@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 import time
+import pathlib
 
 # Things needed to debug the Interaction class
 import resource
@@ -28,6 +29,9 @@ import torch
 from utils.interaction import Interaction
 
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
+
+from monai.config import print_config
+print_config()
 
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
@@ -52,9 +56,9 @@ def get_network(network, labels, args):
         spatial_dims=3,
         in_channels=len(labels) + 1,
         out_channels=len(labels),
-        kernel_size=[3, 3, 3, 3, 3, 3],
-        strides=[1, 2, 2, 2, 2, [2, 2, 1]],
-        upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
+        kernel_size=[3, 3, 3, 3],
+        strides=[1, 2, 2, [2, 2, 1]],
+        upsample_kernel_size=[2, 2, [2, 2, 1]],
         norm_name="instance",
         deep_supervision=False,
         res_block=True,
@@ -242,7 +246,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Data
-    parser.add_argument("-i", "--input", default="../../AutoPET_deepedit/AutoPET")
+    parser.add_argument("-i", "--input", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-o", "--output", default="output/test")
     parser.add_argument("--cache_dir", type=str, default='cache/test')
     parser.add_argument("-x", "--split", type=float, default=0.8)
@@ -304,9 +308,10 @@ def main():
         args.epochs = args.epochs - current_epoch # Reset epochs based on previous model
 
     if not os.path.exists(args.output):
-        os.mkdir(args.output)
+        pathlib.Path(args.output).mkdir(parents=True)
     if not os.path.exists(args.cache_dir):
-        os.mkdir(args.cache_dir)
+        pathlib.Path(args.cache_dir).mkdir(parents=True)
+        #os.mkdir(args.cache_dir)
     run(args)
 
 

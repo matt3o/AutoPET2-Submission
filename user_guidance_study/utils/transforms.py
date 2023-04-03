@@ -24,7 +24,7 @@ from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.utils import min_version, optional_import
 
-from FastGeodis import generalised_geodesic3d
+#from FastGeodis import generalised_geodesic3d
 
 # Add new click to the guidance signal
 def update_guidance(orig, updated):

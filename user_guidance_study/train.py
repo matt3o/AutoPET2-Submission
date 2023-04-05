@@ -30,8 +30,8 @@ from utils.interaction import Interaction
 
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
 
-from monai.config import print_config
-print_config()
+#from monai.config import print_config
+#print_config()
 
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
@@ -43,7 +43,7 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-from monai.inferers import SimpleInferer
+from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
@@ -52,19 +52,35 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def get_network(network, labels, args):
-    network = DynUNet(
-        spatial_dims=3,
-        in_channels=len(labels) + 1,
-        out_channels=len(labels),
-        kernel_size=[3, 3, 3, 3],
-        strides=[1, 2, 2, [2, 2, 1]],
-        upsample_kernel_size=[2, 2, [2, 2, 1]],
-        norm_name="instance",
-        deep_supervision=False,
-        res_block=True,
-        conv1d=args.conv1d,
-        conv1s=args.conv1s,
-    )
+    if network == "dynunet":
+        network = DynUNet(
+            spatial_dims=3,
+            in_channels=len(labels) + 1,
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3, 3, 3 ,3],
+            strides=[1, 2, 2, 2, 2, [2, 2, 1]],
+            upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,
+            conv1d=args.conv1d,
+            conv1s=args.conv1s,
+        )
+    elif network == "smalldynunet":
+        network = DynUNet(
+            spatial_dims=3,
+            in_channels=len(labels) + 1,
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3],
+            strides=[1, 2, [2, 2, 1]],
+            upsample_kernel_size=[2, [2, 2, 1]],
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,
+            conv1d=args.conv1d,
+            conv1s=args.conv1s,
+        )
+
     return network
 
 
@@ -117,6 +133,13 @@ def create_trainer(args):
                 output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
             )
 
+    if args.inferer == "SimpleInferer":
+        inferer=SimpleInferer()
+    elif args.inferer == "SlidingWindowInferer":
+        inferer = SlidingWindowInferer(roi_size=[64, 64, 64])
+    else:
+        raise UserWarning("Invalid Inferer selected")
+
     evaluator = SupervisedEvaluator(
         device=device,
         val_data_loader=val_loader,
@@ -130,7 +153,7 @@ def create_trainer(args):
             max_interactions=args.max_val_interactions,
             args=args,
         ),
-        inferer=SimpleInferer(),
+        inferer=inferer,
         postprocessing=post_transform,
         key_val_metric=all_val_metrics,
         val_handlers=val_handlers,
@@ -187,7 +210,7 @@ def create_trainer(args):
         ),
         optimizer=optimizer,
         loss_function=loss_function,
-        inferer=SimpleInferer(),
+        inferer=inferer,
         postprocessing=post_transform,
         amp=args.amp,
         key_train_metric=all_train_metrics,
@@ -252,14 +275,14 @@ def main():
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 
-
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)
 
     # Model
-    parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet"])
+    parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"])
     parser.add_argument("-r", "--resume", default=False, action='store_true')
+    parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')
@@ -293,7 +316,7 @@ def main():
     parser.add_argument("--conv1s", default=False, action='store_true')
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
-    parser.add_argument("--dataset", default="MSD_Spleen")
+    parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
     args = parser.parse_args()
     # For single label using one of the Medical Segmentation Decathlon
@@ -312,7 +335,9 @@ def main():
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
         #os.mkdir(args.cache_dir)
+
     run(args)
+
 
 
 if __name__ == "__main__":

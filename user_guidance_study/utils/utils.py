@@ -24,7 +24,8 @@ from monai.transforms import (
     DivisiblePadd,
     ToNumpyd,
     ToTensord,
-    CenterSpatialCropd
+    CenterSpatialCropd,
+    RandCropByPosNegLabeld
 )
 from monai.data import partition_dataset
 from monai.data.dataloader import DataLoader
@@ -44,14 +45,17 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest")),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             ### Random Transforms ###
+            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=(64, 64, 64), pos=0.6, neg=0.4),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
+            
 
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
@@ -76,6 +80,7 @@ def get_pre_transforms(labels, device, args):
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
             CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
@@ -109,7 +114,7 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
-            Resized(keys=("image", "label"), spatial_size=[256, 256, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
+            Resized(keys=("image", "label"), spatial_size=[128, 128, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),

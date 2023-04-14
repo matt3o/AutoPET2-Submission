@@ -64,14 +64,14 @@ class Interaction:
         self.max_interactions = max_interactions
         self.args = args
 
-        if not os.path.exists(args.output.replace('output', 'data')):
-            os.makedirs(args.output.replace('output', 'data'), exist_ok=True)
+        #if not os.path.exists(args.output.replace('output', 'data')):
+         #   os.makedirs(args.output.replace('output', 'data'), exist_ok=True)
 
-        self.out = args.output.replace('output', 'data')
-        if not os.path.exists(os.path.join(self.out, 'train')):
-            os.makedirs(os.path.join(self.out, 'train'), exist_ok=True)
-        if not os.path.exists(os.path.join(self.out, 'eval')):
-            os.makedirs(os.path.join(self.out, 'eval'), exist_ok=True)
+        #self.out = args.output.replace('output', 'data')
+        if not os.path.exists(os.path.join(self.args.data, 'train')):
+            os.makedirs(os.path.join(self.args.data, 'train'), exist_ok=True)
+        if not os.path.exists(os.path.join(self.args.data, 'eval')):
+            os.makedirs(os.path.join(self.args.data, 'eval'), exist_ok=True)
 
     def __call__(self, engine: Union[SupervisedTrainer, SupervisedEvaluator], batchdata: Dict[str, torch.Tensor]):
         if batchdata is None:
@@ -106,12 +106,12 @@ class Interaction:
 
                 state = 'train' if self.train else 'eval'
 
-                if not os.path.exists(f'{self.out}/{state}/{j}.npy'):
-                    np.save(f'{self.out}/{state}/{j}.npy', np.array([]))
-                else:
-                    x = list(np.load(f'{self.out}/{state}/{j}.npy'))
-                    x.append(dice.cpu().detach())
-                    np.save(f'{self.out}/{state}/{j}.npy', np.array(x))
+                #if not os.path.exists(f'{self.args.data}/{state}/{j}.npy'):
+                #    np.save(f'{self.args.data}/{state}/{j}.npy', np.array([]))
+                #else:
+                #    x = list(np.load(f'{self.args.data}/{state}/{j}.npy'))
+                #    x.append(dice.cpu().detach())
+                #    np.save(f'{self.args.data}/{state}/{j}.npy', np.array(x))
 
                 batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
 
@@ -143,11 +143,11 @@ class Interaction:
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle
 
     def debug_viz(self, inputs, labels, preds, j):
-        self.save_nifti(f'{self.out}/guidance_bgg_{j}', inputs[0,2].cpu().detach().numpy())
-        self.save_nifti(f'{self.out}/guidance_fgg_{j}', inputs[0,1].cpu().detach().numpy())
-        self.save_nifti(f'{self.out}/labels', labels[0,0].cpu().detach().numpy())
-        self.save_nifti(f'{self.out}/im', inputs[0,0].cpu().detach().numpy())
-        self.save_nifti(f'{self.out}/pred_{j}', preds[0,1])
+        self.save_nifti(f'{self.args.data}/guidance_bgg_{j}', inputs[0,2].cpu().detach().numpy())
+        self.save_nifti(f'{self.args.data}/guidance_fgg_{j}', inputs[0,1].cpu().detach().numpy())
+        self.save_nifti(f'{self.args.data}/labels', labels[0,0].cpu().detach().numpy())
+        self.save_nifti(f'{self.args.data}/im', inputs[0,0].cpu().detach().numpy())
+        self.save_nifti(f'{self.args.data}/pred_{j}', preds[0,1])
         if j == self.max_interactions:
             exit()
 

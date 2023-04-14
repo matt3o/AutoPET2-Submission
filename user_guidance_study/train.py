@@ -136,7 +136,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=[64, 64, 64])
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size)
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -184,6 +184,7 @@ def create_trainer(args):
             final_filename="checkpoint.pt",
         ),
     ]
+
 
     all_train_metrics = dict()
     all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
@@ -245,21 +246,40 @@ def run(args):
         )
         os.makedirs(args.output, exist_ok=True)
 
+    if args.inferer == "SlidingWindowInferer":
+        args.sw_roi_size = eval(args.sw_roi_size)
+    if args.sw_roi_size and args.inferer != "SlidingWindowInferer":
+        raise UserWarning("sw_roi_size supplied but SlidingWindowInferer is not selected..")
+
+    args.crop_spatial_size = eval(args.crop_spatial_size)
+
+    # verify both have a valid size (for Unet with seven layers)
+    assert len(args.sw_roi_size) == 3 and len(args.crop_spatial_size) == 3
+    if args.network == "dynunet":
+        for size in args.crop_spatial_size:
+            assert (size % 64) == 0
+
     trainer, evaluator = create_trainer(args)
 
     start_time = time.time()
-    trainer.run()
+    if not args.eval_only:
+        trainer.run()
+    else:
+        evaluator.run()
     end_time = time.time()
 
-    logging.info("Total Training Time {}".format(end_time - start_time))
-    logging.info("{}:: Saving Final PT Model".format(args.gpu))
-    torch.save(
-        trainer.network.state_dict(), os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.pt")
-    )
 
-    logging.info("{}:: Saving TorchScript Model".format(args.gpu))
-    model_ts = torch.jit.script(trainer.network)
-    torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
+    if not args.eval_only:
+        logging.info("Total Training Time {}".format(end_time - start_time))
+        logging.info("{}:: Saving Final PT Model".format(args.gpu))
+        
+        torch.save(
+            trainer.network.state_dict(), os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.pt")
+        )
+
+        logging.info("{}:: Saving TorchScript Model".format(args.gpu))
+        model_ts = torch.jit.script(trainer.network)
+        torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
 
 
 def main():
@@ -271,7 +291,8 @@ def main():
     # Data
     parser.add_argument("-i", "--input", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-o", "--output", default="output/test")
-    parser.add_argument("--cache_dir", type=str, default='cache/test')
+    parser.add_argument("-d", "--data", default="data/test")
+    parser.add_argument("--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 
@@ -283,6 +304,8 @@ def main():
     parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"])
     parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
+    parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
+    parser.add_argument("--crop_spatial_size", default="(128,128,128)", action='store')
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')
@@ -334,7 +357,8 @@ def main():
         pathlib.Path(args.output).mkdir(parents=True)
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
-        #os.mkdir(args.cache_dir)
+    if not os.path.exists(args.output.replace('output', 'data')):
+        pathlib.Path(args.data).mkdir(parents=True)
 
     run(args)
 

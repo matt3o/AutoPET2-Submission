@@ -88,7 +88,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     Based on the "guidance" points, apply Gaussian to them and add them as new channel for input image.
 
     Args:
-        guidance: key to store guidance.
+        guidance_key: key to store guidance.
         sigma: standard deviation for Gaussian kernel.
         number_intensity_ch: channel index.
     """
@@ -96,7 +96,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        guidance: str = "guidance",
+        guidance_key: str = "guidance",
         sigma: int = 3,
         number_intensity_ch: int = 1,
         allow_missing_keys: bool = False,
@@ -110,7 +110,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         adaptive_sigma = False
     ):
         super().__init__(keys, allow_missing_keys)
-        self.guidance = guidance
+        self.guidance_key = guidance_key
         self.sigma = sigma
         self.number_intensity_ch = number_intensity_ch
         self.disks = disks
@@ -214,7 +214,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
             if key == "image":
                 image = d[key]
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
-                guidance = d[self.guidance]
+                guidance = d[self.guidance_key]
 
                 for key_label in guidance.keys():
                     # Getting signal based on guidance
@@ -311,7 +311,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     Add random guidance based on discrepancies that were found between label and prediction.
 
     Args:
-        guidance: key to guidance source, shape (2, N, # of dim)
+        guidance_key: key to guidance source, shape (2, N, # of dim)
         discrepancy: key to discrepancy map between label and prediction shape (2, C, H, W, D) or (2, C, H, W)
         probability: key to click/interaction probability, shape (1)
     """
@@ -319,13 +319,13 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        guidance: str = "guidance",
+        guidance_key: str = "guidance",
         discrepancy: str = "discrepancy",
         probability: str = "probability",
         allow_missing_keys: bool = False,
     ):
         super().__init__(keys, allow_missing_keys)
-        self.guidance_key = guidance
+        self.guidance_key = guidance_key
         self.discrepancy = discrepancy
         self.probability = probability
         self._will_interact = None
@@ -434,7 +434,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
     The guidance is of size (2, N, # of dims) where N is number of guidance added.
     # of dims = 4 when C, D, H, W; # of dims = 3 when (C, H, W)
     Args:
-        guidance: key to store guidance.
+        guidance_key: key to store guidance.
         sids: key that represents lists of valid slice indices for the given label.
         sid: key that represents the slice to add initial seed point.  If not present, random sid will be chosen.
         connected_regions: maximum connected regions to use for adding initial points.
@@ -443,7 +443,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        guidance: str = "guidance",
+        guidance_key: str = "guidance",
         sids: str = "sids",
         sid: str = "sid",
         connected_regions: int = 5,
@@ -453,7 +453,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         self.sids_key = sids
         self.sid_key = sid
         self.sid: Dict[str, int] = dict()
-        self.guidance = guidance
+        self.guidance_key = guidance_key
         self.connected_regions = connected_regions
 
     def _apply(self, label, sid):
@@ -535,10 +535,10 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                         self._apply(tmp_label, self.sid.get(key_label)).astype(int).tolist()
                     )
 
-                if self.guidance in d.keys():
-                    d[self.guidance] = update_guidance(d[self.guidance], label_guidances)
+                if self.guidance_key in d.keys():
+                    d[self.guidance_key] = update_guidance(d[self.guidance_key], label_guidances)
                 else:
-                    d[self.guidance] = label_guidances # Initialize Guidance Dict
+                    d[self.guidance_key] = label_guidances # Initialize Guidance Dict
 
                 return d
             else:

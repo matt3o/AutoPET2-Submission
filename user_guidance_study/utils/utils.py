@@ -49,7 +49,7 @@ def get_pre_transforms(labels, device, args):
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest")),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             ### Random Transforms ###
-            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=(64, 64, 64), pos=0.6, neg=0.4),
+            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
@@ -59,10 +59,10 @@ def get_pre_transforms(labels, device, args):
 
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
-                                        guidance="guidance",
+                                        guidance_key="guidance",
                                         sigma=args.sigma,
                                         disks=args.disks,
                                         edt=args.edt,
@@ -85,10 +85,10 @@ def get_pre_transforms(labels, device, args):
             DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
-                                        guidance="guidance",
+                                        guidance_key="guidance",
                                         sigma=args.sigma,
                                         disks=args.disks,
                                         edt=args.edt,
@@ -117,10 +117,10 @@ def get_pre_transforms(labels, device, args):
             Resized(keys=("image", "label"), spatial_size=[128, 128, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
-                                        guidance="guidance",
+                                        guidance_key="guidance",
                                         sigma=args.sigma,
                                         disks=args.disks,
                                         edt=args.edt,
@@ -143,10 +143,10 @@ def get_pre_transforms(labels, device, args):
             Resized(keys=("image", "label"), spatial_size=[256, 256, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
-                                        guidance="guidance",
+                                        guidance_key="guidance",
                                         sigma=args.sigma,
                                         disks=args.disks,
                                         edt=args.edt,
@@ -170,13 +170,13 @@ def get_click_transforms(device, args):
         FindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
         AddRandomGuidanceDeepEditd(
             keys="NA",
-            guidance="guidance",
+            guidance_key="guidance",
             discrepancy="discrepancy",
             probability="probability",
         ),
         ToTensord(keys=("image", "guidance"), device=device),
         AddGuidanceSignalDeepEditd(keys="image",
-                                    guidance="guidance",
+                                    guidance_key="guidance",
                                     sigma=args.sigma,
                                     disks=args.disks,
                                     edt=args.edt,

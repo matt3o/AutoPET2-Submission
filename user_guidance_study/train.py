@@ -19,6 +19,8 @@ import os
 import sys
 import time
 import pathlib
+from typing import Optional
+import pprint
 
 # Things needed to debug the Interaction class
 import resource
@@ -46,6 +48,8 @@ from monai.handlers import (
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
+
+from ignite.engine import Engine, Events
 
 from monai.utils import set_determinism
 def count_parameters(model):
@@ -83,6 +87,28 @@ def get_network(network, labels, args):
 
     return network
 
+
+# class CustomLoader:
+#     def __init__(self, name: Optional[str] = None):
+#         self._name = name
+        
+
+#     def attach(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self._name is None:
+#             self.logger = engine.logger
+#         engine.add_event_handler(Events.STARTED, self)
+
+
+#     def __call__(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         pass
 
 def create_trainer(args):
 
@@ -136,7 +162,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size)
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=2)
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -184,7 +210,7 @@ def create_trainer(args):
             final_filename="checkpoint.pt",
         ),
     ]
-
+    
 
     all_train_metrics = dict()
     all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
@@ -217,6 +243,7 @@ def create_trainer(args):
         key_train_metric=all_train_metrics,
         train_handlers=train_handlers,
     )
+
     return trainer, evaluator
 
 
@@ -292,7 +319,7 @@ def main():
     parser.add_argument("-i", "--input", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-o", "--output", default="output/test")
     parser.add_argument("-d", "--data", default="data/test")
-    parser.add_argument("--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
+    parser.add_argument("-c", "--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 

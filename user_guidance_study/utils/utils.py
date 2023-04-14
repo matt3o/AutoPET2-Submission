@@ -79,7 +79,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
@@ -211,13 +211,14 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         test_images = sorted(glob.glob(os.path.join(args.input, "imagesTs", "*.nii.gz")))
         test_labels = sorted(glob.glob(os.path.join(args.input, "labelsTs", "*.nii.gz")))
 
-        with open('utils/zero_autopet.txt', 'r') as f:
-            bad_images = [el.rstrip() for el in f.readlines()] # Filter out crops without any labels
+        # TODO try if this impacts training?!?
+        #with open('utils/zero_autopet.txt', 'r') as f:
+        #    bad_images = [el.rstrip() for el in f.readlines()] # Filter out crops without any labels
 
         datalist = [{"image": image_name, "label": label_name} for image_name, label_name in
-                    zip(all_images, all_labels) if image_name not in bad_images]
+                    zip(all_images, all_labels)] #if image_name not in bad_images]
         val_datalist = [{"image": image_name, "label": label_name} for image_name, label_name in
-                    zip(test_images, test_labels) if image_name not in bad_images]
+                    zip(test_images, test_labels)] #if image_name not in bad_images]
         train_datalist = datalist
         # For debugging with small dataset size
         train_datalist = train_datalist[0: args.limit] if args.limit else train_datalist

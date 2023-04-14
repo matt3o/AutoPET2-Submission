@@ -267,10 +267,10 @@ def run(args):
     else:
         evaluator.run()
     end_time = time.time()
+    logging.info("Total Training Time {}".format(end_time - start_time))
 
 
     if not args.eval_only:
-        logging.info("Total Training Time {}".format(end_time - start_time))
         logging.info("{}:: Saving Final PT Model".format(args.gpu))
         
         torch.save(

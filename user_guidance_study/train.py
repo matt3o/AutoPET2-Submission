@@ -28,6 +28,12 @@ rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
 
 import torch
+
+# dlprof profiling
+PROFILING=True
+if PROFILING:
+    import nvidia_dlprof_pytorch_nvtx
+
 from utils.interaction import Interaction
 
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
@@ -181,12 +187,22 @@ def create_trainer(args):
         ),
         inferer=inferer,
         postprocessing=post_transform,
+        amp=args.amp,
         key_val_metric=all_val_metrics,
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)
-    optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True,batch=True)
+    if not args.fast:
+        optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
+    else:
+        # Idea from fast_training_tutorial
+        optimizer = torch.optim.SGD(
+                        network.parameters(),
+                        lr=args.learning_rate * 1000,
+                        momentum=0.9,
+                        weight_decay=0.00004,)
+
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1)
 
     train_handlers = [
@@ -339,6 +355,7 @@ def main():
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("-e", "--epochs", type=int, default=100)
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
+    parser.add_argument("--fast", default=False, action='store_true')
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 

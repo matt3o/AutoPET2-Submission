@@ -25,9 +25,10 @@ from monai.transforms import (
     ToNumpyd,
     ToTensord,
     CenterSpatialCropd,
-    RandCropByPosNegLabeld
+    RandCropByPosNegLabeld,
+    EnsureTyped,
 )
-from monai.data import partition_dataset
+from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
 
@@ -70,8 +71,9 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),        #
-            ToTensord(keys=("image", "label"), device=torch.device('cpu')),
+                                        device=device, spacing=spacing),
+            #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
@@ -97,7 +99,8 @@ def get_pre_transforms(labels, device, args):
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu')),
+            #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
         t_train = [
@@ -174,7 +177,7 @@ def get_click_transforms(device, args):
             discrepancy="discrepancy",
             probability="probability",
         ),
-        ToTensord(keys=("image", "guidance"), device=device),
+        ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,
@@ -185,7 +188,7 @@ def get_click_transforms(device, args):
                                     exp_geos=args.exp_geos,
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, spacing=spacing),        #
-        ToTensord(keys=("image", "label"), device=torch.device('cpu')),
+        ToTensord(keys=("image", "label"), device=device, track_meta=False),
     ]
 
     return Compose(t)

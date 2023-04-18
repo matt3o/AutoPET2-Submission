@@ -22,7 +22,7 @@ from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
 from monai.transforms import Compose, AsDiscrete
 from monai.utils.enums import CommonKeys
-from monai.metrics import compute_meandice
+from monai.metrics import compute_dice
 
 
 class Interaction:
@@ -68,10 +68,10 @@ class Interaction:
          #   os.makedirs(args.output.replace('output', 'data'), exist_ok=True)
 
         #self.out = args.output.replace('output', 'data')
-        if not os.path.exists(os.path.join(self.args.data, 'train')):
-            os.makedirs(os.path.join(self.args.data, 'train'), exist_ok=True)
-        if not os.path.exists(os.path.join(self.args.data, 'eval')):
-            os.makedirs(os.path.join(self.args.data, 'eval'), exist_ok=True)
+        #if not os.path.exists(os.path.join(self.args.data, 'train')):
+        #    os.makedirs(os.path.join(self.args.data, 'train'), exist_ok=True)
+        #if not os.path.exists(os.path.join(self.args.data, 'eval')):
+        #    os.makedirs(os.path.join(self.args.data, 'eval'), exist_ok=True)
 
     def __call__(self, engine: Union[SupervisedTrainer, SupervisedEvaluator], batchdata: Dict[str, torch.Tensor]):
         if batchdata is None:
@@ -101,7 +101,7 @@ class Interaction:
 
                 preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
                 gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
-                dice = compute_meandice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
+                dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
                 print('It:', j, 'Dice:', round(dice.item(), 4), 'Epoch:', engine.state.epoch)
 
                 state = 'train' if self.train else 'eval'
@@ -121,7 +121,7 @@ class Interaction:
                 for i in range(len(batchdata_list)):
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     before = time.time()
-                    batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform
+                    batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
                     after = time.time()
 
                 if j <= 9 and self.args.save_nifti:
@@ -157,3 +157,4 @@ class Interaction:
         ni_img = nib.Nifti1Image(im, affine=affine)
         ni_img.header.get_xyzt_units()
         ni_img.to_filename(f'{name}.nii.gz')
+

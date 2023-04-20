@@ -10,6 +10,7 @@
 # limitations under the License.
 
 from typing import Callable, Dict, Sequence, Union
+import logging
 
 import numpy as np
 import os
@@ -23,6 +24,8 @@ from monai.engines.utils import IterationEvents
 from monai.transforms import Compose, AsDiscrete
 from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
+
+logger = logging.getLogger(__name__)
 
 
 class Interaction:
@@ -102,7 +105,7 @@ class Interaction:
                 preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
                 gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
                 dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
-                print('It:', j, 'Dice:', round(dice.item(), 4), 'Epoch:', engine.state.epoch)
+                logger.debug('It: {} Dice: {:.4f} Epoch:'.format(j, dice.item(), engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
 
@@ -122,6 +125,8 @@ class Interaction:
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
+                    #logger.info(batchdata_list[i]["label"].size())
+                    # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
                     after = time.time()
 
                 if j <= 9 and self.args.save_nifti:
@@ -157,4 +162,3 @@ class Interaction:
         ni_img = nib.Nifti1Image(im, affine=affine)
         ni_img.header.get_xyzt_units()
         ni_img.to_filename(f'{name}.nii.gz')
-

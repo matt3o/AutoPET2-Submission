@@ -245,13 +245,13 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        pred: str = "pred",
-        discrepancy: str = "discrepancy",
+        pred_key: str = "pred",
+        discrepancy_key: str = "discrepancy",
         allow_missing_keys: bool = False,
     ):
         super().__init__(keys, allow_missing_keys)
-        self.pred = pred
-        self.discrepancy = discrepancy
+        self.pred_key = pred_key
+        self.discrepancy_key = discrepancy_key
 
     @staticmethod
     def disparity(label, pred):
@@ -274,13 +274,16 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                     if key_label != "background":
                         # Taking single label
                         label = np.copy(d[key])
+                        #logger.error("label: {} {}".format(type(label), np.shape(label)))
+                        #logger.error("val_label: {} {}".format(type(val_label), val_label))
+                        #exit(-1)
 
                         # Label should be represented in 1
                         label[label != val_label] = 0
                         label = (label > 0.5).astype(np.float32)
 
                         # Taking single prediction
-                        pred = np.copy(d[self.pred])
+                        pred = np.copy(d[self.pred_key])
                         pred[pred != val_label] = 0
                         # Prediction should be represented in one
                         pred = (pred > 0.5).astype(np.float32)
@@ -292,13 +295,13 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         # Label should be represented in 1
                         label = (label > 0.5).astype(np.float32)
                         # Taking single prediction
-                        pred = np.copy(d[self.pred])
+                        pred = np.copy(d[self.pred_key])
                         pred[pred != val_label] = 1
                         pred = 1 - pred
                         # Prediction should be represented in one
                         pred = (pred > 0.5).astype(np.float32)
                     all_discrepancies[key_label] = self._apply(label, pred)
-                d[self.discrepancy] = all_discrepancies
+                d[self.discrepancy_key] = all_discrepancies
 
                 return d
             else:
@@ -411,7 +414,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
-
     """
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:

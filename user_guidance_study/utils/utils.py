@@ -37,6 +37,8 @@ import glob
 import os
 import logging
 
+logger = logging.getLogger(__name__)
+
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
@@ -170,7 +172,7 @@ def get_click_transforms(device, args):
         AsDiscreted(keys="pred", argmax=True),
         ToNumpyd(keys=("image", "label", "pred")),
         # Transforms for click simulation
-        FindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
+        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy"),
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",
@@ -247,7 +249,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     train_loader = DataLoader(
         train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn',
     )
-    logging.info(
+    logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
             args.gpu, len(train_ds), total_l
         )
@@ -256,7 +258,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
     val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn')
-    logging.info(
+    logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(
             args.gpu, len(val_ds), total_l
         )

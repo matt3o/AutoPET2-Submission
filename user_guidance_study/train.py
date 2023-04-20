@@ -29,10 +29,16 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
 
 import torch
 
+logger = None
+
 # dlprof profiling
 PROFILING=True
 if PROFILING:
     import nvidia_dlprof_pytorch_nvtx
+    from monai.handlers.nvtx_handlers import MarkHandler, RangeHandler
+#    nvidia_dlprof_pytorch_nvtx.init()
+    
+from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
 
 from utils.interaction import Interaction
 
@@ -134,7 +140,7 @@ def create_trainer(args):
     print('Number of parameters:', f"{count_parameters(network):,}")
 
     if args.resume:
-        logging.info("{}:: Loading Network...".format(args.gpu))
+        logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
 
         network.load_state_dict(
@@ -153,6 +159,7 @@ def create_trainer(args):
             save_interval=args.save_interval,
             final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
+        HandlersTimeProfiler(),
     ]
 
     all_val_metrics = dict()
@@ -225,6 +232,7 @@ def create_trainer(args):
             save_final=True,
             final_filename="checkpoint.pt",
         ),
+        HandlersTimeProfiler()
     ]
     
 
@@ -265,11 +273,11 @@ def create_trainer(args):
 
 def run(args):
     for arg in vars(args):
-        logging.info("USING:: {} = {}".format(arg, getattr(args, arg)))
+        logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
 
     if args.export:
-        logging.info(
+        logger.info(
             "{}:: Loading PT Model from: {}".format(args.gpu, args.input)
         )
         device = torch.device(f"cuda:{args.gpu}")
@@ -278,13 +286,13 @@ def run(args):
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
         network.load_state_dict(torch.load(args.input, map_location=map_location))
 
-        logging.info("{}:: Saving TorchScript Model".format(args.gpu))
+        logger.info("{}:: Saving TorchScript Model".format(args.gpu))
         model_ts = torch.jit.script(network)
         torch.jit.save(model_ts, os.path.join(args.output))
         return
 
     if not os.path.exists(args.output):
-        logging.info(
+        logger.info(
             "output path [{}] does not exist. creating it now.".format(args.output)
         )
         os.makedirs(args.output, exist_ok=True)
@@ -310,25 +318,23 @@ def run(args):
     else:
         evaluator.run()
     end_time = time.time()
-    logging.info("Total Training Time {}".format(end_time - start_time))
+    logger.info("Total Training Time {}".format(end_time - start_time))
 
 
     if not args.eval_only:
-        logging.info("{}:: Saving Final PT Model".format(args.gpu))
+        logger.info("{}:: Saving Final PT Model".format(args.gpu))
         
         torch.save(
             trainer.network.state_dict(), os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.pt")
         )
 
-        logging.info("{}:: Saving TorchScript Model".format(args.gpu))
+        logger.info("{}:: Saving TorchScript Model".format(args.gpu))
         model_ts = torch.jit.script(trainer.network)
         torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
 
 
 def main():
-    print(f"CPU Count: {os.cpu_count()}")
     torch.set_num_threads(int(os.cpu_count() / 3)) # Limit number of threads to 1/3 of resources
-    print(f"Num threads: {torch.get_num_threads()}")
     parser = argparse.ArgumentParser()
 
     # Data
@@ -386,6 +392,8 @@ def main():
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
     args = parser.parse_args()
+
+
     # For single label using one of the Medical Segmentation Decathlon
     args.labels = {'spleen': 1,
                    'background': 0
@@ -404,16 +412,35 @@ def main():
     if not os.path.exists(args.output.replace('output', 'data')):
         pathlib.Path(args.data).mkdir(parents=True)
 
+    setup_loggers(args)
+    logger.info(f"CPU Count: {os.cpu_count()}")
+    logger.info(f"Num threads: {torch.get_num_threads()}")
+
     run(args)
 
+def setup_loggers(args):
+    global logger
+    logger = logging.getLogger()
+    if (logger.hasHandlers()):
+        logger.handlers.clear()
+    logger.propagate = False
+    logger.setLevel(logging.DEBUG)
+    # Add the stream handler
+    streamHandler = logging.StreamHandler()
+    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s](%(name)s) - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    streamHandler.setFormatter(formatter)
+    streamHandler.setLevel(logging.INFO)
+    logger.addHandler(streamHandler)
+    # Add the file handler
+    log_file_path = "{}/log.txt".format(args.output)
+    fileHandler = logging.FileHandler(log_file_path)
+    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s](%(name)s) - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    fileHandler.setFormatter(formatter)
+    logger.addHandler(fileHandler)
+    logger.info("Logging all the data to '{}'".format(log_file_path))
 
+    for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
+        logging.getLogger(_).setLevel(logging.INFO)
 
 if __name__ == "__main__":
-
-    logging.basicConfig(
-        stream=sys.stdout,
-        level=logging.INFO,
-        format="[%(asctime)s.%(msecs)03d][%(levelname)5s](%(name)s) - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
     main()

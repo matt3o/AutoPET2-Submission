@@ -21,6 +21,8 @@ import time
 import pathlib
 from typing import Optional
 import pprint
+import uuid
+import shutil
 
 # Things needed to debug the Interaction class
 import resource
@@ -32,10 +34,10 @@ import torch
 logger = None
 
 # dlprof profiling
-PROFILING=True
-if PROFILING:
-    import nvidia_dlprof_pytorch_nvtx
-    from monai.handlers.nvtx_handlers import MarkHandler, RangeHandler
+#PROFILING=True
+#if PROFILING:
+#    import nvidia_dlprof_pytorch_nvtx
+#    from monai.handlers.nvtx_handlers import MarkHandler, RangeHandler
 #    nvidia_dlprof_pytorch_nvtx.init()
     
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
@@ -57,7 +59,7 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-from monai.inferers import SimpleInferer, SlidingWindowInferer
+from monai.inferers import SimpleInferer, SlidingWindowInfererAdapt, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
@@ -159,7 +161,6 @@ def create_trainer(args):
             save_interval=args.save_interval,
             final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
-        HandlersTimeProfiler(),
     ]
 
     all_val_metrics = dict()
@@ -175,7 +176,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=2)
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, progress=True)
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -199,14 +200,14 @@ def create_trainer(args):
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True,batch=True)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
     if not args.fast:
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
     else:
         # Idea from fast_training_tutorial
         optimizer = torch.optim.SGD(
                         network.parameters(),
-                        lr=args.learning_rate * 1000,
+                        lr=args.learning_rate * 50,
                         momentum=0.9,
                         weight_decay=0.00004,)
 
@@ -232,7 +233,6 @@ def create_trainer(args):
             save_final=True,
             final_filename="checkpoint.pt",
         ),
-        HandlersTimeProfiler()
     ]
     
 
@@ -261,7 +261,7 @@ def create_trainer(args):
         ),
         optimizer=optimizer,
         loss_function=loss_function,
-        inferer=inferer,
+        inferer=SimpleInferer(),
         postprocessing=post_transform,
         amp=args.amp,
         key_train_metric=all_train_metrics,
@@ -297,11 +297,9 @@ def run(args):
         )
         os.makedirs(args.output, exist_ok=True)
 
-    if args.inferer == "SlidingWindowInferer":
-        args.sw_roi_size = eval(args.sw_roi_size)
-    if args.sw_roi_size and args.inferer != "SlidingWindowInferer":
-        raise UserWarning("sw_roi_size supplied but SlidingWindowInferer is not selected..")
-
+    # Init the Inferer
+    #if args.inferer == "SlidingWindowInferer":
+    args.sw_roi_size = eval(args.sw_roi_size)
     args.crop_spatial_size = eval(args.crop_spatial_size)
 
     # verify both have a valid size (for Unet with seven layers)
@@ -310,27 +308,37 @@ def run(args):
         for size in args.crop_spatial_size:
             assert (size % 64) == 0
 
-    trainer, evaluator = create_trainer(args)
+    # click-generation
+    logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
-    start_time = time.time()
-    if not args.eval_only:
-        trainer.run()
-    else:
-        evaluator.run()
-    end_time = time.time()
-    logger.info("Total Training Time {}".format(end_time - start_time))
+    try:
+        trainer, evaluator = create_trainer(args)
+
+        start_time = time.time()
+        if not args.eval_only:
+            trainer.run()
+        else:
+            evaluator.run()
+        end_time = time.time()
+        logger.info("Total Training Time {}".format(end_time - start_time))
 
 
-    if not args.eval_only:
-        logger.info("{}:: Saving Final PT Model".format(args.gpu))
-        
-        torch.save(
-            trainer.network.state_dict(), os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.pt")
-        )
+        if not args.eval_only:
+            logger.info("{}:: Saving Final PT Model".format(args.gpu))
+            
+            torch.save(
+                trainer.network.state_dict(), os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.pt")
+            )
 
-        logger.info("{}:: Saving TorchScript Model".format(args.gpu))
-        model_ts = torch.jit.script(trainer.network)
-        torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
+            logger.info("{}:: Saving TorchScript Model".format(args.gpu))
+            model_ts = torch.jit.script(trainer.network)
+            torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
+    finally:
+        # Cleanup
+        if args.delete_cache_after_finish:
+            logger.info("Cleaning up..")
+            shutil.rmtree(args.cache_dir, ignore_errors=True)
+
 
 
 def main():
@@ -339,9 +347,11 @@ def main():
 
     # Data
     parser.add_argument("-i", "--input", default="/cvhci/data/AutoPET/AutoPET/")
-    parser.add_argument("-o", "--output", default="output/test")
-    parser.add_argument("-d", "--data", default="data/test")
+    parser.add_argument("-o", "--output", default="/cvhci/temp/mhadlich/output")
+    parser.add_argument("-d", "--data", default="/cvhci/temp/mhadlich/data")
+    # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
+    parser.add_argument("-de", "--delete_cache_after_finish", default=True, action='store_true')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 
@@ -378,8 +388,24 @@ def main():
     parser.add_argument("-dpt", "--deepgrow_probability_train", type=float, default=1.0)
     parser.add_argument("-dpv", "--deepgrow_probability_val", type=float, default=1.0)
 
+    # Guidance Signal Click Generation
+    parser.add_argument("-cg", "--click_generation", default="non-corrective,random", 
+        choices=[
+        "non-corrective,random", # Sample a random pixel from the training patch
+        "corrective,global,random", # Extract all missclassified pixels, then sample one (from the whole volume), stop if probability (0.9) of stopping based on clicks (binomial distribution?)
+        "corrective,global,low dice", # Extract all missclassified pixels. While the dice score remains low (threshold 0.9 or 0.95), 
+        # continue sampling new clicks (stop at number of clicks to avoid infinite loops)
+        "corrective,global,hybrid low dice", # Same as 'corrective,global,random' but decide whether to sample new clicks
+        #  (based on the distribution on the dice, )
+        # ONLY relevant during evalution 
+        "corrective,patch-based,random", # Same as 'corrective,global,random' but only select those patches where the model was actually wrong (selection probability p*)
+        "corrective,patch-based,low dice", # Same as 'corrective,global,low dice' but do it per patch until below threshold or at click limit
+        "corrective,patch-based,hybrid low dice", # Same as 'corrective,global,hybrid low dice' but do the sampling on the patch with the lowest dice
+        # top 10 worst patches
+        ])
+
     # Guidance Signal Hyperparameters
-    parser.add_argument("--sigma", type=int, default=3)
+    parser.add_argument("--sigma", type=int, default=1)
     parser.add_argument("--disks", default=False, action='store_true')
     parser.add_argument("--edt", default=False, action='store_true')
     parser.add_argument("--gdt", default=False, action='store_true')
@@ -389,15 +415,18 @@ def main():
     parser.add_argument("--conv1s", default=False, action='store_true')
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
+    parser.add_argument("-log", "--log_to_file", default=False, action='store_true')
+
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
     args = parser.parse_args()
 
 
     # For single label using one of the Medical Segmentation Decathlon
-    args.labels = {'spleen': 1,
+    args.labels = {'spleen': 1, # careful this label name is linked in AddGuidanceSignalDeepEditd and probably has to be modified there first
                    'background': 0
                    }
+
     # Restoring previous model if resume flag is True
     args.model_filepath = args.model_weights
     if args.best_val_weights:
@@ -407,9 +436,12 @@ def main():
 
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)
+    
+    args.cache_dir = "{}/{}".format(args.cache_dir, uuid.uuid4())
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
-    if not os.path.exists(args.output.replace('output', 'data')):
+    
+    if not os.path.exists(args.data):
         pathlib.Path(args.data).mkdir(parents=True)
 
     setup_loggers(args)
@@ -431,14 +463,18 @@ def setup_loggers(args):
     streamHandler.setFormatter(formatter)
     streamHandler.setLevel(logging.INFO)
     logger.addHandler(streamHandler)
-    # Add the file handler
-    log_file_path = "{}/log.txt".format(args.output)
-    fileHandler = logging.FileHandler(log_file_path)
-    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s](%(name)s) - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    fileHandler.setFormatter(formatter)
-    logger.addHandler(fileHandler)
-    logger.info("Logging all the data to '{}'".format(log_file_path))
 
+    if args.log_to_file:
+    # Add the file handler
+        log_file_path = "{}/log.txt".format(args.output)
+        fileHandler = logging.FileHandler(log_file_path)
+        fileHandler.setFormatter(formatter)
+        logger.addHandler(fileHandler)
+        logger.info("Logging all the data to '{}'".format(log_file_path))
+    else:
+        logger.info("Logging only to the console")
+
+    # Set logging level for external libraries
     for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
         logging.getLogger(_).setLevel(logging.INFO)
 

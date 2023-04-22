@@ -59,10 +59,11 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-from monai.inferers import SimpleInferer, SlidingWindowInfererAdapt, SlidingWindowInferer
+from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
+from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from ignite.engine import Engine, Events
 
 from monai.utils import set_determinism
@@ -124,7 +125,7 @@ def get_network(network, labels, args):
 #         """
 #         pass
 
-def create_trainer(args):
+def create_trainer(args, profilehandler = None):
 
     set_determinism(seed=args.seed)
 
@@ -149,6 +150,7 @@ def create_trainer(args):
             torch.load(args.model_filepath, map_location=map_location)['net']
         )
 
+    
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -161,7 +163,9 @@ def create_trainer(args):
             save_interval=args.save_interval,
             final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
+        profilehandler,
     ]
+    
 
     all_val_metrics = dict()
     all_val_metrics["val_mean_dice"] = MeanDice(
@@ -176,7 +180,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, progress=True, mode="gaussian")
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -233,6 +237,7 @@ def create_trainer(args):
             save_final=True,
             final_filename="checkpoint.pt",
         ),
+        profilehandler,
     ]
     
 
@@ -312,15 +317,20 @@ def run(args):
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
     try:
-        trainer, evaluator = create_trainer(args)
+        wp = WorkflowProfiler()
+        profilehandler = ProfileHandler("profiler", wp, Events.STARTED, Events.COMPLETED)
+        with wp:           
+            trainer, evaluator = create_trainer(args, profilehandler)
 
-        start_time = time.time()
-        if not args.eval_only:
-            trainer.run()
-        else:
-            evaluator.run()
-        end_time = time.time()
-        logger.info("Total Training Time {}".format(end_time - start_time))
+            start_time = time.time()
+            if not args.eval_only:
+                trainer.run()
+            else:
+                evaluator.run()
+            end_time = time.time()
+            logger.info("Total Training Time {}".format(end_time - start_time))
+            wp.dump_csv()
+            logger.info(wp.get_times_summary())
 
 
         if not args.eval_only:

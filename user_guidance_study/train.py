@@ -176,7 +176,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, progress=True)
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, progress=True, mode="gaussian")
     else:
         raise UserWarning("Invalid Inferer selected")
 

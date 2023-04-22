@@ -57,12 +57,12 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
+            #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             
 
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
@@ -75,7 +75,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, spacing=spacing),
             #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
@@ -86,10 +86,11 @@ def get_pre_transforms(labels, device, args):
             #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
+            # Todo try to remove the Padding
+            #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
@@ -102,7 +103,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, spacing=spacing),
             #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
         ]
     else: # MSD Spleen
         t_train = [
@@ -122,7 +123,7 @@ def get_pre_transforms(labels, device, args):
             Resized(keys=("image", "label"), spatial_size=[128, 128, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
@@ -148,7 +149,7 @@ def get_pre_transforms(labels, device, args):
             Resized(keys=("image", "label"), spatial_size=[256, 256, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids="sids"),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
             ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
@@ -176,8 +177,8 @@ def get_click_transforms(device, args):
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",
-            discrepancy="discrepancy",
-            probability="probability",
+            discrepancy_key="discrepancy",
+            probability_key="probability",
         ),
         ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
@@ -190,7 +191,7 @@ def get_click_transforms(device, args):
                                     exp_geos=args.exp_geos,
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, spacing=spacing),        #
-        ToTensord(keys=("image", "label"), device=device, track_meta=False),
+        ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
     ]
 
     return Compose(t)
@@ -246,7 +247,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     train_ds = PersistentDataset(
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
-    train_loader = DataLoader(
+    train_loader = ThreadDataLoader(
         train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn',
     )
     logger.info(
@@ -257,7 +258,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn')
+    val_loader = ThreadDataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn')
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(
             args.gpu, len(val_ds), total_l

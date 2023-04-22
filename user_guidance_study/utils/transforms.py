@@ -238,8 +238,8 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
     Find discrepancy between prediction and actual during click interactions during training.
 
     Args:
-        pred: key to prediction source.
-        discrepancy: key to store discrepancies found between label and prediction.
+        pred_key: key to prediction source.
+        discrepancy_key: key to store discrepancies found between label and prediction.
     """
 
     def __init__(
@@ -254,7 +254,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         self.discrepancy_key = discrepancy_key
 
     @staticmethod
-    def disparity(label, pred):
+    def disparity(label, pred):        
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
@@ -270,42 +270,44 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         for key in self.key_iterator(d):
             if key == "label":
                 all_discrepancies = {}
-                for _, (key_label, val_label) in enumerate(d["label_names"].items()):
-                    if key_label != "background":
+                # label_names: e.g. [('spleen', 1), ('background', 0)]
+                #logger.error(d["label_names"].items()) & exit(0)
+                for _, (label_key, label_value) in enumerate(d["label_names"].items()):
+                    if label_key != "background":
                         # Taking single label
                         label = np.copy(d[key])
                         #logger.error("label: {} {}".format(type(label), np.shape(label)))
-                        #logger.error("val_label: {} {}".format(type(val_label), val_label))
+                        #logger.error("label_value: {} {}".format(type(label_value), label_value))
                         #exit(-1)
 
                         # Label should be represented in 1
-                        label[label != val_label] = 0
+                        label[label != label_value] = 0
                         label = (label > 0.5).astype(np.float32)
 
                         # Taking single prediction
                         pred = np.copy(d[self.pred_key])
-                        pred[pred != val_label] = 0
+                        pred[pred != label_value] = 0
                         # Prediction should be represented in one
                         pred = (pred > 0.5).astype(np.float32)
                     else:
                         # Taking single label
                         label = np.copy(d[key])
-                        label[label != val_label] = 1
+                        label[label != label_value] = 1
                         label = 1 - label
                         # Label should be represented in 1
                         label = (label > 0.5).astype(np.float32)
                         # Taking single prediction
                         pred = np.copy(d[self.pred_key])
-                        pred[pred != val_label] = 1
+                        pred[pred != label_value] = 1
                         pred = 1 - pred
                         # Prediction should be represented in one
                         pred = (pred > 0.5).astype(np.float32)
-                    all_discrepancies[key_label] = self._apply(label, pred)
+                    all_discrepancies[label_key] = self._apply(label, pred)
                 d[self.discrepancy_key] = all_discrepancies
 
                 return d
             else:
-                print("This transform only applies to 'label' key")
+                logger.error("This transform only applies to 'label' key")
         return d # should never end up here... (dead code)
 
 
@@ -315,22 +317,22 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     Args:
         guidance_key: key to guidance source, shape (2, N, # of dim)
-        discrepancy: key to discrepancy map between label and prediction shape (2, C, H, W, D) or (2, C, H, W)
-        probability: key to click/interaction probability, shape (1)
+        discrepancy_key: key to discrepancy map between label and prediction shape (2, C, H, W, D) or (2, C, H, W)
+        probability_key: key to click/interaction probability, shape (1)
     """
 
     def __init__(
         self,
         keys: KeysCollection,
         guidance_key: str = "guidance",
-        discrepancy: str = "discrepancy",
-        probability: str = "probability",
+        discrepancy_key: str = "discrepancy",
+        probability_key: str = "probability",
         allow_missing_keys: bool = False,
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
-        self.discrepancy = discrepancy
-        self.probability = probability
+        self.discrepancy_key = discrepancy_key
+        self.probability_key = probability_key
         self._will_interact = None
         self.is_pos = None
         self.is_other = None
@@ -338,7 +340,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.guidance: Dict[str, List[List[int]]] = {}
 
     def randomize(self, data=None):
-        probability = data[self.probability]
+        probability = data[self.probability_key]
         self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
     def find_guidance(self, discrepancy):
@@ -385,7 +387,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         d: Dict = dict(data)
 
         guidance = d[self.guidance_key]
-        discrepancy = d[self.discrepancy]
+        discrepancy = d[self.discrepancy_key]
         self.randomize(data)
 
         if self._will_interact:
@@ -437,8 +439,8 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
     # of dims = 4 when C, D, H, W; # of dims = 3 when (C, H, W)
     Args:
         guidance_key: key to store guidance.
-        sids: key that represents lists of valid slice indices for the given label.
-        sid: key that represents the slice to add initial seed point.  If not present, random sid will be chosen.
+        sids_key: key that represents lists of valid slice indices for the given label.
+        sid_key: key that represents the slice to add initial seed point.  If not present, random sid will be chosen.
         connected_regions: maximum connected regions to use for adding initial points.
     """
 
@@ -446,14 +448,14 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         self,
         keys: KeysCollection,
         guidance_key: str = "guidance",
-        sids: str = "sids",
-        sid: str = "sid",
+        sids_key: str = "sids",
+        sid_key: str = "sid",
         connected_regions: int = 5,
         allow_missing_keys: bool = False,
     ):
         super().__init__(keys, allow_missing_keys)
-        self.sids_key = sids
-        self.sid_key = sid
+        self.sids_key = sids_key
+        self.sid_key = sid_key
         self.sid: Dict[str, int] = dict()
         self.guidance_key = guidance_key
         self.connected_regions = connected_regions

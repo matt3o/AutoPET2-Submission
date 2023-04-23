@@ -63,6 +63,7 @@ from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
+from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from ignite.engine import Engine, Events
 
 from monai.data import set_track_meta
@@ -103,28 +104,6 @@ def get_network(network, labels, args):
     return network
 
 
-# class CustomLoader:
-#     def __init__(self, name: Optional[str] = None):
-#         self._name = name
-        
-
-#     def attach(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         if self._name is None:
-#             self.logger = engine.logger
-#         engine.add_event_handler(Events.STARTED, self)
-
-
-#     def __call__(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         pass
-
 def create_trainer(args):
 
     set_determinism(seed=args.seed)
@@ -150,6 +129,7 @@ def create_trainer(args):
             torch.load(args.model_filepath, map_location=map_location)['net']
         )
 
+    
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -163,6 +143,7 @@ def create_trainer(args):
             final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
     ]
+    
 
     all_val_metrics = dict()
     all_val_metrics["val_mean_dice"] = MeanDice(
@@ -177,7 +158,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, progress=True, mode="gaussian")
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -228,7 +209,27 @@ def create_trainer(args):
             output_transform=from_engine(["loss"], first=True),
         ),
         CheckpointSaver(
-            save_dir=args.output,
+            save_dir=args.output,# class CustomLoader:
+#     def __init__(self, name: Optional[str] = None):
+#         self._name = name
+        
+
+#     def attach(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self._name is None:
+#             self.logger = engine.logger
+#         engine.add_event_handler(Events.STARTED, self)
+
+
+#     def __call__(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         pass
             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
             save_interval=args.save_interval * 2,
             save_final=True,
@@ -313,15 +314,24 @@ def run(args):
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
     try:
-        trainer, evaluator = create_trainer(args)
+        wp = WorkflowProfiler()
+        
+        with wp:           
+            trainer, evaluator = create_trainer(args)
 
-        start_time = time.time()
-        if not args.eval_only:
-            trainer.run()
-        else:
-            evaluator.run()
-        end_time = time.time()
-        logger.info("Total Training Time {}".format(end_time - start_time))
+            epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
+            iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
+            batch_h = ProfileHandler("Batch gen", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+
+            start_time = time.time()
+            if not args.eval_only:
+                trainer.run()
+            else:
+                evaluator.run()
+            end_time = time.time()
+            logger.info("Total Training Time {}".format(end_time - start_time))
+
+            logger.info(wp.get_times_summary_pd())
 
 
         if not args.eval_only:

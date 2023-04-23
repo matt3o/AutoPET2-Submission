@@ -103,29 +103,7 @@ def get_network(network, labels, args):
     return network
 
 
-# class CustomLoader:
-#     def __init__(self, name: Optional[str] = None):
-#         self._name = name
-        
-
-#     def attach(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         if self._name is None:
-#             self.logger = engine.logger
-#         engine.add_event_handler(Events.STARTED, self)
-
-
-#     def __call__(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         pass
-
-def create_trainer(args, profilehandler = None):
+def create_trainer(args):
 
     set_determinism(seed=args.seed)
 
@@ -163,7 +141,6 @@ def create_trainer(args, profilehandler = None):
             save_interval=args.save_interval,
             final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
-        profilehandler,
     ]
     
 
@@ -231,13 +208,32 @@ def create_trainer(args, profilehandler = None):
             output_transform=from_engine(["loss"], first=True),
         ),
         CheckpointSaver(
-            save_dir=args.output,
+            save_dir=args.output,# class CustomLoader:
+#     def __init__(self, name: Optional[str] = None):
+#         self._name = name
+        
+
+#     def attach(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self._name is None:
+#             self.logger = engine.logger
+#         engine.add_event_handler(Events.STARTED, self)
+
+
+#     def __call__(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         pass
             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
             save_interval=args.save_interval * 2,
             save_final=True,
             final_filename="checkpoint.pt",
         ),
-        profilehandler,
     ]
     
 
@@ -318,9 +314,13 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        profilehandler = ProfileHandler("profiler", wp, Events.STARTED, Events.COMPLETED)
+        
         with wp:           
-            trainer, evaluator = create_trainer(args, profilehandler)
+            trainer, evaluator = create_trainer(args)
+
+            epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
+            iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
+            batch_h = ProfileHandler("Batch gen", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
 
             start_time = time.time()
             if not args.eval_only:
@@ -329,8 +329,8 @@ def run(args):
                 evaluator.run()
             end_time = time.time()
             logger.info("Total Training Time {}".format(end_time - start_time))
-            wp.dump_csv()
-            logger.info(wp.get_times_summary())
+
+            logger.info(wp.get_times_summary_pd())
 
 
         if not args.eval_only:

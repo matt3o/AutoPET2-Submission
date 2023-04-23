@@ -59,12 +59,13 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-from monai.inferers import SimpleInferer, SlidingWindowInfererAdapt, SlidingWindowInferer
+from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
 from ignite.engine import Engine, Events
 
+from monai.data import set_track_meta
 from monai.utils import set_determinism
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -98,7 +99,7 @@ def get_network(network, labels, args):
             conv1d=args.conv1d,
             conv1s=args.conv1s,
         )
-
+    set_track_meta(False)
     return network
 
 

@@ -83,10 +83,10 @@ class Interaction:
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
 
-                inputs, labels = engine.prepare_batch(batchdata)
+                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
 
-                inputs = inputs.to(engine.state.device)
-                labels = labels.to(engine.state.device)
+                #inputs = inputs.to(engine.state.device)
+                #labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
@@ -102,9 +102,9 @@ class Interaction:
                 post_pred = AsDiscrete(argmax=True, to_onehot=2)
                 post_label = AsDiscrete(to_onehot=2)
 
-                preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
-                gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
-                dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
+                preds = list_data_collate([post_pred(el) for el in decollate_batch(predictions)])
+                gts = list_data_collate([post_label(el) for el in decollate_batch(labels)])
+                dice = compute_dice(preds, gts, include_background=True)[0, 1]
                 logger.debug('It: {} Dice: {:.4f} Epoch:'.format(j, dice.item(), engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
@@ -128,6 +128,7 @@ class Interaction:
                     #logger.info(batchdata_list[i]["label"].size())
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
                     after = time.time()
+                    logger.info("Time needed for click transform: {} seconds".format(after - before))
 
                 if j <= 9 and self.args.save_nifti:
                     self.debug_viz(inputs, labels, preds, j)

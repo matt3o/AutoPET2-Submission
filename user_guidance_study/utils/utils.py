@@ -171,9 +171,12 @@ def get_click_transforms(device, args):
     t = [
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        ToNumpyd(keys=("image", "label", "pred")),
+        #ToNumpyd(keys=("image", )),
+        ToTensord(keys=("label", "pred"), device=device, track_meta=False),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy"),
+        #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
+        ToNumpyd(keys=("image","label", "pred", "discrepancy")),
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",

@@ -13,6 +13,7 @@ import json
 import logging
 import random
 import warnings
+import time
 from typing import Dict, Hashable, List, Mapping, Optional
 
 import numpy as np
@@ -248,18 +249,20 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         pred_key: str = "pred",
         discrepancy_key: str = "discrepancy",
         allow_missing_keys: bool = False,
+        device = None
     ):
         super().__init__(keys, allow_missing_keys)
         self.pred_key = pred_key
         self.discrepancy_key = discrepancy_key
+        self.device = device
 
     @staticmethod
     def disparity(label, pred):        
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).astype(np.float32) # FN
-        neg_disparity = (disparity < 0).astype(np.float32) # FP
+        pos_disparity = (disparity > 0).to(dtype=torch.float32) #.astype(np.float32) # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32) #.astype(np.float32) # FP
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
@@ -272,39 +275,51 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                 all_discrepancies = {}
                 # label_names: e.g. [('spleen', 1), ('background', 0)]
                 #logger.error(d["label_names"].items()) & exit(0)
+                before = time.time()
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
                     if label_key != "background":
                         # Taking single label
-                        label = np.copy(d[key])
+                        #logger.error("d[key], type: {}, value: {}".format(d[key], type(d[key])))
+
+                        ### PART of the conversion to torch
+                        assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
+                        #logger.error("HERE ..................")
+                        label = torch.clone(d[key])
+                        #label = np.copy(d[key])
+                        
                         #logger.error("label: {} {}".format(type(label), np.shape(label)))
                         #logger.error("label_value: {} {}".format(type(label_value), label_value))
                         #exit(-1)
 
                         # Label should be represented in 1
                         label[label != label_value] = 0
-                        label = (label > 0.5).astype(np.float32)
+                        label = (label > 0.5).to(dtype=torch.float32) #.astype(np.float32)
 
                         # Taking single prediction
-                        pred = np.copy(d[self.pred_key])
+                        #pred = np.copy(d[self.pred_key])
+                        pred = torch.clone(d[self.pred_key])
                         pred[pred != label_value] = 0
                         # Prediction should be represented in one
-                        pred = (pred > 0.5).astype(np.float32)
+                        pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
+                        #logger.error("HERE ..................2")
                     else:
+                        # TODO look into thos weird conversion - are they necessary?
                         # Taking single label
-                        label = np.copy(d[key])
+                        label = torch.clone(d[key])
                         label[label != label_value] = 1
                         label = 1 - label
                         # Label should be represented in 1
-                        label = (label > 0.5).astype(np.float32)
+                        label = (label > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                         # Taking single prediction
-                        pred = np.copy(d[self.pred_key])
+                        pred = torch.clone(d[self.pred_key])
                         pred[pred != label_value] = 1
                         pred = 1 - pred
                         # Prediction should be represented in one
-                        pred = (pred > 0.5).astype(np.float32)
+                        pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
                 d[self.discrepancy_key] = all_discrepancies
-
+                
+                logger.info("FindDiscrepancyRegionsDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 logger.error("This transform only applies to 'label' key")

@@ -59,7 +59,7 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-from monai.inferers import SimpleInferer, SlidingWindowInfererAdapt, SlidingWindowInferer
+from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
@@ -176,7 +176,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, progress=True, mode="gaussian")
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
     else:
         raise UserWarning("Invalid Inferer selected")
 

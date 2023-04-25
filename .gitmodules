@@ -1,0 +1,6 @@
+[submodule "user_guidance_study/ChamferDistancePytorch"]
+	path = user_guidance_study/ChamferDistancePytorch
+	url = https://github.com/ThibaultGROUEIX/ChamferDistancePytorch
+[submodule "user_guidance_study/chamferdist"]
+	path = user_guidance_study/chamferdist
+	url = https://github.com/krrish94/chamferdist

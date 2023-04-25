@@ -64,6 +64,8 @@ from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
+from monai.engines.utils import IterationEvents
+
 from ignite.engine import Engine, Events
 
 from monai.data import set_track_meta
@@ -321,7 +323,10 @@ def run(args):
 
             epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
             iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
-            batch_h = ProfileHandler("Batch gen", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+            batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+            innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
+            whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
+            
 
             start_time = time.time()
             if not args.eval_only:
@@ -331,7 +336,7 @@ def run(args):
             end_time = time.time()
             logger.info("Total Training Time {}".format(end_time - start_time))
 
-            logger.info(wp.get_times_summary_pd())
+            logger.info("\n{}".format(wp.get_times_summary_pd()))
 
 
         if not args.eval_only:

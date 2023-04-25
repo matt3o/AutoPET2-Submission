@@ -211,6 +211,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+        before = time.time()
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -231,7 +232,8 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 return d
             else:
                 print("This transform only applies to image key")
-
+        
+        logger.info("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
 class FindDiscrepancyRegionsDeepEditd(MapTransform):
@@ -343,6 +345,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         discrepancy_key: str = "discrepancy",
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
+        device=None,
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -353,21 +356,31 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.is_other = None
         self.default_guidance = None
         self.guidance: Dict[str, List[List[int]]] = {}
+        self.device = device
 
-    def randomize(self, data=None):
+    def randomize(self, data: Dict[Hashable, np.ndarray]):
         probability = data[self.probability_key]
         self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
     def find_guidance(self, discrepancy):
-        distance = distance_transform_cdt(discrepancy).flatten()
+        # TODO make this GPU based!
+        logger.error(discrepancy.size())
+        new_d = discrepancy.clone().cpu().numpy()
+        distance = distance_transform_cdt(new_d).flatten()
+        logger.error(np.shape(distance))
+        #logger.error(distance)
+        #exit(0)
         probability = np.exp(distance.flatten()) - 1.0
-        idx = np.where(discrepancy.flatten() > 0)[0]
+        idx = np.where(new_d.flatten() > 0)[0]
+        logger.error(idx)
 
-        if np.sum(discrepancy > 0) > 0:
+        if np.sum(new_d > 0) > 0:
             seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
             dst = distance[seed]
 
-            g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
+            g = np.asarray(np.unravel_index(seed, new_d.shape)).transpose().tolist()[0]
+            logger.error(g)
+            exit(0)
             g[0] = dst[0]
             return g
         return None
@@ -381,18 +394,18 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         other_discrepancy_areas = {}
         for _, (key_label, val_label) in enumerate(label_names.items()):
             if key_label != "background":
-                tmp_label = np.copy(labels)
+                tmp_label = torch.clone(labels)
                 tmp_label[tmp_label != val_label] = 0
-                tmp_label = (tmp_label > 0.5).astype(np.float32)
-                other_discrepancy_areas[key_label] = np.sum(discrepancy[1] * tmp_label) # calculate "area"
+                tmp_label = (tmp_label > 0.5).to(dtype=torch.float32)
+                other_discrepancy_areas[key_label] = torch.sum(discrepancy[1] * tmp_label) # calculate "area"
             else:
-                tmp_label = np.copy(labels)
+                tmp_label = torch.clone(labels)
                 tmp_label[tmp_label != val_label] = 1
                 tmp_label = 1 - tmp_label
-                other_discrepancy_areas[key_label] = np.sum(discrepancy[1] * tmp_label) # calculate "area"
+                other_discrepancy_areas[key_label] = torch.sum(discrepancy[1] * tmp_label) # calculate "area"
 
         # Add guidance to the current key label
-        if np.sum(pos_discr) > 0:
+        if torch.sum(pos_discr) > 0:
             guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
             self.is_pos = True
 
@@ -400,6 +413,13 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+
+        before = time.time()
+
+        ### PART of the conversion to torch
+        #for i in (d[self.guidance_key],d[self.discrepancy_key]):
+         #   assert type(i) == torch.Tensor, "Wrong type for i {}, value {}".format(type(i), i)
+
 
         guidance = d[self.guidance_key]
         discrepancy = d[self.discrepancy_key]
@@ -409,6 +429,8 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # Convert all guidance to lists so new guidance can be easily appended
             for key_label in d["label_names"].keys():
                 tmp_gui = guidance[key_label]
+                # tmp_gui: list len 5, with sublist len 4: [[0,0,0,0], [0,0,0,0], ...]
+
                 tmp_gui = tmp_gui.tolist() if isinstance(tmp_gui, np.ndarray) else tmp_gui
                 tmp_gui = json.loads(tmp_gui) if isinstance(tmp_gui, str) else tmp_gui
 
@@ -425,7 +447,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if d[self.guidance_key].keys() == self.guidance.keys():
             d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
 
-
+        logger.info("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
 class SplitPredsLabeld(MapTransform):

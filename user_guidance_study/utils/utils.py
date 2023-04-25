@@ -32,6 +32,8 @@ from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
 
+from ChamferDistancePytorch.chamfer3D import dist_chamfer_3D
+
 import torch
 import glob
 import os
@@ -174,14 +176,15 @@ def get_click_transforms(device, args):
         #ToNumpyd(keys=("image", )),
         ToTensord(keys=("label", "pred"), device=device, track_meta=False),
         # Transforms for click simulation
-        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy"),
+        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
-        ToNumpyd(keys=("image","label", "pred", "discrepancy")),
+        #ToNumpyd(keys=("image","label", "pred", "discrepancy")),
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
+            device=device
         ),
         ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",

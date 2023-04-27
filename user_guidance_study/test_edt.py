@@ -1,8 +1,9 @@
 import torch 
 import numpy as np
 
-from FastGeodis import generalised_geodesic3d
+#from FastGeodis import generalised_geodesic3d
 from scipy.ndimage.morphology import distance_transform_edt as distance_transform_edt_scipy
+from scipy.ndimage.morphology import distance_transform_cdt as distance_transform_cdt_scipy
 
 import cupy as cp
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
@@ -18,6 +19,15 @@ def main():
 #    vector_t = torch.rand((128,128,128))
     logger.info(vector_t.shape)
 
+    iterations = 20
+
+    before = time.time()
+    vector = vector_t.clone().cpu().numpy()
+    for i in range(iterations):
+        distance = distance_transform_cdt_scipy(vector)
+    elapsed_time = time.time() - before
+    logger.info("distance_transform_cdt_scipy: {} runs took {:f} seconds, which means {:f} seconds per run".format(iterations, elapsed_time, elapsed_time / iterations))
+
     before = time.time()
     iterations = 20
     vector = vector_t.clone().cpu().numpy()
@@ -25,7 +35,6 @@ def main():
         distance = distance_transform_edt_scipy(vector)
     elapsed_time = time.time() - before
     logger.info("distance_transform_edt_scipy: {} runs took {:f} seconds, which means {:f} seconds per run".format(iterations, elapsed_time, elapsed_time / iterations))
-    
     
     before = time.time()
     vector_cp = cp.asarray(vector_t)
@@ -36,7 +45,8 @@ def main():
 
     assert np.allclose(distance, distance_cp, atol=0.001)
 
-
+    # DISABLED since it yields highly different results than distance_transform_edt_scipy..
+    # Can still be run, will also yield the areas where the vectors differ but that did not really help imo
     # d_edt_gpu = generalised_geodesic3d(vector_t,
     #                                     vector_t,
     #                                     [1.0, 1.0, 1.0],
@@ -58,9 +68,6 @@ def main():
     #         logger.info("Context array: {}".format(vector.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
     #                                                                         max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
     #                                                                         max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
-
-        # raise UserWarning("Distance transform mismatch!")
-
 
 
 if __name__ == "__main__":

@@ -428,7 +428,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
         idx = np.where(distance > 0)[0]
         # logger.info("probability[idx]: \n{}".format(pd.DataFrame(probability[idx]).describe()))
-        logger.error(idx)
+        # logger.error(idx)
 
         if np.sum(distance > 0) > 0:
             seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))

@@ -26,13 +26,8 @@ from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.utils import min_version, optional_import
 
-#from ChamferDistancePytorch.chamfer5D import dist_chamfer_5D
-#cham5D = dist_chamfer_5D.chamfer_5DDist()
-
-from chamferdist import ChamferDistance
-chamferDist = ChamferDistance()
-
-from FastGeodis import generalised_geodesic3d
+import cupy as cp
+from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 
 # Add new click to the guidance signal
 def update_guidance(orig, updated):
@@ -57,9 +52,6 @@ logger = logging.getLogger(__name__)
 
 distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
-
-import cupy as cp
-from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 
 class NormalizeLabelsInDatasetd(MapTransform):
     def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False):

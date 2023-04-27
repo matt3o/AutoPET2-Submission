@@ -114,7 +114,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         exp_geos: bool = False,
         device = None,
         spacing = None,
-        adaptive_sigma = False
+        adaptive_sigma = False,
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -144,9 +144,9 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         if len(guidance):
             if dimensions == 3:
                 # Assume channel is first and depth is last CHWD
-                signal = torch.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]))
+                signal = torch.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]), device=self.device)
             else:
-                signal = torch.zeros((1, image.shape[-2], image.shape[-1]))
+                signal = torch.zeros((1, image.shape[-2], image.shape[-1]), device=self.device)
 
             sshape = signal.shape
 
@@ -208,9 +208,9 @@ class AddGuidanceSignalDeepEditd(MapTransform):
             return signal
         else:
             if dimensions == 3:
-                signal = torch.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]))
+                signal = torch.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]), device=self.device)
             else:
-                signal = torch.zeros((1, image.shape[-2], image.shape[-1]))
+                signal = torch.zeros((1, image.shape[-2], image.shape[-1]), device=self.device)
             if signal is None:
                 print("[ERROR] Signal is None")
             return signal
@@ -223,6 +223,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 image = d[key]
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
                 guidance = d[self.guidance_key]
+                # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
                 for key_label in guidance.keys():
                     # Getting signal based on guidance
@@ -230,16 +231,17 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         signal = self._get_signal(image, guidance[key_label], key_label=key_label)
                     else:
                         signal = self._get_signal(image, [])
-                    tmp_image = torch.cat([tmp_image.cpu(), signal], dim=0)
+                    tmp_image = torch.cat([tmp_image, signal], dim=0)
                     if isinstance(d[key], MetaTensor):
                         d[key].array = tmp_image
                     else:
                         d[key] = tmp_image
+                logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 print("This transform only applies to image key")
         
-        logger.info("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+        logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
 # DONE GPU TRANSFORMATION
@@ -327,14 +329,14 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
                 d[self.discrepancy_key] = all_discrepancies
-                
-                logger.info("FindDiscrepancyRegionsDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+                logger.debug("FindDiscrepancyRegionsDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 logger.error("This transform only applies to 'label' key")
+        raise UserWarning
         return d # should never end up here... (dead code)
 
-
+# GPU TRANSFORMATION started, to be verified
 class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     """
     Add random guidance based on discrepancies that were found between label and prediction.
@@ -372,76 +374,26 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
     def find_guidance(self, discrepancy):
-        # TODO make this GPU based!
-        # logger.info("discrepancy.size: {}".format(discrepancy.size()))
-        # logger.info("discrepancy: \n{}".format(describe(discrepancy)))
-        # zeroed_discrepancy = torch.zeros_like(discrepancy)
-        # torch.save(discrepancy, "discrepancy.pt")
-        # assert discrepancy.size() == zeroed_discrepancy.size()
-        #logger.info(zeroed_discrepancy.size())
-        #dist1, dist2, idx1, idx2 = cham5D(discrepancy, torch.zeros(discrepancy.size(), device=self.device))
-
-        #dist_forward = chamferDist(discrepancy.squeeze(), zeroed_discrepancy.squeeze(), reduction=None)
-        #new_distance = dist_forward.detach().cpu()
-        #logger.info("new_distance.size: {}".format(new_distance.size()))
-        # print((discrepancy.unsqueeze(0).shape, zeroed_discrepancy.unsqueeze(0).shape,
-        #                                             self.spacing,
-        #                                             1e10,
-        #                                             0.0,
-        #                                             2))
-        # discrepancy_edt = generalised_geodesic3d(discrepancy.unsqueeze(0),
-        #                                             discrepancy.unsqueeze(0),
-        #                                             self.spacing,
-        #                                             1e10,
-        #                                             0.0,
-        #                                             2)
-        # d_edt_cpu = discrepancy_edt.detach().cpu().numpy()
-        # logger.info("discrepancy_edt: {}".format(discrepancy_edt))
+        # TODO any more GPU stuff possible?
         discrepancy_cp = cp.asarray(discrepancy.squeeze())
         assert len(discrepancy_cp.shape) == 3
-        distance_cp = distance_transform_edt_cupy(discrepancy_cp)
+        distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
 
-        new_d = discrepancy.clone().cpu().numpy()
-        distance = distance_transform_edt(new_d)
-        #logger.info(distance.squeeze().shape)
+        before = time.time()
+        distance = distance.flatten()
+        probability = torch.exp(distance) - 1.0
+        idx = torch.where(distance > 0)[0]
 
-        assert np.allclose(distance, distance_cp.get(), atol=0.001)
-        # if not np.allclose(distance.squeeze(), d_edt_cpu.squeeze(), atol=0.001):
-        #     logger.error(np.logical_not(np.isclose(distance, d_edt_cpu)))
-        #     idxs = np.where(np.isclose(distance.squeeze(), d_edt_cpu.squeeze()) == False)
-        #     for i in range(0, min(5, idxs[0].size)):
-        #         position = (idxs[0][i], idxs[1][i], idxs[2][i])
-        #         #logger.info(position)
-        #         logger.info("Item at position: {} which has value: {} \nscipy distance: {} , GPU d_edt_cpu: {}".format(
-        #                     position, discrepancy.squeeze(0)[position], distance.squeeze()[position], d_edt_cpu.squeeze()[position]))
-        #         logger.info("Context array: {}".format(discrepancy.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
-        #                                                                      max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
-        #                                                                      max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
-            
-        #     raise UserWarning("Distance transform mismatch!")
-
-        distance = distance_cp.get().flatten()
-        # logger.info("distance: \n{}".format(pd.DataFrame(distance).describe()))
-        #logger.info(distance[1 * 64 *63 *63:1 * 64 *63 *69])
-        probability = np.exp(distance) - 1.0
-        # logger.info("probability: \n{}".format(pd.DataFrame(probability).describe()))
-
-        idx = np.where(distance > 0)[0]
-        # logger.info("probability[idx]: \n{}".format(pd.DataFrame(probability[idx]).describe()))
-        # logger.error(idx)
-
-        if np.sum(distance > 0) > 0:
-            seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-            # maximum_seed = [np.argmax(distance)]
-            # seed = maximum_seed
+        if torch.sum(distance > 0) > 0:
+            idx_np = idx.cpu().numpy()
+            probability_np = probability.cpu().numpy()
+            seed = self.R.choice(idx_np, size=1, p=probability_np[idx_np] / torch.sum(probability[idx]).cpu().numpy())
             dst = distance[seed]
 
             g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
-            # logger.info("{} {} {}".format(new_d.shape, g, new_d.strides))
-            # logger.info("Setting {} to {}".format(g, dst[0]))
-            # logger.info("discrepancy of point {} is {} and distance was {}".format(g, new_d[g[0], g[1]-1:g[1]+2, g[2]-1:g[2]+2, g[3]-1:g[3]+2], distance[seed[0]-3:seed[0]+4]))
-            # assert seed == np.dot(new_d.strides, np.array(g)), "{} != {}".format(seed[0], np.dot(new_d.strides, np.array(g)))
-            g[0] = dst[0]
+            # logger.info("{}".format(dst[0].item()))
+            g[0] = dst[0].item()
+            logger.debug("numpy transform in AddRandomGuidance took {:1f} seconds..".format(time.time()- before))
             return g
         return None
 
@@ -505,9 +457,10 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 self.add_guidance(self.guidance[key_label], discrepancy[key_label], d["label_names"], d["label"])
 
         if d[self.guidance_key].keys() == self.guidance.keys():
+            # logger.info()
             d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
 
-        logger.info("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+        logger.debug("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
 class SplitPredsLabeld(MapTransform):

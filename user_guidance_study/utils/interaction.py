@@ -82,7 +82,6 @@ class Interaction:
         guidance_label_overlap = 0.0
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
-
                 inputs, labels = engine.prepare_batch(batchdata)
 
                 inputs = inputs.to(engine.state.device)
@@ -127,7 +126,8 @@ class Interaction:
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
                     #logger.info(batchdata_list[i]["label"].size())
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
-                    after = time.time()
+                    # logger.info("self.click_transforms took {:1f} seconds..".format(time.time()- before))
+
 
                 if j <= 9 and self.args.save_nifti:
                     self.debug_viz(inputs, labels, preds, j)

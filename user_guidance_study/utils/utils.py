@@ -32,8 +32,6 @@ from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
 
-from ChamferDistancePytorch.chamfer3D import dist_chamfer_3D
-
 import torch
 import glob
 import os
@@ -184,7 +182,8 @@ def get_click_transforms(device, args):
             guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
-            device=device
+            device=device,
+            spacing=spacing
         ),
         ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",

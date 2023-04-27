@@ -14,10 +14,11 @@ import logging
 import random
 import warnings
 import time
-from typing import Dict, Hashable, List, Mapping, Optional
+from typing import Dict, Hashable, List, Mapping, Optional, Union
 
 import numpy as np
 import torch
+import pandas as pd
 
 from monai.config import KeysCollection
 from monai.data import MetaTensor
@@ -25,7 +26,13 @@ from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.utils import min_version, optional_import
 
-#from FastGeodis import generalised_geodesic3d
+#from ChamferDistancePytorch.chamfer5D import dist_chamfer_5D
+#cham5D = dist_chamfer_5D.chamfer_5DDist()
+
+from chamferdist import ChamferDistance
+chamferDist = ChamferDistance()
+
+from FastGeodis import generalised_geodesic3d
 
 # Add new click to the guidance signal
 def update_guidance(orig, updated):
@@ -40,12 +47,19 @@ def update_guidance(orig, updated):
         orig[k] = str(v_old)
     return orig
 
+def describe(t:torch.Tensor):
+    return "\nmean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
+
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
 logger = logging.getLogger(__name__)
 
 
 distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
+distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+
+import cupy as cp
+from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 
 class NormalizeLabelsInDatasetd(MapTransform):
     def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False):
@@ -236,6 +250,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         logger.info("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
+# DONE GPU TRANSFORMATION
 class FindDiscrepancyRegionsDeepEditd(MapTransform):
     """
     Find discrepancy between prediction and actual during click interactions during training.
@@ -346,6 +361,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
         device=None,
+        spacing: Union[List[float], float] = None
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -357,6 +373,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.default_guidance = None
         self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
+        self.spacing = spacing
 
     def randomize(self, data: Dict[Hashable, np.ndarray]):
         probability = data[self.probability_key]
@@ -364,23 +381,74 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy):
         # TODO make this GPU based!
-        logger.error(discrepancy.size())
+        # logger.info("discrepancy.size: {}".format(discrepancy.size()))
+        # logger.info("discrepancy: \n{}".format(describe(discrepancy)))
+        # zeroed_discrepancy = torch.zeros_like(discrepancy)
+        # torch.save(discrepancy, "discrepancy.pt")
+        # assert discrepancy.size() == zeroed_discrepancy.size()
+        #logger.info(zeroed_discrepancy.size())
+        #dist1, dist2, idx1, idx2 = cham5D(discrepancy, torch.zeros(discrepancy.size(), device=self.device))
+
+        #dist_forward = chamferDist(discrepancy.squeeze(), zeroed_discrepancy.squeeze(), reduction=None)
+        #new_distance = dist_forward.detach().cpu()
+        #logger.info("new_distance.size: {}".format(new_distance.size()))
+        # print((discrepancy.unsqueeze(0).shape, zeroed_discrepancy.unsqueeze(0).shape,
+        #                                             self.spacing,
+        #                                             1e10,
+        #                                             0.0,
+        #                                             2))
+        # discrepancy_edt = generalised_geodesic3d(discrepancy.unsqueeze(0),
+        #                                             discrepancy.unsqueeze(0),
+        #                                             self.spacing,
+        #                                             1e10,
+        #                                             0.0,
+        #                                             2)
+        # d_edt_cpu = discrepancy_edt.detach().cpu().numpy()
+        # logger.info("discrepancy_edt: {}".format(discrepancy_edt))
+        discrepancy_cp = cp.asarray(discrepancy.squeeze())
+        assert len(discrepancy_cp.shape) == 3
+        distance_cp = distance_transform_edt_cupy(discrepancy_cp)
+
         new_d = discrepancy.clone().cpu().numpy()
-        distance = distance_transform_cdt(new_d).flatten()
-        logger.error(np.shape(distance))
-        #logger.error(distance)
-        #exit(0)
-        probability = np.exp(distance.flatten()) - 1.0
-        idx = np.where(new_d.flatten() > 0)[0]
+        distance = distance_transform_edt(new_d)
+        #logger.info(distance.squeeze().shape)
+
+        assert np.allclose(distance, distance_cp.get(), atol=0.001)
+        # if not np.allclose(distance.squeeze(), d_edt_cpu.squeeze(), atol=0.001):
+        #     logger.error(np.logical_not(np.isclose(distance, d_edt_cpu)))
+        #     idxs = np.where(np.isclose(distance.squeeze(), d_edt_cpu.squeeze()) == False)
+        #     for i in range(0, min(5, idxs[0].size)):
+        #         position = (idxs[0][i], idxs[1][i], idxs[2][i])
+        #         #logger.info(position)
+        #         logger.info("Item at position: {} which has value: {} \nscipy distance: {} , GPU d_edt_cpu: {}".format(
+        #                     position, discrepancy.squeeze(0)[position], distance.squeeze()[position], d_edt_cpu.squeeze()[position]))
+        #         logger.info("Context array: {}".format(discrepancy.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
+        #                                                                      max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
+        #                                                                      max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
+            
+        #     raise UserWarning("Distance transform mismatch!")
+
+        distance = distance_cp.get().flatten()
+        # logger.info("distance: \n{}".format(pd.DataFrame(distance).describe()))
+        #logger.info(distance[1 * 64 *63 *63:1 * 64 *63 *69])
+        probability = np.exp(distance) - 1.0
+        # logger.info("probability: \n{}".format(pd.DataFrame(probability).describe()))
+
+        idx = np.where(distance > 0)[0]
+        # logger.info("probability[idx]: \n{}".format(pd.DataFrame(probability[idx]).describe()))
         logger.error(idx)
 
-        if np.sum(new_d > 0) > 0:
+        if np.sum(distance > 0) > 0:
             seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+            # maximum_seed = [np.argmax(distance)]
+            # seed = maximum_seed
             dst = distance[seed]
 
-            g = np.asarray(np.unravel_index(seed, new_d.shape)).transpose().tolist()[0]
-            logger.error(g)
-            exit(0)
+            g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
+            # logger.info("{} {} {}".format(new_d.shape, g, new_d.strides))
+            # logger.info("Setting {} to {}".format(g, dst[0]))
+            # logger.info("discrepancy of point {} is {} and distance was {}".format(g, new_d[g[0], g[1]-1:g[1]+2, g[2]-1:g[2]+2, g[3]-1:g[3]+2], distance[seed[0]-3:seed[0]+4]))
+            # assert seed == np.dot(new_d.strides, np.array(g)), "{} != {}".format(seed[0], np.dot(new_d.strides, np.array(g)))
             g[0] = dst[0]
             return g
         return None

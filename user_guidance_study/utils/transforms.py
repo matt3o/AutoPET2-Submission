@@ -25,10 +25,13 @@ from monai.data import MetaTensor
 from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.utils import min_version, optional_import
+from monai.data.meta_tensor import MetaTensor
 
 import cupy as cp
+# Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 
+# TODO remove this monster.
 # Add new click to the guidance signal
 def update_guidance(orig, updated):
     assert orig.keys() == updated.keys()
@@ -45,6 +48,26 @@ def update_guidance(orig, updated):
 def describe(t:torch.Tensor):
     return "\nmean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
 
+def find_discrepancy(vec1, vec2, context_vector, atol=0.001):
+    if not np.allclose(vec1, vec2):
+        logger.error("find_discrepancy() found something")
+        #logger.error(np.logical_not(np.isclose(vec1, vec2)))
+        idxs = np.where(np.isclose(vec1, vec2) == False)
+        assert len(idxs) > 0 and idxs[0].size > 0
+        for i in range(0, min(5, idxs[0].size)):
+            position = []
+            for j in range(0, len(vec1.shape)):
+                position.append(idxs[j][i])
+            position = tuple(position)
+            logger.error("{} \n".format(position))
+            logger.error("Item at position: {} which has value: {} \nvec1: {} , vec2: {}".format(
+                        position, context_vector.squeeze()[position], vec1[position], vec2[position]))
+            # logger.info("Context array: {}".format(context_vector.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
+            #                                                                 max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
+            #                                                                 max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
+
+
+
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
 logger = logging.getLogger(__name__)
@@ -54,7 +77,7 @@ distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="di
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
 class NormalizeLabelsInDatasetd(MapTransform):
-    def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False):
+    def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False, device = None):
         """
         Normalize label values according to label names dictionary
 
@@ -65,13 +88,14 @@ class NormalizeLabelsInDatasetd(MapTransform):
         super().__init__(keys, allow_missing_keys)
 
         self.label_names = label_names
+        self.device = device
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         for key in self.key_iterator(d):
             # Dictionary containing new label numbers
             new_label_names = {}
-            label = np.zeros(d[key].shape)
+            label = torch.zeros(d[key].shape, device=self.device)
             # Making sure the range values and number of labels are the same
             for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):
                 if key_label != "background":
@@ -376,7 +400,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def find_guidance(self, discrepancy):
         # TODO any more GPU stuff possible?
         discrepancy_cp = cp.asarray(discrepancy.squeeze())
-        assert len(discrepancy_cp.shape) == 3
+        assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
         distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
 
         before = time.time()
@@ -388,6 +412,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             idx_np = idx.cpu().numpy()
             probability_np = probability.cpu().numpy()
             seed = self.R.choice(idx_np, size=1, p=probability_np[idx_np] / torch.sum(probability[idx]).cpu().numpy())
+            torch.random(idx, size)
             dst = distance[seed]
 
             g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
@@ -463,13 +488,14 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         logger.debug("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
+# TODO I think this already is GPU based since it uses tensors
 class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
     """
-
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+        before = time.time()
         for key in self.key_iterator(d):
             if key == "pred":
                 for idx, (key_label, _) in enumerate(d["label_names"].items()):
@@ -478,9 +504,10 @@ class SplitPredsLabeld(MapTransform):
                         d[f"label_{key_label}"] = d["label"][idx + 1, ...][None]
             elif key != "pred":
                 logger.info("This is only for pred key")
+        logger.debug("SplitPredsLabeld.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
-
+# TODO Add GPU transform here
 class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
     """
     Add random guidance as initial seed point for a given label.
@@ -502,6 +529,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         sid_key: str = "sid",
         connected_regions: int = 5,
         allow_missing_keys: bool = False,
+        device = None
     ):
         super().__init__(keys, allow_missing_keys)
         self.sids_key = sids_key
@@ -509,53 +537,77 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         self.sid: Dict[str, int] = dict()
         self.guidance_key = guidance_key
         self.connected_regions = connected_regions
+        self.device = device
 
     def _apply(self, label, sid):
+        # sid: single digit, label: array e.g. 1,128,128,128
+        #logger.error("label: {}".format(label.shape))
+        #logger.error("sid: {}".format(sid))
+        assert type(label) == torch.Tensor or type(label) == MetaTensor, "type(label): {} != torch.Tensor or MetaTensor".format(type(label))
+        
         dimensions = 3 if len(label.shape) > 3 else 2
         self.default_guidance = [-1] * (dimensions + 1)
 
         dims = dimensions
         if sid is not None and dimensions == 3:
             dims = 2
-            label = label[0][..., sid][np.newaxis]  # Assume channel is first and depth is last CHWD
+            label = label[0][..., sid][None]  # Assume channel is first and depth is last CHWD
 
         # THERE MAY BE MULTIPLE BLOBS FOR SINGLE LABEL IN THE SELECTED SLICE
-        label = (label > 0.5).astype(np.float32)
+        label = (label > 0.5).to(dtype=torch.float32)
         # measure.label: Label connected regions of an integer array - Two pixels are connected
         # when they are neighbors and have the same value
-        blobs_labels = measure.label(label.astype(int), background=0) if dims == 2 else label
+        # TODO: 2D code is modified but untested!
+        blobs_labels = torch.from_numpy(measure.label(label.to(dtype=torch.int32).cpu(), background=0)).to(device=self.device) if dims == 2 else label
 
         label_guidance = []
-        # If there are is presence of that label in this slice
-        if np.max(blobs_labels) <= 0:
+        # If the label is not present in this slice
+        if torch.max(blobs_labels) <= 0:
             label_guidance.append(self.default_guidance)
         else:
             for ridx in range(1, 2 if dims == 3 else self.connected_regions + 1):
                 if dims == 2:
-                    label = (blobs_labels == ridx).astype(np.float32)
-                    if np.sum(label) == 0:
+                    label = (blobs_labels == ridx).to(dtype=torch.float32)
+                    if torch.sum(label) == 0:
                         label_guidance.append(self.default_guidance)
                         continue
+                logger.error("label: {}".format(describe(label)))
 
                 # The distance transform provides a metric or measure of the separation of points in the image.
                 # This function calculates the distance between each pixel that is set to off (0) and
                 # the nearest nonzero pixel for binary images
                 # http://matlab.izmiran.ru/help/toolbox/images/morph14.html
-                distance = distance_transform_cdt(label).flatten()
-                probability = np.exp(distance) - 1.0
+                # TODO Add special case if all items are 1, then return -1
+                distance_np = distance_transform_cdt(label.cpu().numpy()).flatten()
+                logger.error("distance_np: \n{}".format(describe(torch.Tensor(distance_np))))
+                assert len(label.shape) == 3 and label.is_cuda, "label.shape: {}, label.is_cuda: {}".format(label.shape, label.is_cuda)
+                label_cp = cp.asarray(label)
+                # Note that there is a corner case where if all items in label are 1, the distance will become inf..
+                distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
+                distance = distance.flatten()
+                find_discrepancy(distance_np, distance.cpu().numpy(), label.flatten())
 
-                idx = np.where(label.flatten() > 0)[0]
-                seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+                probability = torch.exp(distance) - 1.0
+                logger.error(describe(distance))
+
+                idx = torch.where(label.flatten() > 0)[0]
+  
+                idx_np = idx.cpu().numpy()
+                probability_np = probability.cpu().numpy()
+                logger.error("probability_np: \n{}".format(describe(torch.Tensor(probability_np))))
+                logger.error("torch.sum: {}".format(torch.sum(probability[idx]).cpu().numpy()))
+                seed = self.R.choice(idx_np, size=1, p=probability_np[idx_np] / torch.sum(probability[idx]).cpu().numpy())
+                #seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+                
                 dst = distance[seed]
 
                 g = np.asarray(np.unravel_index(seed, label.shape)).transpose().tolist()[0]
-                g[0] = dst[0]  # for debug
+                g[0] = dst[0].item()  # for debug
                 if dimensions == 2 or dims == 3:
                     label_guidance.append(g)
                 else:
                     # Clicks are created using this convention Channel Height Width Depth (CHWD)
                     label_guidance.append([g[0], g[-2], g[-1], sid])  # Assume channel is first and depth is last CHWD
-
         return np.asarray(label_guidance)
 
     def _randomize(self, d, key_label):
@@ -571,6 +623,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+        before = time.time()
         for key in self.key_iterator(d):
             if key == "label":
                 label_guidances = {}
@@ -578,29 +631,31 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     # Randomize: Select a random slice
                     self._randomize(d, key_label)
                     # Generate guidance base on selected slice
-                    tmp_label = np.copy(d[key])
-                    # Taking one label to create the guidance
+                    tmp_label = torch.clone(d[key].detach())
+                    assert tmp_label.is_cuda
+                    # Taking one label to create the guidance   
                     if key_label != "background":
                         tmp_label[tmp_label != float(d["label_names"][key_label])] = 0
                     else:
                         tmp_label[tmp_label != float(d["label_names"][key_label])] = 1
                         tmp_label = 1 - tmp_label
+
                     label_guidances[key_label] = json.dumps(
                         self._apply(tmp_label, self.sid.get(key_label)).astype(int).tolist()
                     )
+                    logger.error(label_guidances[key_label])
 
                 if self.guidance_key in d.keys():
                     d[self.guidance_key] = update_guidance(d[self.guidance_key], label_guidances)
                 else:
                     d[self.guidance_key] = label_guidances # Initialize Guidance Dict
-
+                logger.error("AddInitialSeedPointMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
-                print("This transform only applies to label key")
+                raise UserWarning("This transform only applies to label key")
+        raise UserWarning("No input to AddInitialSeedPointMissingLabelsd")
 
-        return d
-
-
+# TODO check for GPU impact - I believe there is None
 class FindAllValidSlicesMissingLabelsd(MapTransform):
     """
     Find/List all valid slices in the labels.
@@ -609,9 +664,10 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
         sids: key to store slices indices having valid label map.
     """
 
-    def __init__(self, keys: KeysCollection, sids="sids", allow_missing_keys: bool = False):
+    def __init__(self, keys: KeysCollection, sids="sids", allow_missing_keys: bool = False, device=None):
         super().__init__(keys, allow_missing_keys)
         self.sids = sids
+        self.device = device
 
     def _apply(self, label, d):
         sids = {}
@@ -628,6 +684,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+        before = time.time()
         for key in self.key_iterator(d):
             if key == "label":
                 label = d[key]
@@ -640,7 +697,8 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
                 sids = self._apply(label, d)
                 if sids is not None and len(sids.keys()):
                     d[self.sids] = sids
+                logger.error("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
-                print("This transform only applies to label key")
-        return d
+                raise UserWarning("This transform only applies to label key")
+        raise UserWarning("No input to FindAllValidSlicesMissingLabelsd")

@@ -403,7 +403,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def find_guidance(self, discrepancy):
         # TODO any more GPU stuff possible?
         assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
-        if torch.eq(discrepancy, torch.ones_like(discrepancy, device=self.device)):
+        if torch.equal(discrepancy, torch.ones_like(discrepancy, device=self.device)):
             # special case of the distance, this code shall behave like distance_transform_cdt from scipy
             # which means it will return a vector full of -1s in this case
             distance = torch.ones_like(discrepancy, device=self.device) * -1
@@ -590,7 +590,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                 distance_np = distance_transform_cdt(label.cpu().numpy()).flatten()
                 logger.error("distance_np: \n{}".format(describe(torch.Tensor(distance_np))))
                 assert len(label.shape) == 3 and label.is_cuda, "label.shape: {}, label.is_cuda: {}".format(label.shape, label.is_cuda)
-                if torch.eq(label, torch.ones_like(label, device=self.device)):
+                if torch.equal(label, torch.ones_like(label, device=self.device)):
                     # special case of the distance, this code shall behave like distance_transform_cdt from scipy
                     # which means it will return a vector full of -1s in this case
                     # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..

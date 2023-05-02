@@ -208,27 +208,7 @@ def create_trainer(args):
             output_transform=from_engine(["loss"], first=True),
         ),
         CheckpointSaver(
-            save_dir=args.output,# class CustomLoader:
-#     def __init__(self, name: Optional[str] = None):
-#         self._name = name
-        
-
-#     def attach(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         if self._name is None:
-#             self.logger = engine.logger
-#         engine.add_event_handler(Events.STARTED, self)
-
-
-#     def __call__(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         pass
+            save_dir=args.output,
             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
             save_interval=args.save_interval * 2,
             save_final=True,
@@ -471,7 +451,7 @@ def setup_loggers(args):
     streamHandler = logging.StreamHandler()
     formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s](%(name)s) - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     streamHandler.setFormatter(formatter)
-    streamHandler.setLevel(logging.INFO)
+    streamHandler.setLevel(logging.DEBUG)
     logger.addHandler(streamHandler)
 
     if args.log_to_file:

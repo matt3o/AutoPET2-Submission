@@ -82,10 +82,10 @@ class Interaction:
         guidance_label_overlap = 0.0
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
-                inputs, labels = engine.prepare_batch(batchdata)
+                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
 
-                inputs = inputs.to(engine.state.device)
-                labels = labels.to(engine.state.device)
+                #inputs = inputs.to(engine.state.device)
+                #labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()

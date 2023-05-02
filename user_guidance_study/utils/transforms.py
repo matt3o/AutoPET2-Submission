@@ -407,7 +407,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # which means it will return a vector full of -1s in this case
             distance = torch.ones_like(discrepancy, device=self.device) * -1
         else:
-            with cp.cuda.Device(self.device):
+            with cp.cuda.Device(self.device.index):
                 discrepancy_cp = cp.asarray(discrepancy.squeeze())
                 assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
                 distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
@@ -599,7 +599,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     distance = torch.ones_like(label, device=self.device) * -1
                     special_case = True
                 else:
-                    with cp.cuda.Device(self.device):
+                    with cp.cuda.Device(self.device.index):
                         label_cp = cp.asarray(label)
                         distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
                 

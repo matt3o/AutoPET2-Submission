@@ -48,7 +48,7 @@ def update_guidance(orig, updated):
 def describe(t:torch.Tensor):
     return "\nmean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
 
-def find_discrepancy(vec1, vec2, context_vector, atol=0.001):
+def find_discrepancy(vec1, vec2, context_vector, atol=0.001, raise_warning=True):
     if not np.allclose(vec1, vec2):
         logger.error("find_discrepancy() found something")
         #logger.error(np.logical_not(np.isclose(vec1, vec2)))
@@ -62,6 +62,8 @@ def find_discrepancy(vec1, vec2, context_vector, atol=0.001):
             logger.error("{} \n".format(position))
             logger.error("Item at position: {} which has value: {} \nvec1: {} , vec2: {}".format(
                         position, context_vector.squeeze()[position], vec1[position], vec2[position]))
+        if raise_warning:
+            raise UserWarning("find_discrepancy has found discrepancies! Please fix your code..")
             # logger.info("Context array: {}".format(context_vector.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
             #                                                                 max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
             #                                                                 max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
@@ -202,6 +204,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                     signal[0] = (signal[0] > 0.1) * 1.0 # 0.1 with sigma=1 --> radius = 3, otherwise it is a cube
 
                     if self.gdt or self.edt or self.adaptive_sigma:
+                        raise UserWarning("Code no longer active")
                         fact = 1.0 if (self.gdt or self.exp_geos or self.adaptive_sigma) else 0.0
                         spacing  = self.spacing
                         geos = generalised_geodesic3d(image.unsqueeze(0).to(self.device),
@@ -399,9 +402,14 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy):
         # TODO any more GPU stuff possible?
-        discrepancy_cp = cp.asarray(discrepancy.squeeze())
         assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
-        distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
+        if torch.eq(discrepancy, torch.ones_like(discrepancy, device=self.device)):
+            # special case of the distance, this code shall behave like distance_transform_cdt from scipy
+            # which means it will return a vector full of -1s in this case
+            distance = torch.ones_like(discrepancy, device=self.device) * -1
+        else:
+            discrepancy_cp = cp.asarray(discrepancy.squeeze())
+            distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
 
         before = time.time()
         distance = distance.flatten()
@@ -582,25 +590,22 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                 distance_np = distance_transform_cdt(label.cpu().numpy()).flatten()
                 logger.error("distance_np: \n{}".format(describe(torch.Tensor(distance_np))))
                 assert len(label.shape) == 3 and label.is_cuda, "label.shape: {}, label.is_cuda: {}".format(label.shape, label.is_cuda)
-                label_cp = cp.asarray(label)
-                # Note that there is a corner case where if all items in label are 1, the distance will become inf..
-                distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
+                if torch.eq(label, torch.ones_like(label, device=self.device)):
+                    # special case of the distance, this code shall behave like distance_transform_cdt from scipy
+                    # which means it will return a vector full of -1s in this case
+                    # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
+                    distance = torch.ones_like(label, device=self.device) * -1
+                else:
+                    label_cp = cp.asarray(label)
+                    distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
+                
                 distance = distance.flatten()
                 find_discrepancy(distance_np, distance.detach().cpu().numpy(), label.flatten())
                 distance_np = distance.detach().cpu().numpy()
 
                 probability = np.exp(distance_np) - 1.0
-                #logger.error(describe(distance))
-
                 idx = np.where(label.flatten().detach().cpu().numpy() > 0)[0]
-  
-                #idx_np = idx.cpu().numpy()
-                #probability_np = probability.cpu().numpy()
-                #logger.error("probability_np: \n{}".format(describe(torch.Tensor(probability_np))))
-                #logger.error("torch.sum: {}".format(torch.sum(probability[idx]).cpu().numpy()))
                 seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-                #seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-                
                 dst = distance[seed]
 
                 g = np.asarray(np.unravel_index(seed, label.shape)).transpose().tolist()[0]

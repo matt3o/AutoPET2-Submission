@@ -409,7 +409,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         else:
             with cp.cuda.Device(self.device.index):
                 discrepancy_cp = cp.asarray(discrepancy.squeeze())
-                assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
+                assert len(discrepancy_cp.shape) == 3
                 distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
 
         before = time.time()

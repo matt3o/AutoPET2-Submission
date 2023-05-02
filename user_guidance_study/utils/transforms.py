@@ -402,14 +402,15 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy):
         # TODO any more GPU stuff possible?
-        assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
         if torch.equal(discrepancy, torch.ones_like(discrepancy, device=self.device)):
             # special case of the distance, this code shall behave like distance_transform_cdt from scipy
             # which means it will return a vector full of -1s in this case
             distance = torch.ones_like(discrepancy, device=self.device) * -1
         else:
-            discrepancy_cp = cp.asarray(discrepancy.squeeze())
-            distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
+            with cp.cuda.Device(self.device):
+                discrepancy_cp = cp.asarray(discrepancy.squeeze())
+                assert len(discrepancy_cp.shape) == 3 and discrepancy_cp.is_cuda
+                distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
 
         before = time.time()
         distance = distance.flatten()
@@ -596,8 +597,9 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
                     distance = torch.ones_like(label, device=self.device) * -1
                 else:
-                    label_cp = cp.asarray(label)
-                    distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
+                    with cp.cuda.Device(self.device):
+                        label_cp = cp.asarray(label)
+                        distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
                 
                 distance = distance.flatten()
                 find_discrepancy(distance_np, distance.detach().cpu().numpy(), label.flatten())

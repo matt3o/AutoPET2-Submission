@@ -59,11 +59,11 @@ def get_pre_transforms(labels, device, args):
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             
-
+            EnsureTyped(keys=("image", "label"), device=device),
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
+            EnsureTyped(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -73,9 +73,10 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
-            #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+                                        device=device, 
+                                        spacing=spacing),
+            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
@@ -89,9 +90,10 @@ def get_pre_transforms(labels, device, args):
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
+            EnsureTyped(keys=("image", "guidance", "label"), device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
+            EnsureTyped(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -101,9 +103,10 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
-            #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+                                        device=device, 
+                                        spacing=spacing),
+            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
         ]
     else: # MSD Spleen
         t_train = [
@@ -122,9 +125,10 @@ def get_pre_transforms(labels, device, args):
             RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
             Resized(keys=("image", "label"), spatial_size=[128, 128, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image", "guidance", "label"), device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
+            #ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -134,7 +138,8 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
+                                        device=device, 
+                                        spacing=spacing),
             ToTensord(keys=("image", "label"), device=torch.device('cpu')), # TODO: check why we need this on the CPU
         ]
         t_val = [
@@ -148,9 +153,9 @@ def get_pre_transforms(labels, device, args):
 
             Resized(keys=("image", "label"), spatial_size=[256, 256, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image", "guidance", "label"), device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -160,7 +165,8 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
+                                        device=device, 
+                                        spacing=spacing),
             ToTensord(keys=("image", "label"), device=torch.device('cpu')),
         ]
     return Compose(t_train), Compose(t_val)
@@ -172,7 +178,7 @@ def get_click_transforms(device, args):
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
-        ToTensord(keys=("label", "pred"), device=device, track_meta=False),
+        EnsureTyped(keys=("image","label", "pred", "guidance"), device=device, track_meta=False),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
@@ -183,9 +189,9 @@ def get_click_transforms(device, args):
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
-            spacing=spacing
+            spacing=spacing,
         ),
-        ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
+        EnsureTyped(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,
@@ -195,8 +201,11 @@ def get_click_transforms(device, args):
                                     gdt_th=args.gdt_th,
                                     exp_geos=args.exp_geos,
                                     adaptive_sigma=args.adaptive_sigma,
-                                    device=device, spacing=spacing),        #
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+                                    device=device, 
+                                    spacing=spacing),        #
+        #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+        EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+        
     ]
 
     return Compose(t)

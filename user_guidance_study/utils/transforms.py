@@ -405,14 +405,15 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
         before = time.time()
         distance = distance.flatten()
-        probability = torch.exp(distance) - 1.0
-        idx = torch.where(distance > 0)[0]
+        distance_np = distance.detach().cpu().numpy()
+        probability = np.exp(distance_np) - 1.0
+        idx = np.where(distance_np > 0)[0]
 
         if torch.sum(distance > 0) > 0:
-            idx_np = idx.cpu().numpy()
-            probability_np = probability.cpu().numpy()
-            seed = self.R.choice(idx_np, size=1, p=probability_np[idx_np] / torch.sum(probability[idx]).cpu().numpy())
-            torch.random(idx, size)
+            #idx_np = idx.cpu().numpy()
+            #probability_np = probability.cpu().numpy()
+            seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+            #torch.random(idx, size)
             dst = distance[seed]
 
             g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
@@ -585,18 +586,19 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                 # Note that there is a corner case where if all items in label are 1, the distance will become inf..
                 distance = torch.as_tensor(distance_transform_edt_cupy(label_cp), device=self.device)
                 distance = distance.flatten()
-                find_discrepancy(distance_np, distance.cpu().numpy(), label.flatten())
+                find_discrepancy(distance_np, distance.detach().cpu().numpy(), label.flatten())
+                distance_np = distance.detach().cpu().numpy()
 
-                probability = torch.exp(distance) - 1.0
-                logger.error(describe(distance))
+                probability = np.exp(distance_np) - 1.0
+                #logger.error(describe(distance))
 
-                idx = torch.where(label.flatten() > 0)[0]
+                idx = np.where(label.flatten().detach().cpu().numpy() > 0)[0]
   
-                idx_np = idx.cpu().numpy()
-                probability_np = probability.cpu().numpy()
-                logger.error("probability_np: \n{}".format(describe(torch.Tensor(probability_np))))
-                logger.error("torch.sum: {}".format(torch.sum(probability[idx]).cpu().numpy()))
-                seed = self.R.choice(idx_np, size=1, p=probability_np[idx_np] / torch.sum(probability[idx]).cpu().numpy())
+                #idx_np = idx.cpu().numpy()
+                #probability_np = probability.cpu().numpy()
+                #logger.error("probability_np: \n{}".format(describe(torch.Tensor(probability_np))))
+                #logger.error("torch.sum: {}".format(torch.sum(probability[idx]).cpu().numpy()))
+                seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
                 #seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
                 
                 dst = distance[seed]

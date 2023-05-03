@@ -442,7 +442,7 @@ def main():
 
 def setup_loggers(args):
     global logger
-    logger = logging.getLogger()
+    logger = logging.getLogger(__name__)
     if (logger.hasHandlers()):
         logger.handlers.clear()
     logger.propagate = False

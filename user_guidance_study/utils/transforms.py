@@ -17,6 +17,7 @@ import time
 from typing import Dict, Hashable, List, Mapping, Optional, Union
 
 import numpy as np
+np.seterr(all='raise')
 import torch
 import pandas as pd
 from numpy.typing import ArrayLike
@@ -91,20 +92,26 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         special_case = True
     else:
         with cp.cuda.Device(device.index):
+            mempool = cp.get_default_memory_pool()
+            mempool.set_limit(size=4*1024**3)
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
 
     if verify_correctness and not special_case:
-        find_discrepancy(distance_np, distance.detach().cpu().numpy(), tensor)
+        find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
 
     return distance
 
-def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = 20, R = np.random):
+def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = None, R = np.random):
     assert torch.sum(distance) > 0
+
+    if max_threshold is None:
+        max_threshold = int(np.floor(np.log(np.finfo(np.float32).max))) / (800*800*800) # divide by the maximum number of elements
+
     before = time.time()
     # Clip the distance transform to avoid overflows and negative probabilities
     transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-    distance_np = transformed_distance.detach().cpu().numpy()
+    distance_np = transformed_distance.cpu().numpy()
     # distance_np = flattened_array
 
     probability = np.exp(distance_np) - 1.0
@@ -458,7 +465,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy):
         # before = time.time()
-        distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=True)
+        distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=False)
         if torch.sum(distance) > 0:
             return get_choice_from_distance_transform(distance, R=self.R)
         else:
@@ -643,7 +650,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                         label_guidance.append(self.default_guidance)
                         continue
 
-                distance = get_distance_transform(label, self.device, verify_correctness=True)
+                distance = get_distance_transform(label, self.device, verify_correctness=False)
                 # distance = get_distance_transform(discrepancy, self.device, verify_correctness=True)
                 g = get_choice_from_distance_transform(distance, R=self.R)
                 # distance = distance.flatten()

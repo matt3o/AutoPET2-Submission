@@ -85,6 +85,7 @@ class Interaction:
                 inputs, labels = engine.prepare_batch(batchdata)
 
                 inputs = inputs.to(engine.state.device)
+                logger.info("inputs.shape is {}".format(inputs.shape))
                 labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)

@@ -189,7 +189,6 @@ def get_click_transforms(device, args):
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
-            spacing=spacing,
         ),
         EnsureTyped(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
@@ -205,7 +204,6 @@ def get_click_transforms(device, args):
                                     spacing=spacing),        #
         #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
         EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-        
     ]
 
     return Compose(t)

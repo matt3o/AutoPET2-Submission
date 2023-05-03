@@ -157,7 +157,7 @@ def create_trainer(args):
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
+        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian", overlap=0)
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -450,7 +450,7 @@ def setup_loggers(args):
     # Add the stream handler
     streamHandler = logging.StreamHandler()
     # (%(name)s)
-    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] %(funcName)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     streamHandler.setFormatter(formatter)
     streamHandler.setLevel(logging.INFO)
     logger.addHandler(streamHandler)

@@ -15,6 +15,7 @@ import random
 import warnings
 import time
 from typing import Dict, Hashable, List, Mapping, Optional, Union
+from pynvml import *
 
 import numpy as np
 np.seterr(all='raise')
@@ -80,6 +81,15 @@ def find_discrepancy(vec1:ArrayLike, vec2:ArrayLike, context_vector:ArrayLike, a
             #                                                                 max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
 
 
+def print_gpu_usage(device:torch.device):
+    nvmlInit()
+    h = nvmlDeviceGetHandleByIndex(device.index)
+    info = nvmlDeviceGetMemoryInfo(h)
+    logger.info('Device: {}\ntotal: {:.0f} MiB\nfree:  {:.0f} MiB\nused:  {:.0f} MiB\n'.format(device.index, info.total/(1024**2), info.free / (1024**2), info.used / (1024**2)))
+    free, total_memory = torch.cuda.mem_get_info(device=device)
+    logger.info("torch device {} \ntotal_memory: {:.0f} MiB\nfree:{:.0f} MiB\n used: {} MiB\n".format(device.index, total_memory / (1024**2), free / (1024**2), (total_memory - free) / (1024**2)))
+
+
 def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify_correctness=False, debug_log=False) -> torch.Tensor:
     # The distance transform provides a metric or measure of the separation of points in the image.
     # This function calculates the distance between each pixel that is set to off (0) and
@@ -110,6 +120,10 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
 
     return distance
+
+
+
+
 
 def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = None, R = np.random):
     assert torch.sum(distance) > 0
@@ -446,7 +460,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
         device=None,
-        spacing: Union[List[float], float] = None
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -458,7 +471,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.default_guidance = None
         self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
-        self.spacing = spacing
 
     def randomize(self, data: Dict[Hashable, np.ndarray]):
         probability = data[self.probability_key]
@@ -575,6 +587,7 @@ class SplitPredsLabeld(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
+        print_gpu_usage(torch.device("cuda:3"))
         for key in self.key_iterator(d):
             if key == "pred":
                 for idx, (key_label, _) in enumerate(d["label_names"].items()):
@@ -584,6 +597,7 @@ class SplitPredsLabeld(MapTransform):
             elif key != "pred":
                 logger.info("This is only for pred key")
         logger.debug("SplitPredsLabeld.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+        print_gpu_usage(torch.device("cuda:3"))
         return d
 
 # TODO Add GPU transform here

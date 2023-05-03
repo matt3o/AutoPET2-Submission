@@ -100,8 +100,8 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
 
 def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = 20, R = np.random):
     before = time.time()
-    # Clip the distance transform to avoid overflows 
-    transformed_distance = distance.clip(max=max_threshold).flatten()
+    # Clip the distance transform to avoid overflows and negative probabilities
+    transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
     distance_np = transformed_distance.detach().cpu().numpy()
     # distance_np = flattened_array
 
@@ -109,19 +109,19 @@ def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int
     idx = np.where(distance_np > 0)[0]
 
     # if torch.sum(distance > 0) > 0:
-    if torch.sum(transformed_distance) > 0:
-        #idx_np = idx.cpu().numpy()
-        #probability_np = probability.cpu().numpy()
-        seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-        #torch.random(idx, size)
-        dst = transformed_distance[seed]
+    # if torch.sum(transformed_distance) > 0:
+    #idx_np = idx.cpu().numpy()
+    #probability_np = probability.cpu().numpy()
+    seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+    #torch.random(idx, size)
+    dst = transformed_distance[seed]
 
-        g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-        # logger.info("{}".format(dst[0].item()))
-        g[0] = dst[0].item()
-        logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
-        return g
-    return None
+    g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+    # logger.info("{}".format(dst[0].item()))
+    g[0] = dst[0].item()
+    logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
+    return g
+    # return None
 
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
@@ -457,7 +457,10 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def find_guidance(self, discrepancy):
         # before = time.time()
         distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=True)
-        return get_choice_from_distance_transform(distance, R=self.R)
+        if torch.sum(distance) > 0:
+            return get_choice_from_distance_transform(distance, R=self.R)
+        else:
+            return None
 
         # # TODO any more GPU stuff possible?
         # if torch.equal(discrepancy, torch.ones_like(discrepancy, device=self.device)):

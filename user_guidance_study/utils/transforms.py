@@ -86,7 +86,8 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         # special case of the distance, this code shall behave like distance_transform_cdt from scipy
         # which means it will return a vector full of -1s in this case
         # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
-        distance = torch.ones_like(tensor, device=device) * -1
+        # TODO match text to code
+        distance = torch.ones_like(tensor, device=device)# * -1
         special_case = True
     else:
         with cp.cuda.Device(device.index):
@@ -99,6 +100,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
     return distance
 
 def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = 20, R = np.random):
+    assert torch.sum(distance) > 0
     before = time.time()
     # Clip the distance transform to avoid overflows and negative probabilities
     transformed_distance = distance.clip(min=0, max=max_threshold).flatten()

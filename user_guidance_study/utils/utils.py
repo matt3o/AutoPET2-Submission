@@ -45,7 +45,7 @@ def get_pre_transforms(labels, device, args):
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
@@ -81,7 +81,7 @@ def get_pre_transforms(labels, device, args):
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
             #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
@@ -112,7 +112,7 @@ def get_pre_transforms(labels, device, args):
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             ScaleIntensityRanged(keys="image", a_min=-224, a_max=212, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
@@ -145,7 +145,7 @@ def get_pre_transforms(labels, device, args):
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             ScaleIntensityRanged(keys="image", a_min=-224, a_max=212, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs

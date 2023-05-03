@@ -19,6 +19,7 @@ from typing import Dict, Hashable, List, Mapping, Optional, Union
 import numpy as np
 import torch
 import pandas as pd
+from numpy.typing import ArrayLike
 
 from monai.config import KeysCollection
 from monai.data import MetaTensor
@@ -46,9 +47,9 @@ def update_guidance(orig, updated):
     return orig
 
 def describe(t:torch.Tensor):
-    return "\nmean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
+    return "mean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
 
-def find_discrepancy(vec1, vec2, context_vector, atol=0.001, raise_warning=True):
+def find_discrepancy(vec1:ArrayLike, vec2:ArrayLike, context_vector:ArrayLike, atol:float=0.001, raise_warning:bool=True):
     if not np.allclose(vec1, vec2):
         logger.error("find_discrepancy() found something")
         #logger.error(np.logical_not(np.isclose(vec1, vec2)))
@@ -67,6 +68,34 @@ def find_discrepancy(vec1, vec2, context_vector, atol=0.001, raise_warning=True)
             # logger.info("Context array: {}".format(context_vector.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
             #                                                                 max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
             #                                                                 max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
+
+
+def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify_correctness=False, debug_log=False) -> Union[torch.Tensor, bool]:
+    # The distance transform provides a metric or measure of the separation of points in the image.
+    # This function calculates the distance between each pixel that is set to off (0) and
+    # the nearest nonzero pixel for binary images
+    # http://matlab.izmiran.ru/help/toolbox/images/morph14.html
+    if verify_correctness:
+        distance_np = distance_transform_edt(tensor.cpu().numpy()).flatten()
+    # if debug_log:
+    #     logger.error("distance_np: \n{}".format(describe(torch.Tensor(distance_np))))
+    assert len(tensor.shape) == 3 and tensor.is_cuda, "tensor.shape: {}, tensor.is_cuda: {}".format(tensor.shape, tensor.is_cuda)
+    special_case = False
+    if torch.equal(tensor, torch.ones_like(tensor, device=device)):
+        # special case of the distance, this code shall behave like distance_transform_cdt from scipy
+        # which means it will return a vector full of -1s in this case
+        # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
+        distance = torch.ones_like(tensor, device=device) * -1
+        special_case = True
+    else:
+        with cp.cuda.Device(device.index):
+            tensor_cp = cp.asarray(tensor)
+            distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
+
+    if verify_correctness and not special_case:
+        find_discrepancy(distance_np, distance.detach().cpu().numpy(), tensor.flatten())
+
+    return distance, special_case
 
 
 
@@ -608,7 +637,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     find_discrepancy(distance_np, distance.detach().cpu().numpy(), label.flatten())
                 distance_np = distance.detach().cpu().numpy()
 
-                probability = np.exp(distance_np) - 1.0
+                probability = distance_np #np.exp(distance_np) - 1.0
                 idx = np.where(label.flatten().detach().cpu().numpy() > 0)[0]
                 seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
                 dst = distance[seed]

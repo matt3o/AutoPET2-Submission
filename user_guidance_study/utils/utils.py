@@ -90,7 +90,7 @@ def get_pre_transforms(labels, device, args):
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
-            EnsureTyped(keys=("image", "guidance", "label"), device=device),
+            EnsureTyped(keys=("image", "label"), device=device),
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             EnsureTyped(keys=("image", "guidance"), device=device),
@@ -178,7 +178,7 @@ def get_click_transforms(device, args):
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
-        EnsureTyped(keys=("image","label", "pred", "guidance"), device=device, track_meta=False),
+        EnsureTyped(keys=("image","label", "pred"), device=device, track_meta=False),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),

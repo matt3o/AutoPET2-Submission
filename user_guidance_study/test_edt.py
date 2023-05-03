@@ -23,9 +23,11 @@ def main():
     ).to(device=torch.device("cuda:3"))
     #vector_t = torch.load("discrepancy.pt").squeeze()
 #    vector_t = torch.rand((128,128,128))
+    vector_t = torch.ones((200,200,200)).to(device=torch.device("cuda:3"))
+    vector_t[0][0][0] = 0
     logger.info(vector_t.shape)
 
-    iterations = 20
+    iterations = 1
 
     before = time.time()
     vector = vector_t.clone().cpu().numpy()
@@ -36,7 +38,6 @@ def main():
     print(distance)
 
     before = time.time()
-    iterations = 20
     vector = vector_t.clone().cpu().numpy()
     for i in range(iterations):    
         distance = distance_transform_edt_scipy(vector)

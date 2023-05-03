@@ -79,6 +79,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         distance_np = distance_transform_edt(tensor.cpu().numpy())
     # if debug_log:
     #     logger.error("distance_np: \n{}".format(describe(torch.Tensor(distance_np))))
+    # Check is necessary since the edt transform only accepts certain dimensions
     assert len(tensor.shape) == 3 and tensor.is_cuda, "tensor.shape: {}, tensor.is_cuda: {}".format(tensor.shape, tensor.is_cuda)
     special_case = False
     if torch.equal(tensor, torch.ones_like(tensor, device=device)):
@@ -115,7 +116,7 @@ def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int
         #torch.random(idx, size)
         dst = transformed_distance[seed]
 
-        g = np.asarray(np.unravel_index(seed, transformed_distance.shape)).transpose().tolist()[0]
+        g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
         # logger.info("{}".format(dst[0].item()))
         g[0] = dst[0].item()
         logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
@@ -455,7 +456,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy):
         # before = time.time()
-        distance = get_distance_transform(discrepancy, self.device, verify_correctness=True)
+        distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=True)
         return get_choice_from_distance_transform(distance, R=self.R)
 
         # # TODO any more GPU stuff possible?

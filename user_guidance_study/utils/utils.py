@@ -272,7 +272,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = ThreadDataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn')
+    val_loader = ThreadDataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'
+    )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(
             args.gpu, len(val_ds), total_l

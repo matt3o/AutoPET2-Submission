@@ -25,7 +25,7 @@ from monai.transforms import Compose, AsDiscrete
 from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("interactive_segmentation")
 
 
 class Interaction:
@@ -104,7 +104,7 @@ class Interaction:
                 preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
                 gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
                 dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
-                logger.debug('It: {} Dice: {:.4f} Epoch:'.format(j, dice.item(), engine.state.epoch))
+                logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice.item(), engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
 

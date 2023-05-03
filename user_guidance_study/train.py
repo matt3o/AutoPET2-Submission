@@ -442,16 +442,17 @@ def main():
 
 def setup_loggers(args):
     global logger
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("interactive_segmentation")
     if (logger.hasHandlers()):
         logger.handlers.clear()
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     # Add the stream handler
     streamHandler = logging.StreamHandler()
-    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s](%(name)s) - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    # (%(name)s)
+    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     streamHandler.setFormatter(formatter)
-    streamHandler.setLevel(logging.DEBUG)
+    streamHandler.setLevel(logging.INFO)
     logger.addHandler(streamHandler)
 
     if args.log_to_file:

@@ -33,6 +33,15 @@ import cupy as cp
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 
+
+measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
+
+logger = logging.getLogger("interactive_segmentation")
+
+
+distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
+distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+
 # TODO remove this monster.
 # Add new click to the guidance signal
 def update_guidance(orig, updated):
@@ -93,7 +102,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
     else:
         with cp.cuda.Device(device.index):
             mempool = cp.get_default_memory_pool()
-            mempool.set_limit(size=4*1024**3)
+            mempool.set_limit(size=8*1024**3)
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
 
@@ -132,14 +141,6 @@ def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int
     return g
     # return None
 
-
-measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
-
-logger = logging.getLogger(__name__)
-
-
-distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
-distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
 class NormalizeLabelsInDatasetd(MapTransform):
     def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False, device = None):
@@ -703,13 +704,13 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     label_guidances[key_label] = json.dumps(
                         self._apply(tmp_label, self.sid.get(key_label)).astype(int).tolist()
                     )
-                    logger.error(label_guidances[key_label])
+                    # logger.error(label_guidances[key_label])
 
                 if self.guidance_key in d.keys():
                     d[self.guidance_key] = update_guidance(d[self.guidance_key], label_guidances)
                 else:
                     d[self.guidance_key] = label_guidances # Initialize Guidance Dict
-                logger.error("AddInitialSeedPointMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+                logger.debug("AddInitialSeedPointMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 raise UserWarning("This transform only applies to label key")
@@ -757,7 +758,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
                 sids = self._apply(label, d)
                 if sids is not None and len(sids.keys()):
                     d[self.sids] = sids
-                logger.error("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+                logger.debug("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 raise UserWarning("This transform only applies to label key")

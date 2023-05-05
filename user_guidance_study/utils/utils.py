@@ -37,7 +37,7 @@ import glob
 import os
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("interactive_segmentation")
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]

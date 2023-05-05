@@ -30,6 +30,7 @@ rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
 
 import torch
+from utils.logger import setup_loggers, get_logger
 
 logger = None
 
@@ -332,6 +333,7 @@ def run(args):
 
 
 def main():
+    global logger
     torch.set_num_threads(int(os.cpu_count() / 3)) # Limit number of threads to 1/3 of resources
     parser = argparse.ArgumentParser()
 
@@ -435,39 +437,11 @@ def main():
         pathlib.Path(args.data).mkdir(parents=True)
 
     setup_loggers(args)
+    logger = get_logger()
     logger.info(f"CPU Count: {os.cpu_count()}")
     logger.info(f"Num threads: {torch.get_num_threads()}")
 
     run(args)
-
-def setup_loggers(args):
-    global logger
-    logger = logging.getLogger("interactive_segmentation")
-    if (logger.hasHandlers()):
-        logger.handlers.clear()
-    logger.propagate = False
-    logger.setLevel(logging.DEBUG)
-    # Add the stream handler
-    streamHandler = logging.StreamHandler()
-    # (%(name)s)
-    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] %(funcName)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    streamHandler.setFormatter(formatter)
-    streamHandler.setLevel(logging.INFO)
-    logger.addHandler(streamHandler)
-
-    if args.log_to_file:
-    # Add the file handler
-        log_file_path = "{}/log.txt".format(args.output)
-        fileHandler = logging.FileHandler(log_file_path)
-        fileHandler.setFormatter(formatter)
-        logger.addHandler(fileHandler)
-        logger.info("Logging all the data to '{}'".format(log_file_path))
-    else:
-        logger.info("Logging only to the console")
-
-    # Set logging level for external libraries
-    for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
-        logging.getLogger(_).setLevel(logging.INFO)
 
 if __name__ == "__main__":
     main()

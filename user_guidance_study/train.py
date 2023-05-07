@@ -42,9 +42,9 @@ logger = None
 #    nvidia_dlprof_pytorch_nvtx.init()
     
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
+from utils.helper import print_gpu_usage
 
 from utils.interaction import Interaction
-
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
 
 #from monai.config import print_config
@@ -308,6 +308,7 @@ def run(args):
                 trainer.run()
             else:
                 evaluator.run()
+            print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
             end_time = time.time()
             logger.info("Total Training Time {}".format(end_time - start_time))
 

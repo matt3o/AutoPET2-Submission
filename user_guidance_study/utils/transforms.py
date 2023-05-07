@@ -37,6 +37,7 @@ from cucim.core.operations.morphology import distance_transform_edt as distance_
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
+from utils.helper import print_gpu_usage
 from utils.logger import setup_loggers, get_logger
 
 # Has to be reinitialized for some weird reason here
@@ -87,22 +88,6 @@ def find_discrepancy(vec1:ArrayLike, vec2:ArrayLike, context_vector:ArrayLike, a
             # logger.info("Context array: {}".format(context_vector.squeeze()[max(0,idxs[0][i]-2):min(idxs[0].size,idxs[0][i]+3),
             #                                                                 max(0,idxs[1][i]-2):min(idxs[1].size, idxs[1][i]+3),
             #                                                                 max(0,idxs[2][i]-2):min(idxs[2].size, idxs[2][i]+3)]))
-
-
-def print_gpu_usage(device:torch.device, used_memory_only=False, context=""):
-    global logger
-    nvmlInit()
-    h = nvmlDeviceGetHandleByIndex(device.index)
-    info = nvmlDeviceGetMemoryInfo(h)
-    if used_memory_only:
-        logger.info('{} Device: {}\nused:  {:.0f} MiB\n'.format(context, device.index, info.used / (1024**2)))
-    else:
-        logger.info('{} Device: {}\ntotal: {:.0f} MiB\nfree:  {:.0f} MiB\nused:  {:.0f} MiB\n'.format(
-            context, device.index, info.total/(1024**2), info.free / (1024**2), info.used / (1024**2)))
-        free, total_memory = torch.cuda.mem_get_info(device=device)
-        logger.info("torch device {} \ntotal_memory: {:.0f} MiB\nfree:{:.0f} MiB\n used: {} MiB\n".format(
-            device.index, total_memory / (1024**2), free / (1024**2), (total_memory - free) / (1024**2)))
-    
 
 
 def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify_correctness=False, debug_log=False) -> torch.Tensor:
@@ -187,6 +172,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+        #print_gpu_usage(torch.device("cuda:0"), context="Normalize..")
         for key in self.key_iterator(d):
             # Dictionary containing new label numbers
             new_label_names = {}
@@ -204,6 +190,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
                 d[key].array = label
             else:
                 d[key] = label
+        #print_gpu_usage(torch.device("cuda:0"), context="Normalize..")
         return d
 
 
@@ -602,7 +589,7 @@ class SplitPredsLabeld(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
-        print_gpu_usage(torch.device("cuda:0"))
+        #print_gpu_usage(torch.device("cuda:0"))
         for key in self.key_iterator(d):
             if key == "pred":
                 for idx, (key_label, _) in enumerate(d["label_names"].items()):
@@ -612,7 +599,7 @@ class SplitPredsLabeld(MapTransform):
             elif key != "pred":
                 logger.info("This is only for pred key")
         logger.debug("SplitPredsLabeld.__call__ took {:.1f} seconds to finish".format(time.time() - before))
-        print_gpu_usage(torch.device("cuda:0"))
+        #print_gpu_usage(torch.device("cuda:0"))
         return d
 
 # TODO Add GPU transform here
@@ -713,8 +700,8 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        print_gpu_usage(device=torch.device("cuda:0"), context="AddInitialSeedPointMissingLabelsd")
-        print("AddInitialSeedPoint")
+        #print_gpu_usage(device=torch.device("cuda:0"), context="AddInitialSeedPointMissingLabelsd")
+        #print("AddInitialSeedPoint")
         before = time.time()
         for key in self.key_iterator(d):
             if key == "label":
@@ -777,7 +764,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
-        print_gpu_usage(device=torch.device("cuda:0"), context="FindAllValidSlicesMissingLabelsd")
+        #print_gpu_usage(device=torch.device("cuda:0"), context="FindAllValidSlicesMissingLabelsd")
         for key in self.key_iterator(d):
             if key == "label":
                 label = d[key]

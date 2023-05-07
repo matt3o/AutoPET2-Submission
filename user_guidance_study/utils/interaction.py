@@ -25,6 +25,8 @@ from monai.transforms import Compose, AsDiscrete
 from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
 
+from utils.helper import print_gpu_usage
+
 logger = logging.getLogger("interactive_segmentation")
 
 
@@ -80,8 +82,11 @@ class Interaction:
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
         guidance_label_overlap = 0.0
+        logger.info("####################### Interaction ##############")
+        print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
+                #print_gpu_usage(device=torch.device("cuda:0"), context="interaction class")
                 inputs, labels = engine.prepare_batch(batchdata)
 
                 inputs = inputs.to(engine.state.device)
@@ -98,13 +103,15 @@ class Interaction:
                             predictions = engine.inferer(inputs, engine.network)
                     else:
                         predictions = engine.inferer(inputs, engine.network)
-
+                
+                #print_gpu_usage(device=torch.device("cuda:0"), context="interaction class")
                 post_pred = AsDiscrete(argmax=True, to_onehot=2)
                 post_label = AsDiscrete(to_onehot=2)
 
                 preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
                 gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
                 dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
+                print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
                 logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice.item(), engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
@@ -143,7 +150,7 @@ class Interaction:
                 batchdata_list[0][CommonKeys.IMAGE][i] *= 0
             batchdata = list_data_collate(batchdata_list)
 
-
+        print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle

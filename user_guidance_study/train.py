@@ -42,7 +42,7 @@ logger = None
 #    nvidia_dlprof_pytorch_nvtx.init()
     
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
-from utils.helper import print_gpu_usage
+from utils.helper import print_gpu_usage, print_all_tensor_gpu_memory_usage
 
 from utils.interaction import Interaction
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
@@ -304,10 +304,14 @@ def run(args):
             batch_h = ProfileHandler("Batch gen", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
 
             start_time = time.time()
-            if not args.eval_only:
-                trainer.run()
-            else:
-                evaluator.run()
+            try:
+                if not args.eval_only:
+                    trainer.run()
+                else:
+                    evaluator.run()
+            except torch.cuda.OutOfMemoryError:
+                print_all_tensor_gpu_memory_usage()
+
             print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
             end_time = time.time()
             logger.info("Total Training Time {}".format(end_time - start_time))

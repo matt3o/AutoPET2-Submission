@@ -17,6 +17,7 @@ import os
 import torch
 import nibabel as nib
 import time
+import pprint
 
 from monai.data import decollate_batch, list_data_collate
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
@@ -25,7 +26,10 @@ from monai.transforms import Compose, AsDiscrete
 from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
 
-from utils.helper import print_gpu_usage
+from monai.data.meta_tensor import MetaTensor
+
+
+from utils.helper import print_gpu_usage, print_amount_of_tensors_on_gpu, get_total_size_of_all_tensors
 
 logger = logging.getLogger("interactive_segmentation")
 
@@ -84,17 +88,23 @@ class Interaction:
         guidance_label_overlap = 0.0
         logger.info("####################### Interaction ##############")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
+        # print_amount_of_tensors_on_gpu()
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
+                logger.info('##### It: {} '.format(j))
                 #print_gpu_usage(device=torch.device("cuda:0"), context="interaction class")
                 inputs, labels = engine.prepare_batch(batchdata)
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="engine.prepare_batch")
 
                 inputs = inputs.to(engine.state.device)
-                logger.info("inputs.shape is {}".format(inputs.shape))
+                if j == 0:
+                    logger.info("inputs.shape is {}".format(inputs.shape))
                 labels = labels.to(engine.state.device)
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="inputs and labels on device")
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="engine.network.eval")
 
                 # Forward Pass
                 with torch.no_grad():
@@ -104,6 +114,8 @@ class Interaction:
                     else:
                         predictions = engine.inferer(inputs, engine.network)
                 
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="after forward pass")
+
                 #print_gpu_usage(device=torch.device("cuda:0"), context="interaction class")
                 post_pred = AsDiscrete(argmax=True, to_onehot=2)
                 post_label = AsDiscrete(to_onehot=2)
@@ -111,7 +123,7 @@ class Interaction:
                 preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
                 gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
                 dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
-                print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="compute_dice")
                 logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice.item(), engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
@@ -127,8 +139,11 @@ class Interaction:
 
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata, detach=True)
+                # logger.error(batchdata_list)
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="decollate_batch")
 
                 for i in range(len(batchdata_list)):
+                    # logger.error(f"################### {i}")
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
@@ -136,11 +151,29 @@ class Interaction:
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
                     # logger.info("self.click_transforms took {:1f} seconds..".format(time.time()- before))
 
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="self.transforms")
 
                 if j <= 9 and self.args.save_nifti:
                     self.debug_viz(inputs, labels, preds, j)
 
                 batchdata = list_data_collate(batchdata_list)
+                logger.error(f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB")
+                # logger.error(type(batchdata))
+                # for key in batchdata:
+                #     # logger.error(f"key: {key} values: \n{type(batchdata[key])}")
+                #     if type(batchdata[key]) == torch.Tensor:
+                #         logger.error(f"{key} size: {batchdata[key].size()} size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB")
+                #     elif type(batchdata[key]) == dict:
+                        
+                #         for key2 in batchdata[key]:
+                #             if type(batchdata[key][key2]) == torch.Tensor:
+                #                 logger.error(f"{key}/{key2} size: {batchdata[key][key2].size()} size in MB: {batchdata[key][key2].element_size() * batchdata[key][key2].nelement() / (1024**2)}MB")
+                #             else:
+                #                 logger.error(f"{key}/{key2}: {batchdata[key][key2]}")
+                #     else:
+                #         raise UserWarning()
+                del inputs, labels, preds, gts, dice, batchdata_list
+                # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="list_data_collate")
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
         else:
@@ -150,6 +183,8 @@ class Interaction:
                 batchdata_list[0][CommonKeys.IMAGE][i] *= 0
             batchdata = list_data_collate(batchdata_list)
 
+        print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
+        torch.cuda.empty_cache()
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata
@@ -170,3 +205,4 @@ class Interaction:
         ni_img = nib.Nifti1Image(im, affine=affine)
         ni_img.header.get_xyzt_units()
         ni_img.to_filename(f'{name}.nii.gz')
+

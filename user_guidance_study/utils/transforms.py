@@ -37,7 +37,7 @@ from cucim.core.operations.morphology import distance_transform_edt as distance_
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
-from utils.helper import print_gpu_usage
+from utils.helper import print_gpu_usage, print_tensor_gpu_usage
 from utils.logger import setup_loggers, get_logger
 
 # Has to be reinitialized for some weird reason here
@@ -112,7 +112,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
     else:
         with cp.cuda.Device(device.index):
             mempool = cp.get_default_memory_pool()
-            mempool.set_limit(size=8*1024**3)
+            mempool.set_limit(size=2*1024**3)
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
 
@@ -121,7 +121,36 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
 
     return distance
 
+# TODO not working due to self.R being in numpy..
+# def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = None, R = np.random):
+#     assert torch.sum(distance) > 0
 
+#     if max_threshold is None:
+#         max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800*800*800) # divide by the maximum number of elements
+
+#     before = time.time()
+#     # Clip the distance transform to avoid overflows and negative probabilities
+#     transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
+#     distance_cp = cp.asarray(transformed_distance)
+#     # distance_np = flattened_array
+
+#     probability = cp.exp(distance_cp) - 1.0
+#     idx = cp.where(distance_cp > 0)[0]
+
+#     # if torch.sum(distance > 0) > 0:
+#     # if torch.sum(transformed_distance) > 0:
+#     #idx_np = idx.cpu().numpy()
+#     #probability_np = probability.cpu().numpy()
+#     seed = R.choice(idx, size=1, p=probability[idx] / cp.sum(probability[idx]))
+#     #torch.random(idx, size)
+#     dst = transformed_distance[seed]
+
+#     g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+#     # logger.info("{}".format(dst[0].item()))
+#     g[0] = dst[0].item()
+#     logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
+#     return g
+#     # return None
 
 
 
@@ -147,6 +176,7 @@ def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int
     seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
     #torch.random(idx, size)
     dst = transformed_distance[seed]
+    del transformed_distance
 
     g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
     # logger.info("{}".format(dst[0].item()))
@@ -325,6 +355,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
+        print_gpu_usage(self.device, used_memory_only=True, context="START AddGuidanceSignalDeepEditd")
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -339,17 +370,17 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                     else:
                         signal = self._get_signal(image, [])
                     tmp_image = torch.cat([tmp_image, signal], dim=0)
+                    # print_tensor_gpu_usage(tmp_image)
                     if isinstance(d[key], MetaTensor):
                         d[key].array = tmp_image
                     else:
                         d[key] = tmp_image
+                print_gpu_usage(self.device, used_memory_only=True, context="END AddGuidanceSignalDeepEditd")
                 logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
-                print("This transform only applies to image key")
-        
-        logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
-        return d
+                raise UserWarning("This transform only applies to image key")
+        raise UserWarning("image key has not been been found")
 
 # DONE GPU TRANSFORMATION
 class FindDiscrepancyRegionsDeepEditd(MapTransform):
@@ -394,6 +425,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                 # label_names: e.g. [('spleen', 1), ('background', 0)]
                 #logger.error(d["label_names"].items()) & exit(0)
                 before = time.time()
+                # print_gpu_usage(self.device, used_memory_only=True, context="before FindDiscrepancyRegionsDeepEditd")
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
                     if label_key != "background":
                         # Taking single label
@@ -435,7 +467,10 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         # Prediction should be represented in one
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
+                # prevent GPU leak?
+                # del d[self.discrepancy_key]
                 d[self.discrepancy_key] = all_discrepancies
+                # print_gpu_usage(self.device, used_memory_only=True, context="after FindDiscrepancyRegionsDeepEditd")
                 logger.debug("FindDiscrepancyRegionsDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
@@ -482,7 +517,9 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # before = time.time()
         distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=False)
         if torch.sum(distance) > 0:
-            return get_choice_from_distance_transform(distance, R=self.R)
+            t = get_choice_from_distance_transform(distance, R=self.R)
+            del distance
+            return t
         else:
             return None
 
@@ -521,18 +558,19 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         pos_discr = discrepancy[0]  # idx 0 is positive discrepancy and idx 1 is negative discrepancy
 
         # Check the areas that belong to other segments
-        other_discrepancy_areas = {}
-        for _, (key_label, val_label) in enumerate(label_names.items()):
-            if key_label != "background":
-                tmp_label = torch.clone(labels)
-                tmp_label[tmp_label != val_label] = 0
-                tmp_label = (tmp_label > 0.5).to(dtype=torch.float32)
-                other_discrepancy_areas[key_label] = torch.sum(discrepancy[1] * tmp_label) # calculate "area"
-            else:
-                tmp_label = torch.clone(labels)
-                tmp_label[tmp_label != val_label] = 1
-                tmp_label = 1 - tmp_label
-                other_discrepancy_areas[key_label] = torch.sum(discrepancy[1] * tmp_label) # calculate "area"
+        # TODO commented since it does nothing..
+        # other_discrepancy_areas = {}
+        # for _, (key_label, val_label) in enumerate(label_names.items()):
+        #     if key_label != "background":
+        #         tmp_label = np.copy(labels)
+        #         tmp_label[tmp_label != val_label] = 0
+        #         tmp_label = (tmp_label > 0.5).astype(np.float32)
+        #         other_discrepancy_areas[key_label] = np.sum(discrepancy[1] * tmp_label) # calculate "area"
+        #     else:
+        #         tmp_label = np.copy(labels)
+        #         tmp_label[tmp_label != val_label] = 1
+        #         tmp_label = 1 - tmp_label
+        #         other_discrepancy_areas[key_label] = np.sum(discrepancy[1] * tmp_label) # calculate "area"
 
         # Add guidance to the current key label
         if torch.sum(pos_discr) > 0:
@@ -549,7 +587,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         ### PART of the conversion to torch
         #for i in (d[self.guidance_key],d[self.discrepancy_key]):
          #   assert type(i) == torch.Tensor, "Wrong type for i {}, value {}".format(type(i), i)
-
+        print_gpu_usage(self.device, used_memory_only=True, context="START AddRandomGuidanceDeepEditd")
 
         guidance = d[self.guidance_key]
         discrepancy = d[self.discrepancy_key]
@@ -559,7 +597,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # Convert all guidance to lists so new guidance can be easily appended
             for key_label in d["label_names"].keys():
                 tmp_gui = guidance[key_label]
-                # tmp_gui: list len 5, with sublist len 4: [[0,0,0,0], [0,0,0,0], ...]
 
                 tmp_gui = tmp_gui.tolist() if isinstance(tmp_gui, np.ndarray) else tmp_gui
                 tmp_gui = json.loads(tmp_gui) if isinstance(tmp_gui, str) else tmp_gui
@@ -575,9 +612,9 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 self.add_guidance(self.guidance[key_label], discrepancy[key_label], d["label_names"], d["label"])
 
         if d[self.guidance_key].keys() == self.guidance.keys():
-            # logger.info()
             d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
 
+        print_gpu_usage(self.device, used_memory_only=True, context="END AddRandomGuidanceDeepEditd")
         logger.debug("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
@@ -602,7 +639,7 @@ class SplitPredsLabeld(MapTransform):
         #print_gpu_usage(torch.device("cuda:0"))
         return d
 
-# TODO Add GPU transform here
+# TODO Should no longer leak memory..
 class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
     """
     Add random guidance as initial seed point for a given label.
@@ -680,6 +717,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
 
                 # g = np.asarray(np.unravel_index(seed, label.shape)).transpose().tolist()[0]
                 # g[0] = dst[0].item()  # for debug
+                del distance
                 if dimensions == 2 or dims == 3:
                     label_guidance.append(g)
                 else:
@@ -706,7 +744,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         for key in self.key_iterator(d):
             if key == "label":
                 label_guidances = {}
-                for key_label in d["sids"].keys():
+                for key_label in d[self.sids_key].keys():
                     # Randomize: Select a random slice
                     self._randomize(d, key_label)
                     # Generate guidance base on selected slice
@@ -722,6 +760,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     label_guidances[key_label] = json.dumps(
                         self._apply(tmp_label, self.sid.get(key_label)).astype(int).tolist()
                     )
+                    del tmp_label
                     # logger.error(label_guidances[key_label])
 
                 if self.guidance_key in d.keys():
@@ -749,6 +788,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
         self.device = device
 
     def _apply(self, label, d):
+        assert type(label) == torch.Tensor or type(label) == MetaTensor
         sids = {}
         for key_label in d["label_names"].keys():
             l_ids = []
@@ -764,6 +804,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
+        # print_gpu_usage(self.device, used_memory_only=True, context="before FindAllValidSlicesMissingLabelsd")
         #print_gpu_usage(device=torch.device("cuda:0"), context="FindAllValidSlicesMissingLabelsd")
         for key in self.key_iterator(d):
             if key == "label":
@@ -778,6 +819,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
                 if sids is not None and len(sids.keys()):
                     d[self.sids] = sids
                 logger.debug("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+                # print_gpu_usage(self.device, used_memory_only=True, context="after FindAllValidSlicesMissingLabelsd")
                 return d
             else:
                 raise UserWarning("This transform only applies to label key")

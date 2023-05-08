@@ -1,6 +1,7 @@
 import torch
 from pynvml import *
 import gc
+from monai.data.meta_tensor import MetaTensor
 
 def get_gpu_usage(device:torch.device, used_memory_only=False, context=""):
     global logger
@@ -47,3 +48,17 @@ def print_amount_of_tensors_on_gpu():
         except:
             pass
     print(f"#################################### No of GPU tensors: {counter}")
+
+
+def get_total_size_of_all_tensors(data):
+    size = 0
+    if type(data) == dict:
+        for key in data:
+            size += get_total_size_of_all_tensors(data[key])
+    elif type(data) == list:
+        for element in data:
+            size += get_total_size_of_all_tensors(element)
+    elif type(data) == torch.Tensor or type(data) == MetaTensor:
+        size += data.element_size() * data.nelement()
+
+    return size

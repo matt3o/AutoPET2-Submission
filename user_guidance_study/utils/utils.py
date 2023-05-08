@@ -1,12 +1,12 @@
 from utils.transforms import (
     AddGuidanceSignalDeepEditd,
-    AddRandomGuidanceDeepEditd,
     FindDiscrepancyRegionsDeepEditd,
     NormalizeLabelsInDatasetd,
     FindAllValidSlicesMissingLabelsd,
     AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
 )
+from utils.transforms_working import AddRandomGuidanceDeepEditd
 
 from monai.transforms import (
     Activationsd,
@@ -75,8 +75,9 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
@@ -105,8 +106,9 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
         t_train = [
@@ -202,8 +204,9 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        #
-        #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
-        EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+        ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+        # ToTensord(keys=("image", "label"), device=device, track_meta=False),
+        # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]
 
     return Compose(t)

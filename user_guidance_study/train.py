@@ -27,7 +27,7 @@ import shutil
 # Things needed to debug the Interaction class
 import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
+resource.setrlimit(resource.RLIMIT_NOFILE, (8192, rlimit[1]))
 
 import torch
 from utils.logger import setup_loggers, get_logger
@@ -68,6 +68,7 @@ from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from ignite.engine import Engine, Events
 
 from monai.utils import set_determinism
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -310,7 +311,8 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
-                print_all_tensor_gpu_memory_usage()
+                pass
+                # print_all_tensor_gpu_memory_usage()
 
             print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
             end_time = time.time()
@@ -348,7 +350,7 @@ def main():
     parser.add_argument("-d", "--data", default="/cvhci/temp/mhadlich/data")
     # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
-    parser.add_argument("-de", "--delete_cache_after_finish", default=True, action='store_true')
+    parser.add_argument("-de", "--delete_cache_after_finish", default=False, action='store_true')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 

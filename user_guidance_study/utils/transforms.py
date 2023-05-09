@@ -355,7 +355,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
-        print_gpu_usage(self.device, used_memory_only=True, context="START AddGuidanceSignalDeepEditd")
+        # print_gpu_usage(self.device, used_memory_only=True, context="START AddGuidanceSignalDeepEditd")
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -375,7 +375,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         d[key].array = tmp_image
                     else:
                         d[key] = tmp_image
-                print_gpu_usage(self.device, used_memory_only=True, context="END AddGuidanceSignalDeepEditd")
+                # print_gpu_usage(self.device, used_memory_only=True, context="END AddGuidanceSignalDeepEditd")
                 logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
@@ -587,7 +587,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         ### PART of the conversion to torch
         #for i in (d[self.guidance_key],d[self.discrepancy_key]):
          #   assert type(i) == torch.Tensor, "Wrong type for i {}, value {}".format(type(i), i)
-        print_gpu_usage(self.device, used_memory_only=True, context="START AddRandomGuidanceDeepEditd")
+        # print_gpu_usage(self.device, used_memory_only=True, context="START AddRandomGuidanceDeepEditd")
 
         guidance = d[self.guidance_key]
         discrepancy = d[self.discrepancy_key]
@@ -614,7 +614,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if d[self.guidance_key].keys() == self.guidance.keys():
             d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
 
-        print_gpu_usage(self.device, used_memory_only=True, context="END AddRandomGuidanceDeepEditd")
+        # print_gpu_usage(self.device, used_memory_only=True, context="END AddRandomGuidanceDeepEditd")
         logger.debug("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 

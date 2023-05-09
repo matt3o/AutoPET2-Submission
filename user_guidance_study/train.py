@@ -311,14 +311,15 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
-                pass
+                raise
                 # print_all_tensor_gpu_memory_usage()
 
-            print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
-            end_time = time.time()
-            logger.info("Total Training Time {}".format(end_time - start_time))
+            finally:
+                print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
+                end_time = time.time()
+                logger.info("Total Training Time {}".format(end_time - start_time))
 
-            logger.info(wp.get_times_summary_pd())
+                logger.info(f"\n{wp.get_times_summary_pd()}")
 
 
         if not args.eval_only:

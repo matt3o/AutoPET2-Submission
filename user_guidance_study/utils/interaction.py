@@ -157,7 +157,7 @@ class Interaction:
                     self.debug_viz(inputs, labels, preds, j)
 
                 batchdata = list_data_collate(batchdata_list)
-                logger.error(f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB")
+                # logger.error(f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB")
                 # logger.error(type(batchdata))
                 # for key in batchdata:
                 #     # logger.error(f"key: {key} values: \n{type(batchdata[key])}")

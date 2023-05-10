@@ -66,7 +66,7 @@ def get_total_size_of_all_tensors(data):
 def describe(t:torch.Tensor):
     return "mean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
 
-def describe_batch_data(d: dict):
+def describe_batch_data(batchdata: dict):
     batch_data_string = ""
     batch_data_string += f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB"
     batch_data_string += f"Type of batch data: {type(batchdata)}"

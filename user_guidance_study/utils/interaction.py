@@ -86,6 +86,9 @@ class Interaction:
                 # NOTE only input and labels get transferred to the GPU since batchdata contains a lot more data
                 # in my experience the data allocated on the GPU during the iterations does not get released properly
                 inputs = inputs.to(engine.state.device)
+                if j == 0:
+                    logger.info("inputs.shape is {}".format(inputs.shape))
+
                 labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
@@ -138,7 +141,7 @@ class Interaction:
 
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
         # torch.cuda.empty_cache()
-        # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
+        print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle

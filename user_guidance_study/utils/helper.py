@@ -62,3 +62,23 @@ def get_total_size_of_all_tensors(data):
         size += data.element_size() * data.nelement()
 
     return size
+
+def describe(t:torch.Tensor):
+    return "mean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
+
+def describe_batch_data(d: dict):
+    batch_data_string = ""
+    batch_data_string += f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB"
+    batch_data_string += f"Type of batch data: {type(batchdata)}"
+    for key in batchdata:
+        if type(batchdata[key]) == torch.Tensor:
+            batch_data_string += f"{key} size: {batchdata[key].size()} size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB"
+        elif type(batchdata[key]) == dict:
+            for key2 in batchdata[key]:
+                if type(batchdata[key][key2]) == torch.Tensor:
+                    batch_data_string += f"{key}/{key2} size: {batchdata[key][key2].size()} size in MB: {batchdata[key][key2].element_size() * batchdata[key][key2].nelement() / (1024**2)}MB"
+                else:
+                    batch_data_string += f"{key}/{key2}: {batchdata[key][key2]}"
+        else:
+            raise UserWarning()
+    return batch_data_string

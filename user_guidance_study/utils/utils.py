@@ -79,6 +79,8 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            # NOTE this can be set to the GPU immediatly however it does not have the intended effect
+            # It just uses more and more memory without offering real advantages
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),

@@ -34,13 +34,6 @@ from utils.logger import setup_loggers, get_logger
 
 logger = None
 
-# dlprof profiling
-#PROFILING=True
-#if PROFILING:
-#    import nvidia_dlprof_pytorch_nvtx
-#    from monai.handlers.nvtx_handlers import MarkHandler, RangeHandler
-#    nvidia_dlprof_pytorch_nvtx.init()
-    
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
 from utils.helper import print_gpu_usage, print_all_tensor_gpu_memory_usage
 
@@ -281,7 +274,6 @@ def run(args):
         os.makedirs(args.output, exist_ok=True)
 
     # Init the Inferer
-    #if args.inferer == "SlidingWindowInferer":
     args.sw_roi_size = eval(args.sw_roi_size)
     args.crop_spatial_size = eval(args.crop_spatial_size)
 

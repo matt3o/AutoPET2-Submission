@@ -35,7 +35,7 @@ from utils.logger import setup_loggers, get_logger
 logger = None
 
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
-from utils.helper import print_gpu_usage, print_all_tensor_gpu_memory_usage
+from utils.helper import print_gpu_usage, print_all_tensor_gpu_memory_usage, get_gpu_usage
 
 from utils.interaction import Interaction
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
@@ -61,6 +61,8 @@ from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from ignite.engine import Engine, Events
 
 from monai.utils import set_determinism
+
+import threading
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -96,6 +98,34 @@ def get_network(network, labels, args):
         )
 
     return network
+
+# def track_gpu_usage(output: str, device: torch.device):
+#     print_gpu_usage(device)
+#     get_gpu_usage(device)
+
+class GPU_Thread(threading.Thread):
+    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
+        super().__init__()
+        self.threadID = threadID
+        self.name = name
+        self.device = device
+        self.csv_file = open(f"{output_file}", "w")
+        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+        self.csv_file.write(header)
+        self.csv_file.write("\n")
+        self.csv_file.flush()
+        self.stopped = event
+
+    def __del__(self):
+        self.csv_file.flush()
+        self.csv_file.close()
+
+    def run(self):
+        while not self.stopped.wait(1):
+            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+            self.csv_file.write(usage)
+            self.csv_file.write("\n")
+
 
 
 def create_trainer(args):
@@ -286,6 +316,12 @@ def run(args):
     # click-generation
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
+    stopFlag = threading.Event()
+    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", torch.device(f"cuda:{args.gpu}"), stopFlag)
+    logger.info(f"Logging GPU usage to {args.output}/usage.csv")
+    # TODO test this on torch v2 
+    # torch.set_default_device(f"cuda:{args.gpu}")
+
     try:
         wp = WorkflowProfiler()
         
@@ -297,6 +333,8 @@ def run(args):
             batch_h = ProfileHandler("Batch gen", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
 
             start_time = time.time()
+            gpu_thread.start()
+
             try:
                 if not args.eval_only:
                     trainer.run()
@@ -307,9 +345,11 @@ def run(args):
                 # print_all_tensor_gpu_memory_usage()
 
             finally:
+                stopFlag.set()
                 print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
                 end_time = time.time()
                 logger.info("Total Training Time {}".format(end_time - start_time))
+                gpu_thread.join()
 
                 logger.info(f"\n{wp.get_times_summary_pd()}")
 

@@ -3,20 +3,36 @@ from pynvml import *
 import gc
 from monai.data.meta_tensor import MetaTensor
 
-def get_gpu_usage(device:torch.device, used_memory_only=False, context=""):
+import functools  
+import time  
+
+def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
     global logger
     nvmlInit()
     h = nvmlDeviceGetHandleByIndex(device.index)
     info = nvmlDeviceGetMemoryInfo(h)
+    nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
     usage = ""
-    if used_memory_only:
-        usage += '{} Device: {} --- used:  {:.0f} MiB\n'.format(context, device.index, info.used / (1024**2))
+    utilization = torch.cuda.utilization(device)
+    t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
+
+    t_used = t_total - t_free
+    used_not_by_torch = nv_used - t_used
+        
+    if csv_format and used_memory_only:
+        raise NotImplemented
+
+    if csv_format:
+        header = "device, context, utilization, total memory (MB), free memory (MB), used memory (MB), Memory not used by torch (MB)"
+        usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+            device.index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+        return (header, usage)
     else:
-        usage += '{} Device: {}\ntotal: {:.0f} MiB\nfree:  {:.0f} MiB\nused:  {:.0f} MiB\n'.format(
-            context, device.index, info.total/(1024**2), info.free / (1024**2), info.used / (1024**2))
-        free, total_memory = torch.cuda.mem_get_info(device=device)
-        usage += "torch device {} \ntotal_memory: {:.0f} MiB\nfree:{:.0f} MiB\n used: {} MiB\n".format(
-            device.index, total_memory / (1024**2), free / (1024**2), (total_memory - free) / (1024**2))
+        if used_memory_only:
+            usage += '{} Device: {} --- used:  {:.0f} MiB\n'.format(context, device.index, nv_used)
+        else:
+            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+                device.index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
     return usage
 
 
@@ -84,3 +100,14 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
             else:
                 raise UserWarning()
     return batch_data_string
+
+def timeit(func):
+    @wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        print(f'Function {func.__name__}() took {total_time:.4f} seconds')
+        return result
+    return timeit_wrapper

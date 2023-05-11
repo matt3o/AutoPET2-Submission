@@ -7,10 +7,17 @@ import functools
 import time
 from datetime import datetime
 
+import os
+
+def get_actual_cuda_index_of_device(device:torch.device):
+    cuda_indexes = os.environ["CUDA_VISIBLE_DEVICES"].split(',')
+    return int(cuda_indexes[device.index])
+
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
     global logger
     nvmlInit()
-    h = nvmlDeviceGetHandleByIndex(device.index)
+    cuda_index = get_actual_cuda_index_of_device(device)
+    h = nvmlDeviceGetHandleByIndex(cuda_index)
     info = nvmlDeviceGetMemoryInfo(h)
     nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
     usage = ""
@@ -26,14 +33,14 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
     if csv_format:
         header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),Memory not used by torch (MB)"
         usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-            device.index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch)
         return (header, usage)
     else:
         if used_memory_only:
-            usage += '{} Device: {} --- used:  {:.0f} MB\n'.format(context, device.index, nv_used)
+            usage += '{} Device: {} --- used:  {:.0f} MB\n'.format(context, cuda_index, nv_used)
         else:
             usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-                device.index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
     return usage
 
 

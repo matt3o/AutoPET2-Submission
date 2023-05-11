@@ -34,6 +34,7 @@ from utils.logger import setup_loggers, get_logger
 
 logger = None
 
+
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
 from utils.helper import print_gpu_usage, print_all_tensor_gpu_memory_usage, get_gpu_usage
 
@@ -58,8 +59,11 @@ from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
 
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
-from ignite.engine import Engine, Events
+from monai.engines.utils import IterationEvents
 
+from ignite.engine import Engine, Events
+import threading
+from monai.data import set_track_meta
 from monai.utils import set_determinism
 
 import threading
@@ -70,6 +74,30 @@ torch.backends.cudnn.allow_tf32 = True
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+class GPU_Thread(threading.Thread):
+    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
+        super().__init__()
+        self.threadID = threadID
+        self.name = name
+        self.device = device
+        self.csv_file = open(f"{output_file}", "w")
+        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+        self.csv_file.write(header)
+        self.csv_file.write("\n")
+        self.csv_file.flush()
+        self.stopped = event
+
+    def __del__(self):
+        self.csv_file.flush()
+        self.csv_file.close()
+
+    def run(self):
+        while not self.stopped.wait(1):
+            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+            self.csv_file.write(usage)
+            self.csv_file.write("\n")
+
 
 def get_network(network, labels, args):
     if network == "dynunet":
@@ -100,7 +128,7 @@ def get_network(network, labels, args):
             conv1d=args.conv1d,
             conv1s=args.conv1s,
         )
-
+    set_track_meta(False)
     return network
 
 # def track_gpu_usage(output: str, device: torch.device):
@@ -331,14 +359,16 @@ def run(args):
         
         with wp:           
             trainer, evaluator = create_trainer(args)
+            gpu_thread.start()
 
             epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
             iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
-            batch_h = ProfileHandler("Batch gen", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+            batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+            innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
+            whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
 
             start_time = time.time()
-            gpu_thread.start()
-
+            
             try:
                 if not args.eval_only:
                     trainer.run()

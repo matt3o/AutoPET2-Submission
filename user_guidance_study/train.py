@@ -67,11 +67,39 @@ from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from monai.engines.utils import IterationEvents
 
 from ignite.engine import Engine, Events
-
+import threading
 from monai.data import set_track_meta
 from monai.utils import set_determinism
+
+from utils.helperr import get_gpu_usage
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+class GPU_Thread(threading.Thread):
+    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
+        super().__init__()
+        self.threadID = threadID
+        self.name = name
+        self.device = device
+        self.csv_file = open(f"{output_file}", "w")
+        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+        self.csv_file.write(header)
+        self.csv_file.write("\n")
+        self.csv_file.flush()
+        self.stopped = event
+
+    def __del__(self):
+        self.csv_file.flush()
+        self.csv_file.close()
+
+    def run(self):
+        while not self.stopped.wait(1):
+            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+            self.csv_file.write(usage)
+            self.csv_file.write("\n")
+
 
 def get_network(network, labels, args):
     if network == "dynunet":
@@ -315,11 +343,16 @@ def run(args):
     # click-generation
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
+    stopFlag = threading.Event()
+    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", torch.device(f"cuda:{args.gpu}"), stopFlag)
+
+
     try:
         wp = WorkflowProfiler()
         
         with wp:           
             trainer, evaluator = create_trainer(args)
+            gpu_thread.start()
 
             epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
             iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
@@ -335,6 +368,8 @@ def run(args):
                 evaluator.run()
             end_time = time.time()
             logger.info("Total Training Time {}".format(end_time - start_time))
+            stopFlag.set()
+            gpu_thread.join()
 
             logger.info("\n{}".format(wp.get_times_summary_pd()))
 

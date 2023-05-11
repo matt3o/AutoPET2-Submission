@@ -140,7 +140,7 @@ class Interaction:
             batchdata = list_data_collate(batchdata_list)
 
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata

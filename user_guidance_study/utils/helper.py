@@ -4,7 +4,8 @@ import gc
 from monai.data.meta_tensor import MetaTensor
 
 import functools  
-import time  
+import time
+from datetime import datetime
 
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
     global logger
@@ -23,13 +24,13 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
         raise NotImplemented
 
     if csv_format:
-        header = "device, context, utilization, total memory (MB), free memory (MB), used memory (MB), Memory not used by torch (MB)"
-        usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-            device.index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+        header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),Memory not used by torch (MB)"
+        usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+            device.index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch)
         return (header, usage)
     else:
         if used_memory_only:
-            usage += '{} Device: {} --- used:  {:.0f} MiB\n'.format(context, device.index, nv_used)
+            usage += '{} Device: {} --- used:  {:.0f} MB\n'.format(context, device.index, nv_used)
         else:
             usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
                 device.index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
@@ -40,7 +41,7 @@ def print_gpu_usage(*args, **kwargs):
     print(get_gpu_usage(*args, **kwargs))
 
 def print_tensor_gpu_usage(a:torch.Tensor):
-    print("Tensor GPU memory: {} Mib".format(a.element_size() * a.nelement() / (1024**2)))
+    print("Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2)))
 
 
 def print_all_tensor_gpu_memory_usage():

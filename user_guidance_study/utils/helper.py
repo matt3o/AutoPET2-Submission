@@ -29,21 +29,20 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
 
     t_used = t_total - t_free
     used_not_by_torch = nv_used - t_used
-    amount_of_tensors = print_amount_of_tensors()
     if csv_format and used_memory_only:
         raise NotImplemented
 
     if csv_format:
-        header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),amount_of_tensors"
+        header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB)"
         usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch, amount_of_tensors)
+            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch)
         return (header, usage)
     else:
         if used_memory_only:
             usage += '{} Device: {} --- used:  {:.0f} MB\n'.format(context, cuda_index, nv_used)
         else:
-            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{}'.format(
-                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch, amount_of_tensors)
+            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
     return usage
 
 

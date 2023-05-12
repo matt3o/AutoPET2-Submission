@@ -75,6 +75,7 @@ def print_amount_of_tensors():
         except:
             pass
     print(f"#################################### Amount of tensors: {counter}")
+    return counter
 
 
 def get_total_size_of_all_tensors(data):

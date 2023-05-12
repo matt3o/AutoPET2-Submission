@@ -29,7 +29,7 @@ from monai.metrics import compute_dice
 from monai.data.meta_tensor import MetaTensor
 
 
-from utils.helper import print_gpu_usage, print_amount_of_tensors_on_gpu, get_total_size_of_all_tensors, describe_batch_data
+from utils.helper import print_gpu_usage, get_total_size_of_all_tensors, describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 

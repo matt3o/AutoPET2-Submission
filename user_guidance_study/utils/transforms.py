@@ -33,7 +33,7 @@ from monai.data.meta_tensor import MetaTensor
 import cupy as cp
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
-
+from cupyx.scipy.ndimage import label as label_cp
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
@@ -648,7 +648,9 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         # measure.label: Label connected regions of an integer array - Two pixels are connected
         # when they are neighbors and have the same value
         # TODO: 2D code is modified but untested!
-        blobs_labels = torch.from_numpy(measure.label(label.to(dtype=torch.int32).cpu(), background=0)).to(device=self.device) if dims == 2 else label
+        with cp.cuda.Device(self.device.index):
+            blobs_labels = torch.as_tensor(label_cp(cp.asarray(label))) if dims == 2 else label
+#            blobs_labels = torch.from_numpy(measure.label(label.to(dtype=torch.int32).cpu(), background=0)).to(device=self.device) if dims == 2 else label
 
         label_guidance = []
         # If the label is not present in this slice

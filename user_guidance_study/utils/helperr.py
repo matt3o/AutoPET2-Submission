@@ -7,10 +7,20 @@ import functools
 import time
 from datetime import datetime
 
+import os
+
+def get_actual_cuda_index_of_device(device:torch.device):
+    try:
+        cuda_indexes = os.environ["CUDA_VISIBLE_DEVICES"].split(',')
+    except KeyError:
+        return int(device.index)
+    return int(cuda_indexes[device.index])
+
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
     global logger
     nvmlInit()
-    h = nvmlDeviceGetHandleByIndex(device.index)
+    cuda_index = get_actual_cuda_index_of_device(device)
+    h = nvmlDeviceGetHandleByIndex(cuda_index)
     info = nvmlDeviceGetMemoryInfo(h)
     nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
     usage = ""
@@ -19,21 +29,21 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
 
     t_used = t_total - t_free
     used_not_by_torch = nv_used - t_used
-        
+    amount_of_tensors = print_amount_of_tensors()
     if csv_format and used_memory_only:
         raise NotImplemented
 
     if csv_format:
-        header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),Memory not used by torch (MB)"
+        header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),amount_of_tensors"
         usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-            device.index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch, amount_of_tensors)
         return (header, usage)
     else:
         if used_memory_only:
-            usage += '{} Device: {} --- used:  {:.0f} MB\n'.format(context, device.index, nv_used)
+            usage += '{} Device: {} --- used:  {:.0f} MB\n'.format(context, cuda_index, nv_used)
         else:
-            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-                device.index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{}'.format(
+                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch, amount_of_tensors)
     return usage
 
 
@@ -52,7 +62,7 @@ def print_all_tensor_gpu_memory_usage():
         except:
             pass
 
-def print_amount_of_tensors_on_gpu():
+def print_amount_of_tensors():
     counter = 0
     for obj in gc.get_objects():
         try:
@@ -64,7 +74,8 @@ def print_amount_of_tensors_on_gpu():
             #     counter += 1
         except:
             pass
-    print(f"#################################### No of GPU tensors: {counter}")
+    print(f"#################################### Amount of tensors: {counter}")
+    return counter
 
 
 def get_total_size_of_all_tensors(data):

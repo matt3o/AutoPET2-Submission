@@ -30,13 +30,15 @@ rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (8192, rlimit[1]))
 
 import torch
+import cupy as cp
+
 from utils.logger import setup_loggers, get_logger
 
 logger = None
 
 
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
-from utils.helper import print_gpu_usage, print_all_tensor_gpu_memory_usage, get_gpu_usage
+from utils.helper import print_gpu_usage, get_gpu_usage, get_acutal_cuda_index_of_device
 
 from utils.interaction import Interaction
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
@@ -163,6 +165,7 @@ class GPU_Thread(threading.Thread):
 def create_trainer(args):
 
     set_determinism(seed=args.seed)
+    cp.random.seed(seed=args.seed)
 
     device = torch.device(f"cuda:{args.gpu}")
 
@@ -509,6 +512,8 @@ def main():
     
     if not os.path.exists(args.data):
         pathlib.Path(args.data).mkdir(parents=True)
+
+    args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 
     setup_loggers(args)
     logger = get_logger()

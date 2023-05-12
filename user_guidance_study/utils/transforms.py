@@ -104,8 +104,8 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         special_case = True
     else:
         with cp.cuda.Device(device.index):
-            mempool = cp.get_default_memory_pool()
-            mempool.set_limit(size=8*1024**3)
+#            mempool = cp.get_default_memory_pool()
+#            mempool.set_limit(size=8*1024**3)
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
 
@@ -114,36 +114,37 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
 
     return distance
 
-# TODO not working due to self.R being in numpy..
-# def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = None, R = np.random):
-#     assert torch.sum(distance) > 0
+# TODO check if this adds non-deterministic behaviour
+def get_choice_from_distance_transform_cp(distance: torch.Tensor, max_threshold:int = None, device: torch.device):
+    assert torch.sum(distance) > 0
+    
+    with cp.cuda.Device(device.index):
+        if max_threshold is None:
+            max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800*800*800) # divide by the maximum number of elements
 
-#     if max_threshold is None:
-#         max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800*800*800) # divide by the maximum number of elements
+        before = time.time()
+        # Clip the distance transform to avoid overflows and negative probabilities
+        transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
+        distance_cp = cp.asarray(transformed_distance)
+        # distance_np = flattened_array
 
-#     before = time.time()
-#     # Clip the distance transform to avoid overflows and negative probabilities
-#     transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-#     distance_cp = cp.asarray(transformed_distance)
-#     # distance_np = flattened_array
+        probability = cp.exp(distance_cp) - 1.0
+        idx = cp.where(distance_cp > 0)[0]
 
-#     probability = cp.exp(distance_cp) - 1.0
-#     idx = cp.where(distance_cp > 0)[0]
+        # if torch.sum(distance > 0) > 0:
+        # if torch.sum(transformed_distance) > 0:
+        #idx_np = idx.cpu().numpy()
+        #probability_np = probability.cpu().numpy()
+        seed = cp.random.choice(idx, size=1, p=probability[idx] / cp.sum(probability[idx]))
+        #torch.random(idx, size)
+        dst = transformed_distance[seed]
 
-#     # if torch.sum(distance > 0) > 0:
-#     # if torch.sum(transformed_distance) > 0:
-#     #idx_np = idx.cpu().numpy()
-#     #probability_np = probability.cpu().numpy()
-#     seed = R.choice(idx, size=1, p=probability[idx] / cp.sum(probability[idx]))
-#     #torch.random(idx, size)
-#     dst = transformed_distance[seed]
-
-#     g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-#     # logger.info("{}".format(dst[0].item()))
-#     g[0] = dst[0].item()
-#     logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
-#     return g
-#     # return None
+        g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+        # logger.info("{}".format(dst[0].item()))
+        g[0] = dst[0].item()
+        logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
+        return g
+        # return None
 
 
 
@@ -488,7 +489,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # before = time.time()
         distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=False)
         if torch.sum(distance) > 0:
-            t = get_choice_from_distance_transform(distance, R=self.R)
+            t = get_choice_from_distance_transform_cp(distance)
             del distance
             return t
         else:
@@ -662,7 +663,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                         continue
 
                 distance = get_distance_transform(label, self.device, verify_correctness=False)
-                g = get_choice_from_distance_transform(distance, R=self.R)
+                g = get_choice_from_distance_transform_cp(distance)
 
                 del distance
                 if dimensions == 2 or dims == 3:

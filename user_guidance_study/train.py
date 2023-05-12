@@ -38,7 +38,7 @@ logger = None
 
 
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
-from utils.helper import print_gpu_usage, get_gpu_usage, get_acutal_cuda_index_of_device
+from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device
 
 from utils.interaction import Interaction
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders

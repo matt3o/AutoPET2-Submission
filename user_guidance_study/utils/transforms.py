@@ -115,7 +115,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
     return distance
 
 # TODO check if this adds non-deterministic behaviour
-def get_choice_from_distance_transform_cp(distance: torch.Tensor, max_threshold:int = None, device: torch.device):
+def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.device, max_threshold:int = None):
     assert torch.sum(distance) > 0
     
     with cp.cuda.Device(device.index):
@@ -130,12 +130,20 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, max_threshold:
 
         probability = cp.exp(distance_cp) - 1.0
         idx = cp.where(distance_cp > 0)[0]
+        probabilities = probability[idx] / cp.sum(probability[idx])
+        assert idx.shape == probabilities.shape
+        logger.error(probabilities)
+        logger.error(probabilities.dtype)
+        assert cp.sum(probabilities) == 1 
+        logger.error(cp.greater_equal(probabilities, 0)) 
+        assert cp.all(cp.greater_equal(probabilities, 0))
 
+        
         # if torch.sum(distance > 0) > 0:
         # if torch.sum(transformed_distance) > 0:
         #idx_np = idx.cpu().numpy()
         #probability_np = probability.cpu().numpy()
-        seed = cp.random.choice(idx, size=1, p=probability[idx] / cp.sum(probability[idx]))
+        seed = cp.random.choice(a=idx, size=1, p=probabilities)
         #torch.random(idx, size)
         dst = transformed_distance[seed]
 
@@ -148,7 +156,7 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, max_threshold:
 
 
 
-def get_choice_from_distance_transform(distance: torch.Tensor, max_threshold:int = None, R = np.random):
+def get_choice_from_distance_transform(distance: torch.Tensor, device: torch.device = None, max_threshold:int = None, R = np.random):
     assert torch.sum(distance) > 0
 
     if max_threshold is None:
@@ -489,7 +497,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # before = time.time()
         distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=False)
         if torch.sum(distance) > 0:
-            t = get_choice_from_distance_transform_cp(distance)
+            t = get_choice_from_distance_transform_cp(distance, device=self.device)
             del distance
             return t
         else:
@@ -523,7 +531,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def add_guidance(self, guidance, discrepancy, label_names, labels):
 
         # Positive clicks of the segment in the iteration
-        pos_discr = discrepancy[0]  # idx 0 is positive discrepancy and idx 1 is negative discrepancy
+        pos_discr = discrepancy[0]      # idx 0 is positive discrepancy and idx 1 is negative discrepancy
 
         # Check the areas that belong to other segments
         # TODO commented since it does nothing..
@@ -649,7 +657,8 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         # when they are neighbors and have the same value
         # TODO: 2D code is modified but untested!
         with cp.cuda.Device(self.device.index):
-            blobs_labels = torch.as_tensor(label_cp(cp.asarray(label))) if dims == 2 else label
+            label_labeled = label_cp(cp.asarray(label))[0]
+            blobs_labels = torch.as_tensor(label_labeled, device=self.device) if dims == 2 else label
 #            blobs_labels = torch.from_numpy(measure.label(label.to(dtype=torch.int32).cpu(), background=0)).to(device=self.device) if dims == 2 else label
 
         label_guidance = []
@@ -665,7 +674,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                         continue
 
                 distance = get_distance_transform(label, self.device, verify_correctness=False)
-                g = get_choice_from_distance_transform_cp(distance)
+                g = get_choice_from_distance_transform_cp(distance, device=self.device)
 
                 del distance
                 if dimensions == 2 or dims == 3:
@@ -698,7 +707,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     # Generate guidance base on selected slice
                     tmp_label = torch.clone(d[key].detach())
                     assert tmp_label.is_cuda
-                    # Taking one label to create the guidance   
+                    # Taking one label to create the guidance       
                     if key_label != "background":
                         tmp_label[tmp_label != float(d["label_names"][key_label])] = 0
                     else:
@@ -739,7 +748,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
         sids = {}
         for key_label in d["label_names"].keys():
             l_ids = []
-            for sid in range(label.shape[-1]):  # Assume channel is first and depth is last CHWD
+            for sid in range(label.shape[-1]):      # Assume channel is first and depth is last CHWD
                 if d["label_names"][key_label] in label[0][..., sid]:
                     l_ids.append(sid)
             # If there are not slices with the label

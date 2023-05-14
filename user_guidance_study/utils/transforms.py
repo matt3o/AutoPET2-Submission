@@ -132,10 +132,6 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
         idx = cp.where(distance_cp > 0)[0]
         probabilities = probability[idx] / cp.sum(probability[idx])
         assert idx.shape == probabilities.shape
-        logger.error(probabilities)
-        logger.error(probabilities.dtype)
-        assert cp.sum(probabilities) == 1 
-        logger.error(cp.greater_equal(probabilities, 0)) 
         assert cp.all(cp.greater_equal(probabilities, 0))
 
         
@@ -144,12 +140,13 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
         #idx_np = idx.cpu().numpy()
         #probability_np = probability.cpu().numpy()
         seed = cp.random.choice(a=idx, size=1, p=probabilities)
+        logger.error(seed)
         #torch.random(idx, size)
-        dst = transformed_distance[seed]
+        dst = transformed_distance[seed.item()]
 
         g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
         # logger.info("{}".format(dst[0].item()))
-        g[0] = dst[0].item()
+        g[0] = dst.item()
         logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
         return g
         # return None

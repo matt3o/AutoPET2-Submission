@@ -77,6 +77,16 @@ torch.backends.cudnn.allow_tf32 = True
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = handle_exception
+
 class GPU_Thread(threading.Thread):
     def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
         super().__init__()

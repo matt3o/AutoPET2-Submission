@@ -684,11 +684,11 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
     def _randomize(self, d, key_label):
         sids = d.get(self.sids_key).get(key_label) if d.get(self.sids_key) is not None else None
         sid = d.get(self.sid_key).get(key_label) if d.get(self.sid_key) is not None else None
-        if sids is not None and sids:
+        if sids is not None and sids.size:
             if sid is None or sid not in sids:
                 sid = self.R.choice(sids, replace=False)
         else:
-            logger.info(f"Not slice IDs for label: {key_label}")
+            logger.warning(f"No slice IDs for label: {key_label}")
             sid = None
         self.sid[key_label] = sid
 
@@ -732,12 +732,12 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
     Find/List all valid slices in the labels.
     Label is assumed to be a 4D Volume with shape CHWD, where C=1.
     Args:
-        sids: key to store slices indices having valid label map.
+        sids_key: key to store slices indices having valid label map.
     """
 
-    def __init__(self, keys: KeysCollection, sids="sids", allow_missing_keys: bool = False, device=None):
+    def __init__(self, keys: KeysCollection, sids_key="sids", allow_missing_keys: bool = False, device=None):
         super().__init__(keys, allow_missing_keys)
-        self.sids = sids
+        self.sids_key = sids_key
         self.device = device
 
     def _apply(self, label, d):
@@ -748,11 +748,11 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
             for sid in range(label.shape[-1]):      # Assume channel is first and depth is last CHWD
                 if d["label_names"][key_label] in label[0][..., sid]:
                     # Append the item instead of the 1-d Tensor value
-                    l_ids.append(sid.item())
+                    l_ids.append(sid)
             # If there are not slices with the label
-            if l_ids == []:
+            if not len(l_ids):
                 l_ids = [-1] * 10
-            sids[key_label] = l_ids
+            sids[key_label] = np.array(l_ids)
         return sids
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
@@ -769,7 +769,8 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
 
                 sids = self._apply(label, d)
                 if sids is not None and len(sids.keys()):
-                    d[self.sids] = sids
+                    d[self.sids_key] = sids
+                    logger.info(f"d[self.sids_key]: {d[self.sids_key]}")
                 logger.debug("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:

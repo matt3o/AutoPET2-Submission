@@ -28,6 +28,7 @@ from monai.transforms import (
     CenterSpatialCropd,
     RandCropByPosNegLabeld,
     EnsureTyped,
+    DeleteItemsd,
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
@@ -62,7 +63,7 @@ def get_pre_transforms(labels, device, args):
             
             EnsureTyped(keys=("image", "label"), device=device),
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             EnsureTyped(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
@@ -78,6 +79,7 @@ def get_pre_transforms(labels, device, args):
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
@@ -96,7 +98,7 @@ def get_pre_transforms(labels, device, args):
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
             EnsureTyped(keys=("image", "label"), device=device),
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             EnsureTyped(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
@@ -112,6 +114,7 @@ def get_pre_transforms(labels, device, args):
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
@@ -209,6 +212,7 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        #
+        DeleteItemsd(keys=("discrepancy")),
         ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),

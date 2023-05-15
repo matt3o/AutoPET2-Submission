@@ -109,12 +109,16 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                 batch_data_string += f"- {key} size: {batchdata[key].size()} size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB\n"
                 batch_data_string += f"  Meta: {batchdata[key].meta}\n"
             elif type(batchdata[key]) == dict:
-                batch_data_string += "-\n"
+                batch_data_string += f"- {key}\n"
                 for key2 in batchdata[key]:
                     if type(batchdata[key][key2]) == torch.Tensor:
-                        batch_data_string += f"  - {key}/{key2} size: {batchdata[key][key2].size()} size in MB: {batchdata[key][key2].element_size() * batchdata[key][key2].nelement() / (1024**2)}MB\n"
+                        batch_data_string += f"    - {key}/{key2} size: {batchdata[key][key2].size()} size in MB: {batchdata[key][key2].element_size() * batchdata[key][key2].nelement() / (1024**2)}MB\n"
                     else:
-                        batch_data_string += f"  - {key}/{key2}: {batchdata[key][key2]} \n"
+                        batch_data_string += f"    - {key}/{key2}: {batchdata[key][key2]} \n"
+            elif type(batchdata[key]) == list:
+                batch_data_string += f"- {key}\n"
+                for item in batchdata[key]:
+                    batch_data_string += f"    - {item}\n"
             else:
                 logger.error(f"Unknown datatype: {type(batchdata[key])}")
                 raise UserWarning()

@@ -9,6 +9,10 @@ from datetime import datetime
 
 import os
 
+import logging
+logger = logging.getLogger("interactive_segmentation")
+
+
 def get_actual_cuda_index_of_device(device:torch.device):
     try:
         cuda_indexes = os.environ["CUDA_VISIBLE_DEVICES"].split(',')
@@ -17,7 +21,6 @@ def get_actual_cuda_index_of_device(device:torch.device):
     return int(cuda_indexes[device.index])
 
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
-    global logger
     nvmlInit()
     cuda_index = get_actual_cuda_index_of_device(device)
     h = nvmlDeviceGetHandleByIndex(cuda_index)
@@ -47,17 +50,17 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
 
 
 def print_gpu_usage(*args, **kwargs):
-    print(get_gpu_usage(*args, **kwargs))
+    logger.info(get_gpu_usage(*args, **kwargs))
 
 def print_tensor_gpu_usage(a:torch.Tensor):
-    print("Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2)))
+    logger.info("Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2)))
 
 
 def print_all_tensor_gpu_memory_usage():
     for obj in gc.get_objects():
         try:
             if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                print(type(obj), obj.size())
+                logger.info(type(obj), obj.size())
         except:
             pass
 
@@ -96,19 +99,24 @@ def describe(t:torch.Tensor):
 def describe_batch_data(batchdata: dict, total_size_only=False):
     batch_data_string = ""
     if total_size_only:
-        batch_data_string += f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB"
+        batch_data_string += f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB\n"
     else:
-        batch_data_string += f"Type of batch data: {type(batchdata)}"
+        batch_data_string += f"Type of batch data: {type(batchdata)}\n"
         for key in batchdata:
             if type(batchdata[key]) == torch.Tensor:
-                batch_data_string += f"{key} size: {batchdata[key].size()} size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB"
+                batch_data_string += f"- {key} size: {batchdata[key].size()} size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB\n"
+            elif type(batchdata[key]) == MetaTensor:
+                batch_data_string += f"- {key} size: {batchdata[key].size()} size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB\n"
+                batch_data_string += f"  Meta: {batchdata[key].meta}\n"
             elif type(batchdata[key]) == dict:
+                batch_data_string += "-\n"
                 for key2 in batchdata[key]:
                     if type(batchdata[key][key2]) == torch.Tensor:
-                        batch_data_string += f"{key}/{key2} size: {batchdata[key][key2].size()} size in MB: {batchdata[key][key2].element_size() * batchdata[key][key2].nelement() / (1024**2)}MB"
+                        batch_data_string += f"  - {key}/{key2} size: {batchdata[key][key2].size()} size in MB: {batchdata[key][key2].element_size() * batchdata[key][key2].nelement() / (1024**2)}MB\n"
                     else:
-                        batch_data_string += f"{key}/{key2}: {batchdata[key][key2]}"
+                        batch_data_string += f"  - {key}/{key2}: {batchdata[key][key2]} \n"
             else:
+                logger.error(f"Unknown datatype: {type(batchdata[key])}")
                 raise UserWarning()
     return batch_data_string
 
@@ -119,12 +127,12 @@ def timeit(func):
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
         total_time = end_time - start_time
-        print(f'Function {func.__name__}() took {total_time:.4f} seconds')
+        logger.debug(f'Function {func.__name__}() took {total_time:.4f} seconds')
         return result
     return timeit_wrapper
 
 
 def get_git_information():
-    stream = os.popen('git status')
+    stream = os.popen('git branch;git rev-parse HEAD')
     git_info = stream.read()
     return git_info

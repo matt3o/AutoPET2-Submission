@@ -54,17 +54,17 @@ distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="di
 
 # TODO remove this monster.
 # Add new click to the guidance signal
-def update_guidance(orig, updated):
-    assert orig.keys() == updated.keys()
-    for k in orig.keys():
-        v_new = updated[k]
-        v_old = eval(orig[k]) # str->list
-        for p in v_new:
-            if p not in v_old:
-                v_old.append(p)
-        v_old = [el for el in v_old if np.min(el) >= 0]
-        orig[k] = str(v_old)
-    return orig
+#def update_guidance(orig, updated):
+#    assert orig.keys() == updated.keys()
+#    for k in orig.keys():
+#        v_new = updated[k]
+#        v_old = eval(orig[k]) # str->list
+#        for p in v_new:
+#            if p not in v_old:
+#                v_old.append(p)
+#        v_old = [el for el in v_old if np.min(el) >= 0]
+#        orig[k] = str(v_old)
+#    return orig
 
 
 def find_discrepancy(vec1:ArrayLike, vec2:ArrayLike, context_vector:ArrayLike, atol:float=0.001, raise_warning:bool=True):
@@ -90,9 +90,12 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
     # This function calculates the distance between each pixel that is set to off (0) and
     # the nearest nonzero pixel for binary images
     # http://matlab.izmiran.ru/help/toolbox/images/morph14.html
+    dimension = tensor.dim()
     if verify_correctness:
         distance_np = distance_transform_edt(tensor.cpu().numpy())
     # Check is necessary since the edt transform only accepts certain dimensions
+    if dimension == 4:
+        tensor = tensor.squeeze(0)
     assert len(tensor.shape) == 3 and tensor.is_cuda, "tensor.shape: {}, tensor.is_cuda: {}".format(tensor.shape, tensor.is_cuda)
     special_case = False
     if torch.equal(tensor, torch.ones_like(tensor, device=device)):
@@ -111,7 +114,10 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
 
     if verify_correctness and not special_case:
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
-
+    
+    if dimension == 4:
+        distance = distance.unsqueeze(0)
+    assert distance.dim() == dimension
     return distance
 
 # TODO check if this adds non-deterministic behaviour
@@ -266,25 +272,28 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         self.gdt = True if self.exp_geos else self.gdt
 
 
-    def _get_signal(self, image, guidance, key_label='spleen'):
+    def _get_signal(self, image, guidance, key_label):
         dimensions = 3 if len(image.shape) > 3 else 2
-        guidance = guidance.tolist() if isinstance(guidance, np.ndarray) else guidance
-        guidance = json.loads(guidance) if isinstance(guidance, str) else guidance
+        #guidance = guidance.tolist() if isinstance(guidance, np.ndarray) else guidance
+        #guidance = json.loads(guidance) if isinstance(guidance, str) else guidance
 
         if self.gdt or self.edt:
             assert self.disks
 
-        if len(guidance):
+        first_point_size = guidance[0].numel()
+        if guidance.size()[0]:
             if dimensions == 3:
                 # Assume channel is first and depth is last CHWD
+                assert first_point_size == 4, f" first_point_size is {first_point_size}))"
                 signal = torch.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]), device=self.device)
             else:
+                assert first_point_size == 3, f" first_point_size is {first_point_size}))"
                 signal = torch.zeros((1, image.shape[-2], image.shape[-1]), device=self.device)
 
             sshape = signal.shape
 
             for point in guidance:
-                if torch.any(torch.asarray(point) < 0):
+                if torch.any(point < 0):
                     continue
                 if dimensions == 3:
                     # Making sure points fall inside the image dimension
@@ -363,7 +372,8 @@ class AddGuidanceSignalDeepEditd(MapTransform):
 
                 for key_label in guidance.keys():
                     # Getting signal based on guidance
-                    if guidance[key_label] is not None and len(guidance[key_label]):
+                    assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
+                    if guidance[key_label] is not None and guidance[key_label].numel():
                         signal = self._get_signal(image, guidance[key_label], key_label=key_label)
                     else:
                         signal = self._get_signal(image, [])
@@ -492,7 +502,9 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy):
         # before = time.time()
-        distance = get_distance_transform(discrepancy.squeeze(0), self.device, verify_correctness=False)
+        logger.warning(f"discrepancy.dim: {discrepancy.dim()}")
+        distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
+        logger.warning(f"distance.dim(): {distance.dim()}")
         if torch.sum(distance) > 0:
             t = get_choice_from_distance_transform_cp(distance, device=self.device)
             del distance
@@ -510,20 +522,20 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         #         discrepancy_cp = cp.asarray(discrepancy.squeeze())
         #         assert len(discrepancy_cp.shape) == 3
         #         distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
-        distance = distance.flatten()
-        distance_np = distance.detach().cpu().numpy()
-        probability = np.exp(distance_np) - 1.0
-        idx = np.where(distance_np > 0)[0]
-
-        if torch.sum(distance > 0) > 0:
-            seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-            dst = distance[seed]
-
-            g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
-            g[0] = dst[0].item()
-            logger.debug("distance transform in AddRandomGuidance took {:1f} seconds..".format(time.time()- before))
-            return g
-        return None
+#        distance = distance.flatten()
+#        distance_np = distance.detach().cpu().numpy()
+#        probability = np.exp(distance_np) - 1.0
+#        idx = np.where(distance_np > 0)[0]
+#
+#        if torch.sum(distance > 0) > 0:
+#            seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+#            dst = distance[seed]
+#
+#            g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
+#            g[0] = dst[0].item()
+#            logger.debug("distance transform in AddRandomGuidance took {:1f} seconds..".format(time.time()- before))
+#            return g
+#        return None
 
     def add_guidance(self, guidance, discrepancy, label_names, labels):
 
@@ -547,9 +559,15 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
         # Add guidance to the current key label
         if torch.sum(pos_discr) > 0:
-            guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
+            tmp_gui = self.find_guidance(pos_discr)
+            if tmp_gui is not None:
+                logger.info(f"guidance: {guidance}")
+                logger.info(f"tmp_gui: {torch.Tensor(tmp_gui)}")
+                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32)), 0)
+                logger.info(guidance)
+#            guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
             self.is_pos = True
-
+        return guidance
 
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
@@ -563,22 +581,32 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # Convert all guidance to lists so new guidance can be easily appended
             for key_label in d["label_names"].keys():
                 tmp_gui = guidance[key_label]
+                assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor
 
-                tmp_gui = tmp_gui.tolist() if isinstance(tmp_gui, np.ndarray) else tmp_gui
-                tmp_gui = json.loads(tmp_gui) if isinstance(tmp_gui, str) else tmp_gui
+#                tmp_gui = tmp_gui.tolist() if isinstance(tmp_gui, np.ndarray) else tmp_gui
+#                tmp_gui = json.loads(tmp_gui) if isinstance(tmp_gui, str) else tmp_gui
 
                 if tmp_gui is None:
                     self.guidance[key_label] = []
                 else:
-                    self.guidance[key_label] = [j for j in tmp_gui if -1 not in j] # Filter guidances with -1 as index
+                    self.guidance[key_label] = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()]
+                    logger.warning(f"self.guidance[key_label]: {self.guidance[key_label]}")
+#                    for row in tmp_gui:
+#                        if row.any(-1)
+#                        if -1 in row:
+#                            continue
+#                        else:
+#
+#                    self.guidance[key_label] = [j for j in tmp_gui if -1 not in j] # Filter guidances with -1 as index
 
             # Add guidance according to discrepancy
             for key_label in d["label_names"].keys():
                 # Add guidance based on discrepancy
-                self.add_guidance(self.guidance[key_label], discrepancy[key_label], d["label_names"], d["label"])
+                self.guidance[key_label] = self.add_guidance(self.guidance[key_label], discrepancy[key_label], d["label_names"], d["label"])
 
         if d[self.guidance_key].keys() == self.guidance.keys():
-            d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
+            # d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
+            d[self.guidance_key] = self.guidance
         else:
             raise UserWarning("Can this ever happen?")
 
@@ -636,7 +664,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         self.connected_regions = connected_regions
         self.device = device
 
-    def _apply(self, label, sid):
+    def _apply(self, label, sid) -> np.array:
         # sid: single digit, label: array e.g. 1,128,128,128
         assert type(label) == torch.Tensor or type(label) == MetaTensor, "type(label): {} != torch.Tensor or MetaTensor".format(type(label))
         
@@ -679,7 +707,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                 else:
                     # Clicks are created using this convention Channel Height Width Depth (CHWD)
                     label_guidance.append([g[0], g[-2], g[-1], sid])  # Assume channel is first and depth is last CHWD
-        return np.asarray(label_guidance)
+        return torch.tensor(label_guidance,dtype=torch.int32)
 
     def _randomize(self, d, key_label):
         sids = d.get(self.sids_key).get(key_label) if d.get(self.sids_key) is not None else None
@@ -711,13 +739,12 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                         tmp_label[tmp_label != float(d["label_names"][key_label])] = 1
                         tmp_label = 1 - tmp_label
 
-                    label_guidances[key_label] = json.dumps(
-                        self._apply(tmp_label, self.sid.get(key_label)).astype(int).tolist()
-                    )
+                    label_guidances[key_label] = self._apply(tmp_label, self.sid.get(key_label))
                     del tmp_label
 
                 if self.guidance_key in d.keys():
-                    d[self.guidance_key] = update_guidance(d[self.guidance_key], label_guidances)
+                    #d[self.guidance_key] = update_guidance(d[self.guidance_key], label_guidances)
+                    d[self.guidance_key] = label_guidances
                 else:
                     d[self.guidance_key] = label_guidances # Initialize Guidance Dict
                 logger.debug("AddInitialSeedPointMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
@@ -770,7 +797,6 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
                 sids = self._apply(label, d)
                 if sids is not None and len(sids.keys()):
                     d[self.sids_key] = sids
-                    logger.info(f"d[self.sids_key]: {d[self.sids_key]}")
                 logger.debug("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:

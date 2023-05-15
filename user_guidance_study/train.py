@@ -38,7 +38,7 @@ logger = None
 
 
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
-from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device
+from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device, get_git_information
 
 from utils.interaction import Interaction
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
@@ -488,13 +488,15 @@ def main():
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
+    # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()
     args.caller_args = sys.argv[1:]
     args.env = os.environ
+    args.git = get_git_information
 
 
     # For single label using one of the Medical Segmentation Decathlon
-    args.labels = {'spleen': 1, # careful this label name is linked in AddGuidanceSignalDeepEditd and probably has to be modified there first
+    args.labels = {'spleen': 1,
                    'background': 0
                    }
 

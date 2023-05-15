@@ -122,3 +122,9 @@ def timeit(func):
         print(f'Function {func.__name__}() took {total_time:.4f} seconds')
         return result
     return timeit_wrapper
+
+
+def get_git_information():
+    stream = os.popen('git status')
+    git_info = stream.read()
+    return git_info

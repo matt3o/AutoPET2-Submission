@@ -112,7 +112,6 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            DeleteItemd(keys=("discrepancy")),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             DeleteItemsd(keys=("discrepancy")),

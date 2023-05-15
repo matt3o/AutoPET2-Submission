@@ -28,6 +28,7 @@ from monai.transforms import (
     CenterSpatialCropd,
     RandCropByPosNegLabeld,
     EnsureTyped,
+    DeleteItemd
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
@@ -78,6 +79,7 @@ def get_pre_transforms(labels, device, args):
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            DeleteItemd(keys=("discrepancy")),
             ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
@@ -110,6 +112,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
+            DeleteItemd(keys=("discrepancy")),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
@@ -209,6 +212,7 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        #
+        DeleteItemd(keys=("discrepancy")),
         ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),

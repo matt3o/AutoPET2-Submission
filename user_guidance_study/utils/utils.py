@@ -77,7 +77,8 @@ def get_pre_transforms(labels, device, args):
                                         device=device, 
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
@@ -110,7 +111,8 @@ def get_pre_transforms(labels, device, args):
                                         device=device, 
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
@@ -207,7 +209,7 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        #
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+        ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), track_meta=False, allow_missing_keys=True),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]

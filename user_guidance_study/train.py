@@ -502,7 +502,7 @@ def main():
     args = parser.parse_args()
     args.caller_args = sys.argv[1:]
     args.env = os.environ
-    args.git = get_git_information
+    args.git = get_git_information()
 
 
     # For single label using one of the Medical Segmentation Decathlon

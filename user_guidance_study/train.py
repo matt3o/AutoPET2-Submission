@@ -489,6 +489,8 @@ def main():
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
     args = parser.parse_args()
+    args.caller_args = sys.argv[1:]
+    args.env = os.environ
 
 
     # For single label using one of the Medical Segmentation Decathlon

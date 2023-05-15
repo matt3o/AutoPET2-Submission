@@ -747,7 +747,8 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
             l_ids = []
             for sid in range(label.shape[-1]):      # Assume channel is first and depth is last CHWD
                 if d["label_names"][key_label] in label[0][..., sid]:
-                    l_ids.append(sid)
+                    # Append the item instead of the 1-d Tensor value
+                    l_ids.append(sid.item())
             # If there are not slices with the label
             if l_ids == []:
                 l_ids = [-1] * 10

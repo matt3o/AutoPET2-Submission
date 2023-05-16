@@ -218,6 +218,9 @@ def get_click_transforms(device, args):
                                     device=device, 
                                     spacing=spacing),        #
         DeleteItemsd(keys=("discrepancy")),
+        # Delete all transforms (only needed for inversion I think)
+        DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
+
         ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
@@ -235,7 +238,9 @@ def get_post_transforms(labels):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
-        DeleteItemsd(keys=("image", "label_names", "guidance", "image_meta_dict", "label_meta_dict", "label_names_transforms", "guidance_transforms")),
+        DeleteItemsd(keys=("image", "label_names", "guidance", "image_meta_dict", "label_meta_dict")),
+        # Delete all transforms (only needed for inversion I think)
+        DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
         PrintDataD()
     ]
     return Compose(t)

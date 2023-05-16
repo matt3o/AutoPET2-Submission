@@ -472,7 +472,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     Add random guidance based on discrepancies that were found between label and prediction.
 
     Args:
-    guidance_key: key to guidance source, shape (2, N, # of dim)
+        guidance_key: key to guidance source, shape (2, N, # of dim)
         discrepancy_key: key to discrepancy map between label and prediction shape (2, C, H, W, D) or (2, C, H, W)
         probability_key: key to click/interaction probability, shape (1)
     """

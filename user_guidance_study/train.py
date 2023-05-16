@@ -187,8 +187,10 @@ def create_trainer(args):
 
     if args.inferer == "SimpleInferer":
         inferer=SimpleInferer()
+        train_inferer = eval_inferer = inferer
     elif args.inferer == "SlidingWindowInferer":
-        inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
     else:
         raise UserWarning("Invalid Inferer selected")
 
@@ -205,7 +207,7 @@ def create_trainer(args):
             max_interactions=args.max_val_interactions,
             args=args,
         ),
-        inferer=inferer,
+        inferer=eval_inferer,
         postprocessing=post_transform,
         amp=args.amp,
         key_val_metric=all_val_metrics,
@@ -293,7 +295,7 @@ def create_trainer(args):
         ),
         optimizer=optimizer,
         loss_function=loss_function,
-        inferer=SimpleInferer(),
+        inferer=train_inferer,
         postprocessing=post_transform,
         amp=args.amp,
         key_train_metric=all_train_metrics,

@@ -564,7 +564,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             if tmp_gui is not None:
                 # logger.info(f"guidance: {guidance}")
                 # logger.info(f"tmp_gui: {torch.Tensor(tmp_gui)}")
-                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=self.device)), 0)
+                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32)), 0)
                 # logger.info(guidance)
 #            guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
             self.is_pos = True

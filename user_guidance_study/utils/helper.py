@@ -136,8 +136,9 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                 for item in batchdata[key]:
                     batch_data_string += f"    - {item}\n"
             else:
-                logger.error(f"Unknown datatype: {type(batchdata[key])}")
-                raise UserWarning()
+                batch_data_string += f"- {key}({type(batchdata[key])})\n"
+                # logger.error(f"Unknown datatype: {type(batchdata[key])}")
+                # raise UserWarning()
     return batch_data_string
 
 def timeit(func):

@@ -37,7 +37,7 @@ from cupyx.scipy.ndimage import label as label_cp
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
-from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe
+from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data
 from utils.logger import setup_loggers, get_logger
 
 # Has to be reinitialized for some weird reason here
@@ -51,6 +51,25 @@ logger = get_logger()
 
 distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+
+
+class PrintDataD(MapTransform):
+    def __init__(self, keys: KeysCollection = None):
+        """
+        Normalize label values according to label names dictionary
+
+        Args:
+            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+            label_names: all label names
+        """
+        super().__init__(keys)
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d: Dict = dict(data)
+        logger.info(describe_batch_data(d))
+        # exit(0)
+        return d
+
 
 # TODO remove this monster.
 # Add new click to the guidance signal
@@ -564,7 +583,8 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             if tmp_gui is not None:
                 # logger.info(f"guidance: {guidance}")
                 # logger.info(f"tmp_gui: {torch.Tensor(tmp_gui)}")
-                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32)), 0)
+                assert guidance.dtype == torch.int32
+                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
                 # logger.info(guidance)
 #            guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
             self.is_pos = True

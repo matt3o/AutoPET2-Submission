@@ -6,6 +6,7 @@ from utils.transforms import (
     FindAllValidSlicesMissingLabelsd,
     AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
+    PrintDataD
 )
 # from utils.transforms_working import AddRandomGuidanceDeepEditd, AddGuidanceSignalDeepEditd
 
@@ -39,7 +40,11 @@ import glob
 import os
 import logging
 
+from utils.helper import describe_batch_data
+
 logger = logging.getLogger("interactive_segmentation")
+
+TRANSFER_TO_CPU = False
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
@@ -80,7 +85,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True),
+            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
@@ -115,7 +120,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True),
+            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
@@ -213,7 +218,7 @@ def get_click_transforms(device, args):
                                     device=device, 
                                     spacing=spacing),        #
         DeleteItemsd(keys=("discrepancy")),
-        ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True),
+        ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]
@@ -230,6 +235,8 @@ def get_post_transforms(labels):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
+        DeleteItemsd(keys=("image", "label_names", "guidance", "image_meta_dict", "label_meta_dict", "label_names_transforms", "guidance_transforms")),
+        PrintDataD()
     ]
     return Compose(t)
 

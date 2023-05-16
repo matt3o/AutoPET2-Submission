@@ -129,7 +129,7 @@ class Interaction:
                     self.debug_viz(inputs, labels, preds, j)
 
                 batchdata = list_data_collate(batchdata_list)
-                logger.info(describe_batch_data(batchdata, total_size_only=True))
+                # logger.info(describe_batch_data(batchdata, total_size_only=True))
                 del inputs, labels, preds, gts, dice, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
         else:

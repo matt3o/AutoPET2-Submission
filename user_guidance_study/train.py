@@ -27,7 +27,7 @@ import shutil
 # Things needed to debug the Interaction class
 import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (8192, rlimit[1]))
+resource.setrlimit(resource.RLIMIT_NOFILE, (8*8192, rlimit[1]))
 
 import torch
 import cupy as cp

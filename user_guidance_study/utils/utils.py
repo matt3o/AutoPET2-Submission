@@ -44,7 +44,7 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
-TRANSFER_TO_CPU = False
+TRANSFER_TO_CPU = True
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
@@ -193,7 +193,7 @@ def get_click_transforms(device, args):
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
-        EnsureTyped(keys=("image","label", "pred"), device=device, track_meta=False),
+        ToTensord(keys=("image","label", "pred"), device=device, track_meta=False),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
@@ -205,7 +205,7 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
-        EnsureTyped(keys=("image", "guidance"), device=device, track_meta=False),
+        ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,

@@ -364,7 +364,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         signal[0] = geos[0][0]
 
 
-            if not (torch.min(signal[0]) >= 0 and torch.max(signal[0] <= 1.0)):
+            if not (torch.min(signal[0]).item() >= 0 and torch.max(signal[0]).item() <= 1.0):
                 raise UserWarning('[WARNING] Bad signal values', torch.min(signal[0]), torch.max(signal[0]))
             if signal is None:
                 raise UserWarning("[ERROR] Signal is None")

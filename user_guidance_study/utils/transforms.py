@@ -524,7 +524,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
     def find_guidance(self, discrepancy):
-        if not discrepancy.is_cuda():
+        if not discrepancy.is_cuda:
             discrepancy = discrepancy.to(device=self.device)
         # before = time.time()
         # logger.warning(f"discrepancy.dim: {discrepancy.dim()}")

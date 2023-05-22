@@ -438,6 +438,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         # -1 means predicted label missed that region of the ground truth
         pos_disparity = (disparity > 0).to(dtype=torch.float32) #.astype(np.float32) # FN
         neg_disparity = (disparity < 0).to(dtype=torch.float32) #.astype(np.float32) # FP
+        del disparity
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
@@ -478,6 +479,8 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         # Prediction should be represented in one
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
+                    del label
+                    del pred
                 d[self.discrepancy_key] = all_discrepancies
                 logger.debug("FindDiscrepancyRegionsDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d

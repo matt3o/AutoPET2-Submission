@@ -8,7 +8,7 @@ from utils.transforms import (
     SplitPredsLabeld,
     PrintDataD
 )
-# from utils.transforms_working import AddRandomGuidanceDeepEditd, AddGuidanceSignalDeepEditd
+from utils.transforms_old import FindDiscrepancyRegionsDeepEditd, AddRandomGuidanceDeepEditd
 
 from monai.transforms import (
     Activationsd,
@@ -193,7 +193,7 @@ def get_click_transforms(device, args):
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
-        ToTensord(keys=("image","label", "pred"), device=device, track_meta=False),
+        ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
@@ -205,6 +205,7 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
+        DeleteItemsd(keys=("discrepancy")),
         ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
@@ -217,11 +218,10 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        #
-        DeleteItemsd(keys=("discrepancy")),
+        
         # Delete all transforms (only needed for inversion I think)
-        DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-
-        ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
+        # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
+        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]

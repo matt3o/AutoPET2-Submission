@@ -8,7 +8,8 @@ from utils.transforms import (
     SplitPredsLabeld,
     PrintDataD
 )
-from utils.transforms_old import FindDiscrepancyRegionsDeepEditd, AddRandomGuidanceDeepEditd
+from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
+from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
 
 from monai.transforms import (
     Activationsd,
@@ -195,16 +196,24 @@ def get_click_transforms(device, args):
         #ToNumpyd(keys=("image", )),
         ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
         # Transforms for click simulation
-        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
+        # FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
+        OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
+        #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
         #ToNumpyd(keys=("image","label", "pred", "discrepancy")),
-        AddRandomGuidanceDeepEditd(
+        OLDAddRandomGuidanceDeepEditd(
             keys="NA",
-            guidance_key="guidance",
-            discrepancy_key="discrepancy",
-            probability_key="probability",
-            device=device,
+            guidance="guidance",
+            discrepancy="discrepancy",
+            probability="probability",
         ),
+        # AddRandomGuidanceDeepEditd(
+        #     keys="NA",
+        #     guidance_key="guidance",
+        #     discrepancy_key="discrepancy",
+        #     probability_key="probability",
+        #     device=device,
+        # ),
         DeleteItemsd(keys=("discrepancy")),
         ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",

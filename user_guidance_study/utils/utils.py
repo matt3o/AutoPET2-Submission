@@ -214,7 +214,7 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
-        DeleteItemsd(keys=("discrepancy")),
+        # DeleteItemsd(keys=("discrepancy")),
         ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",

@@ -436,8 +436,8 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).to(dtype=torch.float32) #.astype(np.float32) # FN
-        neg_disparity = (disparity < 0).to(dtype=torch.float32) #.astype(np.float32) # FP
+        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=torch.device('cpu')) #.astype(np.float32) # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=torch.device('cpu')) #.astype(np.float32) # FP
         del disparity
         return [pos_disparity, neg_disparity]
 
@@ -448,32 +448,32 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         d: Dict = dict(data)
         for key in self.key_iterator(d):
             if key == "label":
+                assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
                 all_discrepancies = {}
                 # label_names: e.g. [('spleen', 1), ('background', 0)]
                 before = time.time()
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
                     if label_key != "background":
-                        assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
-                        label = torch.clone(d[key])
+                        label = torch.detach().clone(d[key])
                         # Label should be represented in 1
                         label[label != label_value] = 0
                         label = (label > 0.5).to(dtype=torch.float32) #.astype(np.float32)
 
                         # Taking single prediction
-                        pred = torch.clone(d[self.pred_key])
+                        pred = torch.detach().clone(d[self.pred_key])
                         pred[pred != label_value] = 0
                         # Prediction should be represented in one
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     else:
                         # TODO look into thos weird conversion - are they necessary?
                         # Taking single label
-                        label = torch.clone(d[key])
+                        label = torch.detach().clone(d[key])
                         label[label != label_value] = 1
                         label = 1 - label
                         # Label should be represented in 1
                         label = (label > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                         # Taking single prediction
-                        pred = torch.clone(d[self.pred_key])
+                        pred = torch.detach().clone(d[self.pred_key])
                         pred[pred != label_value] = 1
                         pred = 1 - pred
                         # Prediction should be represented in one
@@ -529,6 +529,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # before = time.time()
         # logger.warning(f"discrepancy.dim: {discrepancy.dim()}")
         distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
+        del discrepancy
         # logger.warning(f"distance.dim(): {distance.dim()}")
         if torch.sum(distance) > 0:
             t = get_choice_from_distance_transform_cp(distance, device=self.device)
@@ -589,7 +590,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 # logger.info(f"guidance: {guidance}")
                 # logger.info(f"tmp_gui: {torch.Tensor(tmp_gui)}")
                 assert guidance.dtype == torch.int32
-                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
+                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=torch.device('cpu'))), 0)
                 # logger.info(guidance)
 #            guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
             self.is_pos = True
@@ -604,7 +605,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.randomize(data)
 
         if self._will_interact:
-            # Convert all guidance to lists so new guidance can be easily appended
             for key_label in d["label_names"].keys():
                 tmp_gui = guidance[key_label]
                 assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor

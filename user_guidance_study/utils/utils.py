@@ -198,6 +198,7 @@ def get_click_transforms(device, args):
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
         ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
+        PrintGPUUsaged(device=device),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         # OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
@@ -217,8 +218,10 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
+        PrintGPUUsaged(device=device),
         # DeleteItemsd(keys=("discrepancy")),
         ToTensord(keys=("image"), device=device, track_meta=False),
+        PrintGPUUsaged(device=device),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,

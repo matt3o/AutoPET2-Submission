@@ -358,11 +358,11 @@ def run(args):
     args.crop_spatial_size = eval(args.crop_spatial_size)
 
     # verify both have a valid size (for Unet with seven layers)
-    assert len(args.sw_roi_size) == 3 and len(args.crop_spatial_size) == 3
+    assert len(args.sw_roi_size) == 3 and len(args.crop_spatial_size) == 4
     if args.network == "dynunet":
         for size in args.crop_spatial_size:
             assert (size % 64) == 0
-
+    
     # click-generation
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
@@ -448,7 +448,7 @@ def main():
     parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
-    parser.add_argument("--crop_spatial_size", default="(128,128,128)", action='store')
+    parser.add_argument("--crop_spatial_size", default="(1,128,128,128)", action='store')
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')

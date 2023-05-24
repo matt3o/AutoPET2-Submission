@@ -53,6 +53,7 @@ def get_pre_transforms(labels, device, args):
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
+            ToTensord(keys=("label"), device=device),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
@@ -191,6 +192,7 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
+        PrintGPUUsageD(device=device),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
@@ -233,6 +235,7 @@ def get_click_transforms(device, args):
         ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+        PrintGPUUsageD(device=device),
     ]
 
     return Compose(t)

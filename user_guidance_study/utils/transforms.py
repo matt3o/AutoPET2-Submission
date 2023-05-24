@@ -70,6 +70,25 @@ class PrintDataD(MapTransform):
         # exit(0)
         return d
 
+class PrintGPUUsageD(MapTransform):
+    def __init__(self, device, keys: KeysCollection):
+        """
+        Normalize label values according to label names dictionary
+
+        Args:
+            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+            label_names: all label names
+        """
+        super().__init__(keys)
+        self.device = device
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d: Dict = dict(data)
+        print_gpu_usage(device, used_memory_only=True)
+        # exit(0)
+        return d
+
+
 
 # TODO remove this monster.
 # Add new click to the guidance signal

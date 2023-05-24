@@ -215,7 +215,7 @@ def get_click_transforms(device, args):
             device=device,
         ),
         # DeleteItemsd(keys=("discrepancy")),
-        ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
+        ToTensord(keys=("image"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,

@@ -21,6 +21,8 @@ def get_actual_cuda_index_of_device(device:torch.device):
     return int(cuda_indexes[device.index])
 
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
+    # empty the cache first
+    torch.cuda.empty_cache()
     nvmlInit()
     cuda_index = get_actual_cuda_index_of_device(device)
     h = nvmlDeviceGetHandleByIndex(cuda_index)
@@ -148,7 +150,7 @@ def timeit(func):
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
         total_time = end_time - start_time
-        logger.debug(f'Function {func.__name__}() took {total_time:.4f} seconds')
+        logger.info(f'Function {func.__name__}() took {total_time:.4f} seconds')
         return result
     return timeit_wrapper
 

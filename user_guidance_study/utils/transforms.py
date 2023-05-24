@@ -37,7 +37,7 @@ from cupyx.scipy.ndimage import label as label_cp
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
-from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data
+from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
 from utils.logger import setup_loggers, get_logger
 
 # Has to be reinitialized for some weird reason here
@@ -222,7 +222,8 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
         self.label_names = label_names
         self.device = device
-
+    
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         for key in self.key_iterator(d):
@@ -378,6 +379,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 print("[ERROR] Signal is None")
             return signal
 
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()

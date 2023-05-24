@@ -20,7 +20,7 @@ def get_actual_cuda_index_of_device(device:torch.device):
         return int(device.index)
     return int(cuda_indexes[device.index])
 
-def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
+def gpu_usage(device:torch.device, used_memory_only=False):
     # empty the cache first
     torch.cuda.empty_cache()
     nvmlInit()
@@ -28,12 +28,21 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
     h = nvmlDeviceGetHandleByIndex(cuda_index)
     info = nvmlDeviceGetMemoryInfo(h)
     nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
-    usage = ""
     utilization = torch.cuda.utilization(device)
     t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
 
     t_used = t_total - t_free
     used_not_by_torch = nv_used - t_used
+
+    if not used_memory_only:
+        return cuda_index, utilization, nv_total, nv_free, nv_used, used_not_by_torch
+    else:
+        return nv_used
+
+
+def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
+    cuda_index, utilization, nv_total, nv_free, nv_used, used_not_by_torch = gpu_usage()
+
     if csv_format and used_memory_only:
         raise NotImplemented
 
@@ -146,11 +155,20 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
 def timeit(func):
     @wraps(func)
     def timeit_wrapper(*args, **kwargs):
+        try:
+            device = args[0].device
+        except:
+            device = None
+        if device is not None:
+            gpu1 = gpu_usage(used_memory_only=True)
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
+        if device is not None:
+            gpu2 = gpu_usage(used_memory_only=True)
         total_time = end_time - start_time
-        logger.info(f'Function {func.__name__}() took {total_time:.4f} seconds')
+        logger.info(f'Function {func.__qualname__}() took {total_time:.4f} seconds')
+        logger.info(f'Function {func.__qualname__}() reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')
         return result
     return timeit_wrapper
 

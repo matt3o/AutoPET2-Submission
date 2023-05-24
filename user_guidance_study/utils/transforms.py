@@ -446,6 +446,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
     def _apply(self, label, pred):
         return self.disparity(label, pred)
 
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         for key in self.key_iterator(d):
@@ -453,7 +454,6 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                 assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
                 all_discrepancies = {}
                 # label_names: e.g. [('spleen', 1), ('background', 0)]
-                before = time.time()
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
                     if label_key != "background":
                         label = torch.clone(d[key].detach())
@@ -484,7 +484,6 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                     del label
                     del pred
                 d[self.discrepancy_key] = all_discrepancies
-                logger.debug("FindDiscrepancyRegionsDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 logger.error("This transform only applies to 'label' key")
@@ -598,10 +597,9 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             self.is_pos = True
         return guidance
 
-
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        before = time.time()
         guidance = d[self.guidance_key]
         discrepancy = d[self.discrepancy_key]
         self.randomize(data)
@@ -640,7 +638,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         else:
             raise UserWarning("Can this ever happen?")
 
-        logger.debug("AddRandomGuidanceDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
         return d
 
 
@@ -648,6 +645,7 @@ class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
     """
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
@@ -750,9 +748,9 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
             sid = None
         self.sid[key_label] = sid
 
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        before = time.time()
         for key in self.key_iterator(d):
             if key == "label":
                 label_guidances = {}
@@ -777,7 +775,6 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                     d[self.guidance_key] = label_guidances
                 else:
                     d[self.guidance_key] = label_guidances # Initialize Guidance Dict
-                logger.debug("AddInitialSeedPointMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 del d[self.sids_key]
                 return d
             else:
@@ -813,9 +810,9 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
             sids[key_label] = np.asarray(l_ids)
         return sids
 
+    @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        before = time.time()
         for key in self.key_iterator(d):
             if key == "label":
                 label = d[key]
@@ -828,7 +825,6 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
                 sids = self._apply(label, d)
                 if sids is not None and len(sids.keys()):
                     d[self.sids_key] = sids
-                logger.debug("FindAllValidSlicesMissingLabelsd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 raise UserWarning("This transform only applies to label key")

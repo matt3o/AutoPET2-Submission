@@ -56,6 +56,7 @@ def get_pre_transforms(labels, device, args):
             EnsureChannelFirstd(keys=("image", "label")),
             ToTensord(keys=("label"), device=device),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
+            ToTensord(keys=("label"), device=torch.device("cpu")),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
@@ -69,11 +70,11 @@ def get_pre_transforms(labels, device, args):
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             
-            EnsureTyped(keys=("image", "label"), device=device),
+            ToTensord(keys=("image", "label"), device=device),
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
-            EnsureTyped(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -105,10 +106,10 @@ def get_pre_transforms(labels, device, args):
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
-            EnsureTyped(keys=("image", "label"), device=device),
+            ToTensord(keys=("image", "label"), device=device),
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
-            EnsureTyped(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image", "guidance"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -254,10 +255,10 @@ def get_post_transforms(labels):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
-        DeleteItemsd(keys=("image", "label_names", "guidance", "image_meta_dict", "label_meta_dict")),
-        # Delete all transforms (only needed for inversion I think)
-        DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        PrintDatad()
+        # DeleteItemsd(keys=("image", "label_names", "guidance", "image_meta_dict", "label_meta_dict")),
+        # # Delete all transforms (only needed for inversion I think)
+        # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
+        # PrintDatad()
     ]
     return Compose(t)
 

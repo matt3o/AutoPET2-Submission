@@ -88,7 +88,7 @@ def get_pre_transforms(labels, device, args):
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
-            DeleteItemsd(keys=("discrepancy")),
+            # DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
@@ -123,7 +123,7 @@ def get_pre_transforms(labels, device, args):
                                         spacing=spacing),
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
-            DeleteItemsd(keys=("discrepancy")),
+            # DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
@@ -301,7 +301,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
     train_loader = DataLoader(
-        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
+        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1#, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -311,7 +311,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
+    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1#, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

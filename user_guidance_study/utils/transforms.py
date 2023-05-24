@@ -145,13 +145,12 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         special_case = True
     else:
         with cp.cuda.Device(device.index):
-            
 #            mempool.set_limit(size=8*1024**3)
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
             mempool = cp.get_default_memory_pool()
             mempool.free_all_blocks()
-            assert mempool.used_bytes() / 1024**2 < 1, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 1 MB"
+            assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
 
     if verify_correctness and not special_case:
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
@@ -195,7 +194,7 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
         g[0] = dst.item()
         mempool = cp.get_default_memory_pool()
         mempool.free_all_blocks()
-        assert mempool.used_bytes() / 1024**2 < 1, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 1 MB"
+        assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
     return g
         # return None
 

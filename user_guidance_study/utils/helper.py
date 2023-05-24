@@ -160,12 +160,12 @@ def timeit(func):
         except:
             device = None
         if device is not None:
-            gpu1 = gpu_usage(used_memory_only=True)
+            gpu1 = gpu_usage(device=device, used_memory_only=True)
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
         if device is not None:
-            gpu2 = gpu_usage(used_memory_only=True)
+            gpu2 = gpu_usage(device=device, used_memory_only=True)
         total_time = end_time - start_time
         logger.info(f'Function {func.__qualname__}() took {total_time:.4f} seconds')
         logger.info(f'Function {func.__qualname__}() reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')

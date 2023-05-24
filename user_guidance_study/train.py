@@ -360,7 +360,7 @@ def run(args):
     # verify both have a valid size (for Unet with seven layers)
     assert len(args.sw_roi_size) == 3 and len(args.crop_spatial_size) == 4
     if args.network == "dynunet":
-        for size in args.crop_spatial_size:
+        for size in args.crop_spatial_size[1:]:
             assert (size % 64) == 0
     
     # click-generation

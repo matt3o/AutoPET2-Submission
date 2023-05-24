@@ -150,7 +150,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
             mempool.free_all_blocks()
-            assert mempool.used_bytes() == 0
+            assert mempool.used_bytes() == 0, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB != 0"
 
     if verify_correctness and not special_case:
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)

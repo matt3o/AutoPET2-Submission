@@ -53,7 +53,7 @@ distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="di
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
 
-class PrintDataD(MapTransform):
+class PrintDatad(MapTransform):
     def __init__(self, keys: KeysCollection = None):
         """
         Normalize label values according to label names dictionary
@@ -70,8 +70,8 @@ class PrintDataD(MapTransform):
         # exit(0)
         return d
 
-class PrintGPUUsageD(MapTransform):
-    def __init__(self, device, keys: KeysCollection):
+class PrintGPUUsaged(MapTransform):
+    def __init__(self, device, keys: KeysCollection = None):
         """
         Normalize label values according to label names dictionary
 

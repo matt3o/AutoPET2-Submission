@@ -6,7 +6,8 @@ from utils.transforms import (
     FindAllValidSlicesMissingLabelsd,
     AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
-    PrintDataD
+    PrintDatad, 
+    PrintGPUUsaged
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -192,7 +193,7 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
-        PrintGPUUsageD(device=device),
+        PrintGPUUsaged(device=device),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
@@ -232,10 +233,10 @@ def get_click_transforms(device, args):
         
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
+        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-        PrintGPUUsageD(device=device),
+        PrintGPUUsaged(device=device),
     ]
 
     return Compose(t)
@@ -253,7 +254,7 @@ def get_post_transforms(labels):
         DeleteItemsd(keys=("image", "label_names", "guidance", "image_meta_dict", "label_meta_dict")),
         # Delete all transforms (only needed for inversion I think)
         DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        PrintDataD()
+        PrintDatad()
     ]
     return Compose(t)
 

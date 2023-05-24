@@ -456,26 +456,26 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                 before = time.time()
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
                     if label_key != "background":
-                        label = torch.detach().clone(d[key])
+                        label = torch.clone(d[key].detach())
                         # Label should be represented in 1
                         label[label != label_value] = 0
                         label = (label > 0.5).to(dtype=torch.float32) #.astype(np.float32)
 
                         # Taking single prediction
-                        pred = torch.detach().clone(d[self.pred_key])
+                        pred = torch.clone(d[self.pred_key].detach())
                         pred[pred != label_value] = 0
                         # Prediction should be represented in one
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     else:
                         # TODO look into thos weird conversion - are they necessary?
                         # Taking single label
-                        label = torch.detach().clone(d[key])
+                        label = torch.clone(d[key].detach())
                         label[label != label_value] = 1
                         label = 1 - label
                         # Label should be represented in 1
                         label = (label > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                         # Taking single prediction
-                        pred = torch.detach().clone(d[self.pred_key])
+                        pred = torch.clone(d[self.pred_key].detach())
                         pred[pred != label_value] = 1
                         pred = 1 - pred
                         # Prediction should be represented in one

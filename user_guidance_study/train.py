@@ -176,8 +176,8 @@ def create_trainer(args):
 
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):
-        mempool = cp.get_default_memory_pool()
-        mempool.set_limit(size=10*1024**3)
+        #mempool = cp.get_default_memory_pool()
+        #mempool.set_limit(size=10*1024**3)
         cp.random.seed(seed=args.seed)
 
     device = torch.device(f"cuda:{args.gpu}")

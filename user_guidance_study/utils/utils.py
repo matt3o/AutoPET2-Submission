@@ -89,7 +89,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
+            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
@@ -124,7 +124,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
+            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
@@ -194,12 +194,10 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
-        PrintGPUUsaged(device=device),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         #ToNumpyd(keys=("image", )),
-        ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
-        PrintGPUUsaged(device=device),
+        # ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
         # Transforms for click simulation
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         # OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
@@ -219,10 +217,8 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
-        PrintGPUUsaged(device=device),
         # DeleteItemsd(keys=("discrepancy")),
         ToTensord(keys=("image"), device=device, track_meta=False),
-        PrintGPUUsaged(device=device),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,
@@ -237,10 +233,9 @@ def get_click_transforms(device, args):
         
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=device, allow_missing_keys=True, track_meta=False),
+        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-        PrintGPUUsaged(device=device),
     ]
 
     return Compose(t)

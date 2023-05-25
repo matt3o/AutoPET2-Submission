@@ -148,9 +148,9 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
 #            mempool.set_limit(size=8*1024**3)
             tensor_cp = cp.asarray(tensor)
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
-            mempool = cp.get_default_memory_pool()
-            mempool.free_all_blocks()
-            assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
+            # mempool = cp.get_default_memory_pool()
+            # mempool.free_all_blocks()
+            # assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
 
     if verify_correctness and not special_case:
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
@@ -192,9 +192,9 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
         g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
         # logger.info("{}".format(dst[0].item()))
         g[0] = dst.item()
-        mempool = cp.get_default_memory_pool()
-        mempool.free_all_blocks()
-        assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
+        # mempool = cp.get_default_memory_pool()
+        # mempool.free_all_blocks()
+        # assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
     return g
         # return None
 
@@ -456,14 +456,12 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         self.discrepancy_key = discrepancy_key
         self.device = device
 
-    @staticmethod
-    def disparity(label, pred):        
+    def disparity(self, label, pred):        
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=torch.device('cpu')) #.astype(np.float32) # FN
-        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=torch.device('cpu')) #.astype(np.float32) # FP
-        del disparity
+        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=self.device) #.astype(np.float32) # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=self.device) #.astype(np.float32) # FP
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
@@ -504,8 +502,6 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         # Prediction should be represented in one
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
-                    del label
-                    del pred
                 d[self.discrepancy_key] = all_discrepancies
                 return d
             else:

@@ -296,7 +296,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
     train_loader = DataLoader(
-        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1#, multiprocessing_context='spawn', persistent_workers=True,
+        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -306,7 +306,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1#, multiprocessing_context='spawn', persistent_workers=True,
+    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

@@ -419,9 +419,11 @@ def run(args):
             torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
     finally:
         # Cleanup
-        if args.delete_cache_after_finish:
+        if args.throw_away_cache:
             logger.info("Cleaning up..")
             shutil.rmtree(args.cache_dir, ignore_errors=True)
+        else:
+            logger.info("Leaving cache dir as it is..")
 
 
 
@@ -436,7 +438,7 @@ def main():
     parser.add_argument("-d", "--data", default="/cvhci/temp/mhadlich/data")
     # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
-    parser.add_argument("-de", "--delete_cache_after_finish", default=False, action='store_true')
+    parser.add_argument("-ta", "--throw_away_cache", default=False, action='store_true')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 
@@ -526,7 +528,11 @@ def main():
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)
     
-    args.cache_dir = "{}/{}".format(args.cache_dir, uuid.uuid4())
+    if args.throw_away_cache:
+        args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
+    else:
+        args.cache_dir = f"{args.cache_dir}"
+
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
     

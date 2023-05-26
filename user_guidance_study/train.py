@@ -170,6 +170,7 @@ class GPU_Thread(threading.Thread):
             header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
             self.csv_file.write(usage)
             self.csv_file.write("\n")
+            self.csv_file.flush()
 
 
 

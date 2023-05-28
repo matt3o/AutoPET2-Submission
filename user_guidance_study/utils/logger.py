@@ -29,7 +29,13 @@ def setup_loggers(args=None):
 
     # Set logging level for external libraries
     for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
-        logging.getLogger(_).setLevel(logging.INFO)
+        l = logging.getLogger(_)
+        l.handlers.clear()
+        l.setLevel(logging.INFO)
+        l.addHandler(streamHandler)
+        if args is not None and args.log_to_file:
+            l.addHandler(fileHandler)
+            
 
 def get_logger():
     global logger

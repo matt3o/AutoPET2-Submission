@@ -1,5 +1,4 @@
 cache/*
 output/*
-data/*
 utils/__pycache__/*
 __pycache__/*

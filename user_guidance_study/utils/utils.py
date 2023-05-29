@@ -88,7 +88,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
+            ToTensord(keys=("image", "label", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
@@ -198,7 +198,7 @@ def get_click_transforms(device, args):
         #ToNumpyd(keys=("image", )),
         # ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
         # Transforms for click simulation
-        ToTensord(keys=("label"), device=device, track_meta=False),
+        ToTensord(keys=("image", "label"), device=device, track_meta=False),
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         # OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
@@ -218,7 +218,6 @@ def get_click_transforms(device, args):
             device=device,
         ),
         # DeleteItemsd(keys=("discrepancy")),
-        ToTensord(keys=("image"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,
@@ -233,7 +232,7 @@ def get_click_transforms(device, args):
         
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        # ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False),
+        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]

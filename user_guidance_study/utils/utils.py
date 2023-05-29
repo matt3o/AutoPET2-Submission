@@ -73,7 +73,7 @@ def get_pre_transforms(labels, device, args):
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
-            ToTensord(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -99,7 +99,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            # CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             # Todo try to remove the Padding
@@ -108,7 +108,7 @@ def get_pre_transforms(labels, device, args):
             ToTensord(keys=("image", "label"), device=device),
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
-            ToTensord(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,

@@ -195,6 +195,8 @@ def create_trainer(args):
 
     print('Number of parameters:', f"{count_parameters(network):,}")
 
+    if args.model_filepath and not args.resume:
+        raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
     if args.resume:
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}

@@ -246,6 +246,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self.label_names = label_names
         self.device = device
     
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -263,9 +264,9 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
             d["label_names"] = new_label_names
             if isinstance(d[key], MetaTensor):
-                d[key].array = label
+                d[key].array = label.to(torch.device("cpu"))
             else:
-                d[key] = label
+                d[key] = label.to(torch.device("cpu"))
         return d
 
 
@@ -402,6 +403,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 print("[ERROR] Signal is None")
             return signal
 
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -410,7 +412,9 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
+                assert image.is_cuda
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
+
                 guidance = d[self.guidance_key]
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
@@ -419,10 +423,13 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                     # Getting signal based on guidance
                     assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
                     if guidance[key_label] is not None and guidance[key_label].numel():
-                        signal = self._get_signal(image, guidance[key_label], key_label=key_label)
+                        signal = self._get_signal(image, guidance[key_label].to(device=self.device), key_label=key_label)
                     else:
-                        signal = self._get_signal(image, torch.Tensor([]), key_label=key_label)
+                        signal = self._get_signal(image, torch.Tensor([]).to(device=self.device), key_label=key_label)
+                    assert signal.is_cuda
+                    assert tmp_image.is_cuda
                     tmp_image = torch.cat([tmp_image, signal], dim=0)
+                    # tmp_image = tmp_image.to(torch.device("cpu"))
                     if isinstance(d[key], MetaTensor):
                         d[key].array = tmp_image
                     else:
@@ -460,13 +467,14 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=self.device) #.astype(np.float32) # FN
-        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=self.device) #.astype(np.float32) # FP
+        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=torch.device("cpu")) #.astype(np.float32) # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=torch.device("cpu")) #.astype(np.float32) # FP
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
         return self.disparity(label, pred)
 
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -474,6 +482,17 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
             if key == "label":
                 assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
                 all_discrepancies = {}
+                if not d[key].is_cuda:
+                    d[key] = d[key].to(device=self.device)
+                    label_was_on_cuda = False
+                else:
+                    label_was_on_cuda = True
+                if not d[key].is_cuda:
+                    d[self.pred_key] = d[self.pred_key].to(device=self.device)
+                    pred_was_on_cuda = False
+                else:
+                    pred_was_on_cuda = True
+
                 # label_names: e.g. [('spleen', 1), ('background', 0)]
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
                     if label_key != "background":
@@ -503,6 +522,11 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
                 d[self.discrepancy_key] = all_discrepancies
+                # Restore previous state of label and pred
+                if not label_was_on_cuda:
+                    d[key] = d[key].to(device=torch.device("cpu"))
+                if not pred_was_on_cuda:
+                    d[self.pred_key] = d[self.pred_key].to(device=torch.device("cpu"))
                 return d
             else:
                 logger.error("This transform only applies to 'label' key")
@@ -556,6 +580,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             del distance
             return t
         else:
+            del distance
             return None
 
         # # TODO any more GPU stuff possible?
@@ -586,7 +611,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def add_guidance(self, guidance, discrepancy, label_names, labels):
 
         # Positive clicks of the segment in the iteration
-        pos_discr = discrepancy[0]      # idx 0 is positive discrepancy and idx 1 is negative discrepancy
+        pos_discr = discrepancy[0] # idx 0 is positive discrepancy and idx 1 is negative discrepancy
 
         # Check the areas that belong to other segments
         # TODO commented since it does nothing..
@@ -616,6 +641,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             self.is_pos = True
         return guidance
 
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -664,6 +690,7 @@ class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
     """
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -747,14 +774,12 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
 
                 distance = get_distance_transform(label, self.device, verify_correctness=False)
                 g = get_choice_from_distance_transform_cp(distance, device=self.device)
-
-                del distance
                 if dimensions == 2 or dims == 3:
                     label_guidance.append(g)
                 else:
                     # Clicks are created using this convention Channel Height Width Depth (CHWD)
                     label_guidance.append([g[0], g[-2], g[-1], sid])  # Assume channel is first and depth is last CHWD
-        return torch.tensor(label_guidance,dtype=torch.int32)
+        return torch.tensor(label_guidance, dtype=torch.int32, device=torch.device("cpu"))
 
     def _randomize(self, d, key_label):
         sids = d.get(self.sids_key).get(key_label) if d.get(self.sids_key) is not None else None
@@ -767,6 +792,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
             sid = None
         self.sid[key_label] = sid
 
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -829,6 +855,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
             sids[key_label] = np.asarray(l_ids)
         return sids
 
+    @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)

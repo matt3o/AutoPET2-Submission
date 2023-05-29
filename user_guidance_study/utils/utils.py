@@ -12,6 +12,8 @@ from utils.transforms import (
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
 
+from monai.transforms.transform import MapTransform, Randomizable, Transform
+
 from monai.transforms import (
     Activationsd,
     AsDiscreted,
@@ -46,7 +48,7 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
-TRANSFER_TO_CPU = True
+TRANSFER_TO_CPU = False
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
@@ -54,13 +56,10 @@ def get_pre_transforms(labels, device, args):
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            ToTensord(keys=("label"), device=device),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
-            ToTensord(keys=("label"), device=torch.device("cpu")),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
-            #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
-            #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest")),
+            #CenterSpatialCropd(keys=["image", "la/tmp/dataial_size=[96, 96, 128], mode=("area", "nearest")),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             ### Random Transforms ###
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
@@ -89,7 +88,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False)
+            ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
@@ -100,7 +99,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            # CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             # Todo try to remove the Padding
@@ -124,7 +123,7 @@ def get_pre_transforms(labels, device, args):
             # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
-            ToTensord(keys=("image", "label", "pred", "label_names", "guidance"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False)
+            ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label", "guidance"), device=device, allow_missing_keys=True, track_meta=False)
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
@@ -234,7 +233,7 @@ def get_click_transforms(device, args):
         
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False),
+        # ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True) if TRANSFER_TO_CPU else ToTensord(keys=("image", "label"), device=device, allow_missing_keys=True, track_meta=False),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]
@@ -296,7 +295,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     train_ds = PersistentDataset(
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
-    train_loader = DataLoader(
+    train_loader = ThreadDataLoader(
         train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
     )
     logger.info(
@@ -307,7 +306,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
+    val_loader = ThreadDataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

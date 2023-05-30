@@ -11,13 +11,13 @@
 
 from typing import Callable, Dict, Sequence, Union
 import logging
-
-import numpy as np
-import os
-import torch
-import nibabel as nib
 import time
 import pprint
+import os
+
+import numpy as np
+import torch
+import nibabel as nib
 
 from monai.data import decollate_batch, list_data_collate
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
@@ -25,13 +25,12 @@ from monai.engines.utils import IterationEvents
 from monai.transforms import Compose, AsDiscrete
 from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
-
 from monai.data.meta_tensor import MetaTensor
 
-
-from utils.helper import print_gpu_usage, get_total_size_of_all_tensors, describe_batch_data
+from utils.helper import print_gpu_usage, get_total_size_of_all_tensors, describe_batch_data, timeit
 
 logger = logging.getLogger("interactive_segmentation")
+np.seterr(all='raise')
 
 
 class Interaction:
@@ -73,6 +72,7 @@ class Interaction:
         self.max_interactions = max_interactions
         self.args = args
 
+    @timeit
     def __call__(self, engine: Union[SupervisedTrainer, SupervisedEvaluator], batchdata: Dict[str, torch.Tensor]):
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
@@ -82,14 +82,13 @@ class Interaction:
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
                 logger.info('##### It: {} '.format(j))
-                inputs, labels = engine.prepare_batch(batchdata)
-                # NOTE only input and labels get transferred to the GPU since batchdata contains a lot more data
-                # in my experience the data allocated on the GPU during the iterations does not get released properly
-                inputs = inputs.to(engine.state.device)
+                before = time.time()
+                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device) # never move directly to device, will loose too much GPU memory
+
+                # inputs = inputs.to(engine.state.device)
                 if j == 0:
                     logger.info("inputs.shape is {}".format(inputs.shape))
-
-                labels = labels.to(engine.state.device)
+                # labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
@@ -98,30 +97,40 @@ class Interaction:
                 with torch.no_grad():
                     if engine.amp:
                         with torch.cuda.amp.autocast():
-                            predictions = engine.inferer(inputs, engine.network)
+                            predictions = timeit(engine.inferer)(inputs, engine.network)
                     else:
-                        predictions = engine.inferer(inputs, engine.network)
+                        predictions = timeit(engine.inferer)(inputs, engine.network)
+                
                 
                 post_pred = AsDiscrete(argmax=True, to_onehot=2)
                 post_label = AsDiscrete(to_onehot=2)
 
-                preds = np.array([post_pred(el).cpu().detach().numpy() for el in decollate_batch(predictions)])
-                gts = np.array([post_label(el).cpu().detach().numpy() for el in decollate_batch(labels)])
-                dice = compute_dice(torch.Tensor(preds), torch.Tensor(gts), include_background=True)[0, 1]
-                logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice.item(), engine.state.epoch))
+                # print(predictions)
+                # print(len(decollate_batch(predictions)))
+                # print(len(decollate_batch(labels)))
+                preds = post_pred(predictions)
+                gts = post_label(labels)
+
+                # preds = torch.Tensor([post_pred(el) for el in decollate_batch(predictions)])
+                # gts = torch.Tensor([post_label(el) for el in decollate_batch(labels)])
+                dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
+                logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
+                del preds, gts, dice
 
                 state = 'train' if self.train else 'eval'
 
-                batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
+                # LEAK?
+                batchdata.update({CommonKeys.PRED: predictions.detach().cpu()}) # update predictions of this iteration
 
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata, detach=True)
+                
 
                 for i in range(len(batchdata_list)):
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
-                    logger.info("self.click_transforms took {:1f} seconds..".format(time.time()- before))
+                    logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
 
                 if j <= 9 and self.args.save_nifti:
@@ -129,8 +138,9 @@ class Interaction:
 
                 batchdata = list_data_collate(batchdata_list)
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
-                del inputs, labels, preds, gts, dice, batchdata_list
+                del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
+                logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before))
         else:
             # zero out input guidance channels
             batchdata_list = decollate_batch(batchdata, detach=True)

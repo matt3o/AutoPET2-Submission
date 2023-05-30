@@ -82,7 +82,7 @@ class Interaction:
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
                 logger.info('##### It: {} '.format(j))
-                before = time.time()
+                before_it = time.time()
                 inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device) # never move directly to device, will loose too much GPU memory
 
                 # inputs = inputs.to(engine.state.device)
@@ -108,19 +108,16 @@ class Interaction:
                 # print(predictions)
                 # print(len(decollate_batch(predictions)))
                 # print(len(decollate_batch(labels)))
-                preds = post_pred(predictions)
-                gts = post_label(labels)
 
-                # preds = torch.Tensor([post_pred(el) for el in decollate_batch(predictions)])
-                # gts = torch.Tensor([post_label(el) for el in decollate_batch(labels)])
+                preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
+                gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
                 dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
                 logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
                 del preds, gts, dice
 
                 state = 'train' if self.train else 'eval'
 
-                # LEAK?
-                batchdata.update({CommonKeys.PRED: predictions.detach().cpu()}) # update predictions of this iteration
+                batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
 
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata, detach=True)
@@ -140,7 +137,7 @@ class Interaction:
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
                 del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
-                logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before))
+                logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before_it))
         else:
             # zero out input guidance channels
             batchdata_list = decollate_batch(batchdata, detach=True)
@@ -149,7 +146,7 @@ class Interaction:
             batchdata = list_data_collate(batchdata_list)
 
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata

@@ -38,7 +38,6 @@ def find_discrepancy(vec1:ArrayLike, vec2:ArrayLike, context_vector:ArrayLike, a
         if raise_warning:
             raise UserWarning("find_discrepancy has found discrepancies! Please fix your code..")
 
-@timeit
 def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify_correctness=False) -> torch.Tensor:
     # The distance transform provides a metric or measure of the separation of points in the image.
     # This function calculates the distance between each pixel that is set to off (0) and

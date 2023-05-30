@@ -1,18 +1,20 @@
-import torch
-from pynvml import *
+import os
+import logging
 import gc
-from monai.data.meta_tensor import MetaTensor
 import pprint
-
 import functools  
 import time
 from datetime import datetime
+from functools import wraps
 
-import os
-
-import logging
-logger = logging.getLogger("interactive_segmentation")
+import torch
 import cupy as cp
+
+
+from pynvml import *
+from monai.data.meta_tensor import MetaTensor
+
+logger = logging.getLogger("interactive_segmentation")
 
 def get_actual_cuda_index_of_device(device:torch.device):
     try:
@@ -165,23 +167,36 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
 def timeit(func):
     @wraps(func)
     def timeit_wrapper(*args, **kwargs):
-        try:
-            device = args[0].device
-        except:
-            device = None
+        # try:
+        #     device = args[0].device
+        # except AttributeError:
+        #     device = None
         
-        if device is not None:
-            gpu1 = gpu_usage(device=device, used_memory_only=True)
+        # if device is not None:
+        #     gpu1 = gpu_usage(device=device, used_memory_only=True)
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
-        if device is not None:
-            gpu2 = gpu_usage(device=device, used_memory_only=True)
+        # if device is not None:
+        #     gpu2 = gpu_usage(device=device, used_memory_only=True)
         total_time = end_time - start_time
-        if device is not None:
-            logger.info(f'Function {func.__qualname__}() took {total_time:.4f} seconds and reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')
-        else:
-            logger.info(f'Function {func.__qualname__}() took {total_time:.4f} seconds')
+        name = None
+        try:
+            name = func.__qualname__
+        except AttributeError:
+            # Excepting it to be an object now
+            try: 
+                name = func.__class__.__qualname__
+            except AttributeError:
+                logger.error("Timeit Wrapper got unexpected element (not func, class or object). Please fix!")
+            pass
+        # if device is not None:
+        #     logger.info(f'Function {name}() took {total_time:.3f} seconds and reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')
+        # else:
+        logger.info(f'{name}() took {total_time:.3f} seconds')
+            
+
+
         return result
     return timeit_wrapper
 

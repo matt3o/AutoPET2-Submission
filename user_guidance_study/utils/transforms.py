@@ -37,6 +37,8 @@ from cupyx.scipy.ndimage import label as label_cp
 
 measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
 
+from utils.distance_transform import get_distance_transform, get_choice_from_distance_transform_cp
+
 from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
 from utils.logger import setup_loggers, get_logger
 
@@ -47,7 +49,6 @@ logger = get_logger()
 
 #logger = logging.getLogger("interactive_segmentation")
 #logger.setLevel(logging.INFO)
-
 
 distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
@@ -87,149 +88,6 @@ class PrintGPUUsaged(MapTransform):
         print_gpu_usage(device=self.device, used_memory_only=True)
         # exit(0)
         return d
-
-
-
-# TODO remove this monster.
-# Add new click to the guidance signal
-#def update_guidance(orig, updated):
-#    assert orig.keys() == updated.keys()
-#    for k in orig.keys():
-#        v_new = updated[k]
-#        v_old = eval(orig[k]) # str->list
-#        for p in v_new:
-#            if p not in v_old:
-#                v_old.append(p)
-#        v_old = [el for el in v_old if np.min(el) >= 0]
-#        orig[k] = str(v_old)
-#    return orig
-
-
-def find_discrepancy(vec1:ArrayLike, vec2:ArrayLike, context_vector:ArrayLike, atol:float=0.001, raise_warning:bool=True):
-    if not np.allclose(vec1, vec2):
-        logger.error("find_discrepancy() found something")
-        #logger.error(np.logical_not(np.isclose(vec1, vec2)))
-        idxs = np.where(np.isclose(vec1, vec2) == False)
-        assert len(idxs) > 0 and idxs[0].size > 0
-        for i in range(0, min(5, idxs[0].size)):
-            position = []
-            for j in range(0, len(vec1.shape)):
-                position.append(idxs[j][i])
-            position = tuple(position)
-            logger.error("{} \n".format(position))
-            logger.error("Item at position: {} which has value: {} \nvec1: {} , vec2: {}".format(
-                        position, context_vector.squeeze()[position], vec1[position], vec2[position]))
-        if raise_warning:
-            raise UserWarning("find_discrepancy has found discrepancies! Please fix your code..")
-
-
-def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify_correctness=False) -> torch.Tensor:
-    # The distance transform provides a metric or measure of the separation of points in the image.
-    # This function calculates the distance between each pixel that is set to off (0) and
-    # the nearest nonzero pixel for binary images
-    # http://matlab.izmiran.ru/help/toolbox/images/morph14.html
-    dimension = tensor.dim()
-    if verify_correctness:
-        distance_np = distance_transform_edt(tensor.cpu().numpy())
-    # Check is necessary since the edt transform only accepts certain dimensions
-    if dimension == 4:
-        tensor = tensor.squeeze(0)
-    assert len(tensor.shape) == 3 and tensor.is_cuda, "tensor.shape: {}, tensor.is_cuda: {}".format(tensor.shape, tensor.is_cuda)
-    special_case = False
-    if torch.equal(tensor, torch.ones_like(tensor, device=device)):
-        # special case of the distance, this code shall behave like distance_transform_cdt from scipy
-        # which means it will return a vector full of -1s in this case
-        # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
-        # TODO match text to code
-        distance = torch.ones_like(tensor, device=device)# * -1
-        special_case = True
-    else:
-        with cp.cuda.Device(device.index):
-#            mempool.set_limit(size=8*1024**3)
-            tensor_cp = cp.asarray(tensor)
-            distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
-            # mempool = cp.get_default_memory_pool()
-            # mempool.free_all_blocks()
-            # assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
-
-    if verify_correctness and not special_case:
-        find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
-    
-    if dimension == 4:
-        distance = distance.unsqueeze(0)
-    assert distance.dim() == dimension
-    return distance
-
-# TODO check if this adds non-deterministic behaviour
-def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.device, max_threshold:int = None):
-    assert torch.sum(distance) > 0
-    
-    with cp.cuda.Device(device.index):
-        if max_threshold is None:
-            max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800*800*800) # divide by the maximum number of elements
-
-        before = time.time()
-        # Clip the distance transform to avoid overflows and negative probabilities
-        transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-        distance_cp = cp.asarray(transformed_distance)
-        # distance_np = flattened_array
-
-        probability = cp.exp(distance_cp) - 1.0
-        idx = cp.where(distance_cp > 0)[0]
-        probabilities = probability[idx] / cp.sum(probability[idx])
-        assert idx.shape == probabilities.shape
-        assert cp.all(cp.greater_equal(probabilities, 0))
-
-        
-        # if torch.sum(distance > 0) > 0:
-        # if torch.sum(transformed_distance) > 0:
-        #idx_np = idx.cpu().numpy()
-        #probability_np = probability.cpu().numpy()
-        seed = cp.random.choice(a=idx, size=1, p=probabilities)
-        #torch.random(idx, size)
-        dst = transformed_distance[seed.item()]
-
-        g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-        # logger.info("{}".format(dst[0].item()))
-        g[0] = dst.item()
-        # mempool = cp.get_default_memory_pool()
-        # mempool.free_all_blocks()
-        # assert mempool.used_bytes() / 1024**2 < 500, f"mempool has size: {mempool.used_bytes()/ 1024**2:.1f} MB > 500 MB"
-    return g
-        # return None
-
-
-
-def get_choice_from_distance_transform(distance: torch.Tensor, device: torch.device = None, max_threshold:int = None, R = np.random):
-    assert torch.sum(distance) > 0
-
-    if max_threshold is None:
-        max_threshold = int(np.floor(np.log(np.finfo(np.float32).max))) / (800*800*800) # divide by the maximum number of elements
-
-    before = time.time()
-    # Clip the distance transform to avoid overflows and negative probabilities
-    transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-    distance_np = transformed_distance.cpu().numpy()
-    # distance_np = flattened_array
-
-    probability = np.exp(distance_np) - 1.0
-    idx = np.where(distance_np > 0)[0]
-
-    # if torch.sum(distance > 0) > 0:
-    # if torch.sum(transformed_distance) > 0:
-    #idx_np = idx.cpu().numpy()
-    #probability_np = probability.cpu().numpy()
-    seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-    #torch.random(idx, size)
-    dst = transformed_distance[seed]
-    del transformed_distance
-
-    g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-    # logger.info("{}".format(dst[0].item()))
-    g[0] = dst[0].item()
-    logger.debug("get_choice_from_distance_transform took {:1f} seconds..".format(time.time()- before))
-    return g
-    # return None
 
 
 class NormalizeLabelsInDatasetd(MapTransform):
@@ -487,7 +345,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                     label_was_on_cuda = False
                 else:
                     label_was_on_cuda = True
-                if not d[key].is_cuda:
+                if not d["pred"].is_cuda:
                     d[self.pred_key] = d[self.pred_key].to(device=self.device)
                     pred_was_on_cuda = False
                 else:

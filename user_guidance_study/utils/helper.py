@@ -12,7 +12,7 @@ import os
 
 import logging
 logger = logging.getLogger("interactive_segmentation")
-
+import cupy as cp
 
 def get_actual_cuda_index_of_device(device:torch.device):
     try:

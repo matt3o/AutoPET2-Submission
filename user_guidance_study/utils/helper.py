@@ -2,6 +2,7 @@ import torch
 from pynvml import *
 import gc
 from monai.data.meta_tensor import MetaTensor
+import pprint
 
 import functools  
 import time
@@ -34,8 +35,13 @@ def gpu_usage(device:torch.device, used_memory_only=False):
     t_used = t_total - t_free
     used_not_by_torch = nv_used - t_used
 
+    with cp.cuda.Device(device.index):
+        mempool = cp.get_default_memory_pool()
+        cupy_usage = mempool.used_bytes() / 1024**2
+
+
     if not used_memory_only:
-        return cuda_index, utilization, nv_total, nv_free, nv_used, used_not_by_torch
+        return cuda_index, utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage
     else:
         return nv_used
 
@@ -49,15 +55,17 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
 
     if csv_format:
         header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB)"
-        usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+        usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage)
         return (header, usage)
     else:
         if used_memory_only:
             usage += '{} Device: {} --- used:  {:.0f} MB'.format(context, cuda_index, nv_used)
         else:
-            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch)
+            usage += header
+            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage)
+            usage = pprint.pformat(usage)
     return usage
 
 

@@ -397,9 +397,15 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
+                print(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 raise
-                # print_all_tensor_gpu_memory_usage()
-
+            except RuntimeError as e:
+                if "cuDNN" in str(e):
+                    # Got a cuDNN error
+                    print(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+                else:
+                    print(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+                raise
             finally:
                 stopFlag.set()
                 print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")

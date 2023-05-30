@@ -70,6 +70,8 @@ from monai.utils import set_determinism
 
 import threading
 
+from monai.optimizers.novograd import Novograd
+
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -261,15 +263,12 @@ def create_trainer(args):
     )
 
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
-    if not args.fast:
+    
+    if args.novograd:
+        optimizer = Novograd(network.parameters(), args.learning_rate)
+    else: # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
-    else:
-        # Idea from fast_training_tutorial
-        optimizer = torch.optim.SGD(
-                        network.parameters(),
-                        lr=args.learning_rate * 50,
-                        momentum=0.9,
-                        weight_decay=0.00004,)
+
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1)
 
@@ -467,7 +466,7 @@ def main():
     parser.add_argument("--num_workers", type=int, default=1)
     parser.add_argument("-e", "--epochs", type=int, default=100)
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
-    parser.add_argument("--fast", default=False, action='store_true')
+    parser.add_argument("--novograd", default=False, action='store_true')
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 

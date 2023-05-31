@@ -64,7 +64,7 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
         if used_memory_only:
             usage += '{} Device: {} --- used:  {:.0f} MB'.format(context, cuda_index, nv_used)
         else:
-            header = "device,context,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),cupy memory (MB)"
+            header = "\ndevice,context,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),cupy memory (MB)\n"
             usage += header
             usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
                 cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage)

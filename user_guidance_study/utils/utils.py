@@ -102,7 +102,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            # CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            # CenterSpatialCropd(keys=["image", "label"], roi_size=(300, 300, 450)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),

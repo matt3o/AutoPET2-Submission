@@ -86,6 +86,9 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+    logger.critical(torch.cuda.memory_summary())
+    
 
 sys.excepthook = handle_exception
 
@@ -396,14 +399,11 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
-                print(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 raise
             except RuntimeError as e:
                 if "cuDNN" in str(e):
                     # Got a cuDNN error
-                    print(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
-                else:
-                    print(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+                    pass
                 raise
             finally:
                 stopFlag.set()

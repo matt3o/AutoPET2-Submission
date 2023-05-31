@@ -409,8 +409,7 @@ def run(args):
             finally:
                 stopFlag.set()
                 logger.info(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
-                end_time = time.time()
-                logger.info("Total Training Time {}".format(end_time - start_time))
+                logger.info("Total Training Time {}".format(time.time() - start_time))
                 logger.info(f"\n{wp.get_times_summary_pd()}")
                 gpu_thread.join()
 
@@ -509,7 +508,7 @@ def main():
     parser.add_argument("--conv1s", default=False, action='store_true')
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
-    parser.add_argument("-log", "--log_to_file", default=False, action='store_true')
+    parser.add_argument("--no_log", default=False, action='store_true')
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 

@@ -17,13 +17,13 @@ def setup_loggers(args=None):
     streamHandler.setLevel(logging.INFO)
     logger.addHandler(streamHandler)
     
-    if args is not None and args.log_to_file:
+    if args is not None and not args.no_log:
     # Add the file handler
-        log_file_path = "{}/log.txt".format(args.output)
+        log_file_path = f"{args.output}/log.txt"
         fileHandler = logging.FileHandler(log_file_path)
         fileHandler.setFormatter(formatter)
         logger.addHandler(fileHandler)
-        logger.info("Logging all the data to '{}'".format(log_file_path))
+        logger.info(f"Logging all the data to '{log_file_path}'")
     else:
         logger.info("Logging only to the console")
 
@@ -33,7 +33,7 @@ def setup_loggers(args=None):
         l.handlers.clear()
         l.setLevel(logging.INFO)
         l.addHandler(streamHandler)
-        if args is not None and args.log_to_file:
+        if args is not None and not args.no_log:
             l.addHandler(fileHandler)
             
 

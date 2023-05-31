@@ -34,10 +34,13 @@ from monai.transforms import (
     RandCropByPosNegLabeld,
     EnsureTyped,
     DeleteItemsd,
+    CuCIMd, 
+    RandCuCIMd
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
+
 
 import torch
 import glob
@@ -53,19 +56,23 @@ def get_pre_transforms(labels, device, args):
     if args.dataset == 'AutoPET':
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             #CenterSpatialCropd(keys=["image", "la/tmp/dataial_size=[96, 96, 128], mode=("area", "nearest")),
-            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+            #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+            CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
+            
             ### Random Transforms ###
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
+            RandCuCIMd(name="color_jitter", brightness=64.0 / 255.0, contrast=0.75, saturation=0.25, hue=0.04),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device), # sids np array on cpu
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device), 
@@ -90,17 +97,19 @@ def get_pre_transforms(labels, device, args):
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
             # CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
-            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+            #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+            CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",

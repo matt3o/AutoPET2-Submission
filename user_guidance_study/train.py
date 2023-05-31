@@ -86,7 +86,6 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
     logger.critical(torch.cuda.memory_summary())
     
 
@@ -399,21 +398,21 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
+                logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 raise
             except RuntimeError as e:
                 if "cuDNN" in str(e):
                     # Got a cuDNN error
                     pass
+                logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 raise
             finally:
                 stopFlag.set()
-                print_gpu_usage(torch.device(f"cuda:{args.gpu}"), context="STOP")
+                logger.info(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 end_time = time.time()
                 logger.info("Total Training Time {}".format(end_time - start_time))
-                gpu_thread.join()
-
                 logger.info(f"\n{wp.get_times_summary_pd()}")
-
+                gpu_thread.join()
 
         if not args.eval_only:
             logger.info("{}:: Saving Final PT Model".format(args.gpu))

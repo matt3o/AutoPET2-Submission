@@ -30,11 +30,14 @@ def gpu_usage(device:torch.device, used_memory_only=False):
     cuda_index = get_actual_cuda_index_of_device(device)
     h = nvmlDeviceGetHandleByIndex(cuda_index)
     info = nvmlDeviceGetMemoryInfo(h)
+    util = nvmlDeviceGetUtilizationRates(h)
     nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
-    utilization = torch.cuda.utilization(device)
+    # utilization = torch.cuda.utilization(device)
     t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
+    util_gpu = util.gpu / 100
+    util_memory = util.memory / 100
 
-    t_used = t_total - t_free
+    t_used = torch.cuda.memory_reserved(device)
     used_not_by_torch = nv_used - t_used
 
     with cp.cuda.Device(device.index):
@@ -43,32 +46,43 @@ def gpu_usage(device:torch.device, used_memory_only=False):
 
 
     if not used_memory_only:
-        return cuda_index, utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage
+        return cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage
     else:
         return nv_used
 
 
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
-    cuda_index, utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage = gpu_usage(device=device)
+    cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage = gpu_usage(device=device)
     usage = ""
 
     if csv_format and used_memory_only:
         raise NotImplemented
 
     if csv_format:
-        header = "device,context,time,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),cupy memory (MB)"
-        usage += '{},{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-            cuda_index, context, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage)
+        header = "device,context,time,gpu util (%),memory util (%),total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),cupy memory (MB)"
+        usage += '{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+            cuda_index,
+            context,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            util_gpu,
+            util_memory,
+            nv_total,
+            nv_free,
+            nv_used,
+            used_not_by_torch,
+            cupy_usage
+        )
         return (header, usage)
     else:
         if used_memory_only:
             usage += '{} Device: {} --- used:  {:.0f} MB'.format(context, cuda_index, nv_used)
         else:
-            header = "\ndevice,context,utilization,total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),cupy memory (MB)\n"
-            usage += header
-            usage += '{},{},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
-                cuda_index, context, utilization, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage)
-            usage = pprint.pformat(usage)
+            usage += 'device: {} context: {}\n gpu util (%):{:.2f} memory util (%): {:.2f}\n'.format(
+                cuda_index, context, util_gpu, util_memory,
+            )
+            usage += 'total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f} memory not used by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n'.format(
+                nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage,
+            )
     return usage
 
 

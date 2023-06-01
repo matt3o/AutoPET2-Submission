@@ -77,13 +77,13 @@ class Interaction:
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
         guidance_label_overlap = 0.0
-        logger.info("####################### Interaction ##############")
+        logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs},Iter {engine.state.iteration}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             for j in range(self.max_interactions):
                 logger.info('##### It: {} '.format(j))
                 before_it = time.time()
-                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device) # never move directly to device, will loose too much GPU memory
+                inputs, labels = engine.prepare_batch(batchdata, engine.state.device) # never move directly to device, will loose too much GPU memory
 
                 # inputs = inputs.to(engine.state.device)
                 if j == 0:
@@ -92,6 +92,7 @@ class Interaction:
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
+                #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="Before forward pass")
 
                 # Forward Pass
                 with torch.no_grad():
@@ -118,6 +119,7 @@ class Interaction:
                 state = 'train' if self.train else 'eval'
 
                 batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
+                #del predictions
 
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata, detach=True)
@@ -137,6 +139,7 @@ class Interaction:
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
                 del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
+                #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
                 logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before_it))
         else:
             # zero out input guidance channels
@@ -146,8 +149,8 @@ class Interaction:
             batchdata = list_data_collate(batchdata_list)
 
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
-        torch.cuda.empty_cache()
-        print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
+        #torch.cuda.empty_cache()
+        #print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle

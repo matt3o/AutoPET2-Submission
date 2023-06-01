@@ -37,8 +37,8 @@ def gpu_usage(device:torch.device, used_memory_only=False):
     util_gpu = util.gpu / 100
     util_memory = util.memory / 100
 
-    t_used = torch.cuda.memory_reserved(device)
-    used_not_by_torch = nv_used - t_used
+    torch_reserved = torch.cuda.memory_reserved(device)
+    # used_not_by_torch = nv_used - t_used
 
     with cp.cuda.Device(device.index):
         mempool = cp.get_default_memory_pool()
@@ -46,20 +46,20 @@ def gpu_usage(device:torch.device, used_memory_only=False):
 
 
     if not used_memory_only:
-        return cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage
+        return cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_usage
     else:
         return nv_used
 
 
 def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
-    cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage = gpu_usage(device=device)
+    cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_usage = gpu_usage(device=device)
     usage = ""
 
     if csv_format and used_memory_only:
         raise NotImplemented
 
     if csv_format:
-        header = "device,context,time,gpu util (%),memory util (%),total memory (MB),free memory (MB),used memory (MB),memory not used by torch (MB),cupy memory (MB)"
+        header = "device,context,time,gpu util (%),memory util (%),total memory (MB),free memory (MB),used memory (MB),memory reserved by torch (MB),cupy memory (MB)"
         usage += '{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
             cuda_index,
             context,
@@ -69,7 +69,7 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
             nv_total,
             nv_free,
             nv_used,
-            used_not_by_torch,
+            torch_reserved,
             cupy_usage
         )
         return (header, usage)
@@ -80,8 +80,8 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
             usage += 'device: {} context: {}\n gpu util (%):{:.2f} memory util (%): {:.2f}\n'.format(
                 cuda_index, context, util_gpu, util_memory,
             )
-            usage += 'total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f} memory not used by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n'.format(
-                nv_total, nv_free, nv_used, used_not_by_torch, cupy_usage,
+            usage += 'total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f} memory reserved by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n'.format(
+                nv_total, nv_free, nv_used, torch_reserved, cupy_usage,
             )
     return usage
 

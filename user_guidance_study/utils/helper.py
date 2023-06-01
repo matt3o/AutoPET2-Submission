@@ -37,7 +37,7 @@ def gpu_usage(device:torch.device, used_memory_only=False):
     util_gpu = util.gpu / 100
     util_memory = util.memory / 100
 
-    torch_reserved = torch.cuda.memory_reserved(device)
+    torch_reserved = torch.cuda.memory_reserved(device) / (1024**2)
     # used_not_by_torch = nv_used - t_used
 
     with cp.cuda.Device(device.index):

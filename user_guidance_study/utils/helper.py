@@ -33,7 +33,7 @@ def gpu_usage(device:torch.device, used_memory_only=False):
     util = nvmlDeviceGetUtilizationRates(h)
     nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
     # utilization = torch.cuda.utilization(device)
-    t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
+    # t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
     util_gpu = util.gpu / 100
     util_memory = util.memory / 100
 

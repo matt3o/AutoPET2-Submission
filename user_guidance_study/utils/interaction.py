@@ -80,9 +80,10 @@ class Interaction:
         logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs},Iter {engine.state.iteration}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
+            before_it = time.time()
             for j in range(self.max_interactions):
                 logger.info('##### It: {} '.format(j))
-                before_it = time.time()
+                
                 inputs, labels = engine.prepare_batch(batchdata, engine.state.device) # never move directly to device, will loose too much GPU memory
 
                 # inputs = inputs.to(engine.state.device)
@@ -98,11 +99,11 @@ class Interaction:
                 with torch.no_grad():
                     if engine.amp:
                         with torch.cuda.amp.autocast():
-                            predictions = timeit(engine.inferer)(inputs, engine.network)
+                            predictions = engine.inferer(inputs, engine.network)
                     else:
-                        predictions = timeit(engine.inferer)(inputs, engine.network)
+                        predictions = engine.inferer(inputs, engine.network)
                 
-                if self.args.save_nifti: 
+                if self.args.save_nifti:
                     post_pred = AsDiscrete(argmax=True, to_onehot=2)
                     post_label = AsDiscrete(to_onehot=2)
 
@@ -128,7 +129,7 @@ class Interaction:
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
-                    logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
+                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
 
                 if j <= 9 and self.args.save_nifti:
@@ -140,14 +141,14 @@ class Interaction:
                 #del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
                 #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
-                logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before_it))
+            logger.info("Interaction {} took {:.2f} seconds..".format(time.time()- before_it))
         else:
             # zero out input guidance channels
             batchdata_list = decollate_batch(batchdata, detach=True)
             for i in range(1, len(batchdata_list[0][CommonKeys.IMAGE])):
                 batchdata_list[0][CommonKeys.IMAGE][i] *= 0
             batchdata = list_data_collate(batchdata_list)
-
+        
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
         #torch.cuda.empty_cache()
         #print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")

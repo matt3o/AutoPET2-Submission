@@ -38,7 +38,8 @@ from monai.transforms import (
     CuCIMd, 
     RandCuCIMd,
     ToCupyd,
-    CropForegroundd
+    CropForegroundd,
+    CheckTheAmountOfInformationLossByCropd,
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
@@ -113,6 +114,7 @@ def get_pre_transforms(labels, device, args):
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+            CheckTheAmountOfInformationLossByCropd(keys=["label"], roi_size=(300, 300, 400), label_names=labels)
             CenterSpatialCropd(keys=["image", "label"], roi_size=(300, 300, 400)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs

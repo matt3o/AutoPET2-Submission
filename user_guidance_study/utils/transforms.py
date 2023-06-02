@@ -54,6 +54,26 @@ distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="di
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
 
+class DetachTensorsd(MapTransform):
+    def __init__(self, keys: KeysCollection = None):
+        """
+        Normalize label values according to label names dictionary
+
+        Args:
+            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+            label_names: all label names
+        """
+        super().__init__(keys)
+
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d: Dict = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = d[key].detach()
+        # exit(0)
+        return d
+
+
 class PrintDatad(MapTransform):
     def __init__(self, keys: KeysCollection = None):
         """

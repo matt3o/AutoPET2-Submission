@@ -6,8 +6,9 @@ from utils.transforms import (
     FindAllValidSlicesMissingLabelsd,
     AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
-    PrintDatad, 
-    PrintGPUUsaged
+    PrintDatad,
+    PrintGPUUsaged,
+    DetachTensorsd,
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -209,11 +210,11 @@ def get_click_transforms(device, args):
     t = [
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        ToNumpyd(keys=("image", "label", "pred")),
+        DetachTensorsd(keys=("image", "label", "pred")),
         # ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
         # Transforms for click simulation
         # ToTensord(keys=("image", "label", "guidance"), device=device, track_meta=False),
-        ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
+        # ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         # OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),

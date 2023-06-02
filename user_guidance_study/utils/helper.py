@@ -207,7 +207,7 @@ def timeit(func):
         # if device is not None:
         #     logger.info(f'Function {name}() took {total_time:.3f} seconds and reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')
         # else:
-        logger.info(f'{name}() took {total_time:.3f} seconds')
+        logger.debug(f'{name}() took {total_time:.3f} seconds')
             
 
 

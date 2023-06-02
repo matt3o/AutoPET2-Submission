@@ -110,17 +110,10 @@ class Interaction:
                     # print(len(decollate_batch(predictions)))
                     # print(len(decollate_batch(labels)))
 
-<<<<<<< HEAD
                     preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
                     gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
                     dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
                     logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
-=======
-                preds = torch.stack([post_pred(el) for el in decollate_batch(predictions, detach=True)])
-                gts = torch.stack([post_label(el) for el in decollate_batch(labels, detach=True)])
-                dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
-                logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
->>>>>>> 8df89c6cdf4a6d31634cc751193c0ae352170dea
 
                 state = 'train' if self.train else 'eval'
 

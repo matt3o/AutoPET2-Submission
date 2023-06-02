@@ -74,7 +74,7 @@ class DetachTensorsd(MapTransform):
         return d
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection = None, roi_size:Iterable, label_names):
+    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
         """
         Normalize label values according to label names dictionary
 
@@ -91,7 +91,6 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
         for key in self.key_iterator(d):
             if key == "label":
                 label = d[key]
-                logger.info(label.shape)
                 new_data = {"label": label.clone()}
                 # copy the label and crop it to the desired size
                 cropped_label = CenterSpatialCropd(keys="label", roi_size=self.roi_size)(new_data)["label"]
@@ -105,7 +104,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                         # then check how much of the labels is lost
                         lost_pixels = sum_label - sum_cropped_label
                         lost_pixels_ratio = lost_pixels / sum_label * 100
-                        logger.info(f"{lost_pixels_ratio.1f} % of labels of the type {key_label} have been lost when cropping") 
+                        logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
             else: 
                 raise UserWarning("This transform only applies to key 'label'")
         return d

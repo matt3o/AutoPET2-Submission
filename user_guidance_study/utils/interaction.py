@@ -103,7 +103,7 @@ class Interaction:
                     else:
                         predictions = engine.inferer(inputs, engine.network)
                 
-                if self.args.save_nifti:
+                if self.args.save_nifti or args.debug:
                     post_pred = AsDiscrete(argmax=True, to_onehot=2)
                     post_label = AsDiscrete(to_onehot=2)
 

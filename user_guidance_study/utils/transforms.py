@@ -27,6 +27,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor
 from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
+from monai.transforms import CenterSpatialCropd
 from monai.utils import min_version, optional_import
 from monai.data.meta_tensor import MetaTensor
 
@@ -52,6 +53,9 @@ logger = get_logger()
 
 distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+
+def threshold_foreground(x):
+    return x > 0.005
 
 
 class DetachTensorsd(MapTransform):

@@ -10,6 +10,7 @@ from utils.transforms import (
     PrintGPUUsaged,
     DetachTensorsd,
     CheckTheAmountOfInformationLossByCropd,
+    threshold_foreground,
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -55,8 +56,6 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
-def threshold_foreground(x):
-    return x > 0.005
 
 
 def get_pre_transforms(labels, device, args):

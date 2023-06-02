@@ -103,8 +103,8 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                 for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):
                     # Only count non-background lost labels
                     if key_label != "background":
-                        sum_label = torch.sum(label == idx)
-                        sum_cropped_label = torch.sum(cropped_label == idx)
+                        sum_label = torch.sum(label == idx).item()
+                        sum_cropped_label = torch.sum(cropped_label == idx).item()
                         # then check how much of the labels is lost
                         lost_pixels = sum_label - sum_cropped_label
                         lost_pixels_ratio = lost_pixels / sum_label * 100

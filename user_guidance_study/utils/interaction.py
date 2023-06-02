@@ -102,19 +102,18 @@ class Interaction:
                     else:
                         predictions = timeit(engine.inferer)(inputs, engine.network)
                 
-                
-                post_pred = AsDiscrete(argmax=True, to_onehot=2)
-                post_label = AsDiscrete(to_onehot=2)
+                if self.args.save_nifti: 
+                    post_pred = AsDiscrete(argmax=True, to_onehot=2)
+                    post_label = AsDiscrete(to_onehot=2)
 
-                # print(predictions)
-                # print(len(decollate_batch(predictions)))
-                # print(len(decollate_batch(labels)))
+                    # print(predictions)
+                    # print(len(decollate_batch(predictions)))
+                    # print(len(decollate_batch(labels)))
 
-                preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
-                gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
-                dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
-                logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
-                del preds, gts, dice
+                    preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
+                    gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
+                    dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
+                    logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
 
@@ -137,7 +136,8 @@ class Interaction:
 
                 batchdata = list_data_collate(batchdata_list)
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
-                del inputs, labels, batchdata_list
+                #del preds, gts, dice
+                #del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
                 #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
                 logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before_it))

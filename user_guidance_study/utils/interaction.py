@@ -82,8 +82,7 @@ class Interaction:
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             before_it = time.time()
             for j in range(self.max_interactions):
-                logger.info('##### It: {} '.format(j))
-                
+                # logger.info('##### It: {} '.format(j))
                 inputs, labels = engine.prepare_batch(batchdata, engine.state.device) # never move directly to device, will loose too much GPU memory
 
                 # inputs = inputs.to(engine.state.device)
@@ -141,7 +140,7 @@ class Interaction:
                 #del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
                 #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
-            logger.info("Interaction {} took {:.2f} seconds..".format(time.time()- before_it))
+            logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
         else:
             # zero out input guidance channels
             batchdata_list = decollate_batch(batchdata, detach=True)

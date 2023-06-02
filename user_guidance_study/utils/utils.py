@@ -37,7 +37,7 @@ from monai.transforms import (
     CuCIMd, 
     RandCuCIMd,
     ToCupyd,
-    CropForeground
+    CropForegroundd
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader

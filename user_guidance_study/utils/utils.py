@@ -36,7 +36,8 @@ from monai.transforms import (
     DeleteItemsd,
     CuCIMd, 
     RandCuCIMd,
-    ToCupyd
+    ToCupyd,
+    CropForeground
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
@@ -51,6 +52,10 @@ import logging
 from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
+
+def threshold_foreground(x):
+    return x > 0.005
+
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
@@ -70,6 +75,7 @@ def get_pre_transforms(labels, device, args):
             ### Random Transforms ###
             #RandCuCIMd(name="color_jitter", keys="image", brightness=64.0 / 255.0, contrast=0.75, saturation=0.25, hue=0.04),
             #ToTensord("image", device=device),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
@@ -105,6 +111,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             CenterSpatialCropd(keys=["image", "label"], roi_size=(300, 300, 400)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs

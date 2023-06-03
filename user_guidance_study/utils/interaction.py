@@ -77,13 +77,13 @@ class Interaction:
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
         guidance_label_overlap = 0.0
-        logger.info("####################### Interaction ##############")
+        logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs},Iter {engine.state.iteration % engine.state.epoch_length}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
+            before_it = time.time()
             for j in range(self.max_interactions):
-                logger.info('##### It: {} '.format(j))
-                before_it = time.time()
-                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device) # never move directly to device, will loose too much GPU memory
+                # logger.info('##### It: {} '.format(j))
+                inputs, labels = engine.prepare_batch(batchdata, engine.state.device) # never move directly to device, will loose too much GPU memory
 
                 # inputs = inputs.to(engine.state.device)
                 if j == 0:
@@ -92,32 +92,33 @@ class Interaction:
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
+                #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="Before forward pass")
 
                 # Forward Pass
                 with torch.no_grad():
                     if engine.amp:
                         with torch.cuda.amp.autocast():
-                            predictions = timeit(engine.inferer)(inputs, engine.network)
+                            predictions = engine.inferer(inputs, engine.network)
                     else:
-                        predictions = timeit(engine.inferer)(inputs, engine.network)
+                        predictions = engine.inferer(inputs, engine.network)
                 
-                
-                post_pred = AsDiscrete(argmax=True, to_onehot=2)
-                post_label = AsDiscrete(to_onehot=2)
+                if self.args.save_nifti or self.args.debug:
+                    post_pred = AsDiscrete(argmax=True, to_onehot=2)
+                    post_label = AsDiscrete(to_onehot=2)
 
-                # print(predictions)
-                # print(len(decollate_batch(predictions)))
-                # print(len(decollate_batch(labels)))
+                    # print(predictions)
+                    # print(len(decollate_batch(predictions)))
+                    # print(len(decollate_batch(labels)))
 
-                preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
-                gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
-                dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
-                logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
-                del preds, gts, dice
+                    preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
+                    gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
+                    dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
+                    logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
 
                 state = 'train' if self.train else 'eval'
 
                 batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
+                #del predictions
 
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata, detach=True)
@@ -127,7 +128,7 @@ class Interaction:
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
-                    logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
+                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
 
                 if j <= 9 and self.args.save_nifti:
@@ -135,19 +136,21 @@ class Interaction:
 
                 batchdata = list_data_collate(batchdata_list)
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
-                del inputs, labels, batchdata_list
+                #del preds, gts, dice
+                #del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
-                logger.info("It {} took {:.2f} seconds..".format(j, time.time()- before_it))
+                #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
+            logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
         else:
             # zero out input guidance channels
             batchdata_list = decollate_batch(batchdata, detach=True)
             for i in range(1, len(batchdata_list[0][CommonKeys.IMAGE])):
                 batchdata_list[0][CommonKeys.IMAGE][i] *= 0
             batchdata = list_data_collate(batchdata_list)
-
+        
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
-        torch.cuda.empty_cache()
-        print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
+        #torch.cuda.empty_cache()
+        #print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
         # first item in batch only
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle
@@ -157,7 +160,7 @@ class Interaction:
         self.save_nifti(f'{self.args.data}/guidance_fgg_{j}', inputs[0,1].cpu().detach().numpy())
         self.save_nifti(f'{self.args.data}/labels', labels[0,0].cpu().detach().numpy())
         self.save_nifti(f'{self.args.data}/im', inputs[0,0].cpu().detach().numpy())
-        self.save_nifti(f'{self.args.data}/pred_{j}', preds[0,1])
+        self.save_nifti(f'{self.args.data}/pred_{j}', preds[0,1].cpu().detach().numpy())
         if j == self.max_interactions:
             exit()
 

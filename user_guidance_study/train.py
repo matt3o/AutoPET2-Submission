@@ -509,6 +509,7 @@ def main():
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
     parser.add_argument("--no_log", default=False, action='store_true')
+    parser.add_argument("--debug", default=False, action='store_true')
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 

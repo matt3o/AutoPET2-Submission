@@ -6,8 +6,11 @@ from utils.transforms import (
     FindAllValidSlicesMissingLabelsd,
     AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
-    PrintDatad, 
-    PrintGPUUsaged
+    PrintDatad,
+    PrintGPUUsaged,
+    DetachTensorsd,
+    CheckTheAmountOfInformationLossByCropd,
+    threshold_foreground,
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -35,7 +38,9 @@ from monai.transforms import (
     EnsureTyped,
     DeleteItemsd,
     CuCIMd, 
-    RandCuCIMd
+    RandCuCIMd,
+    ToCupyd,
+    CropForegroundd,
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
@@ -51,23 +56,30 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
+crop_size = (192,192,256)
+#crop_size = (128,128,128)
+#crop_size = (300,300,400)
+
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             #CenterSpatialCropd(keys=["image", "la/tmp/dataial_size=[96, 96, 128], mode=("area", "nearest")),
-            #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+            #ToCupyd(keys="image", device=device),
+            #CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
             
             ### Random Transforms ###
+            #RandCuCIMd(name="color_jitter", keys="image", brightness=64.0 / 255.0, contrast=0.75, saturation=0.25, hue=0.04),
+            #ToTensord("image", device=device),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
-            RandCuCIMd(name="color_jitter", brightness=64.0 / 255.0, contrast=0.75, saturation=0.25, hue=0.04),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
@@ -97,19 +109,21 @@ def get_pre_transforms(labels, device, args):
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            # CenterSpatialCropd(keys=["image", "label"], roi_size=(300, 300, 450)),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+            CheckTheAmountOfInformationLossByCropd(keys=["label"], roi_size=crop_size, label_names=labels),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=crop_size),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
+            #ToCupyd(keys="image"),
+            #CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
-            
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
@@ -199,11 +213,11 @@ def get_click_transforms(device, args):
     t = [
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        #ToNumpyd(keys=("image", )),
+        DetachTensorsd(keys=("image", "label", "pred")),
         # ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
         # Transforms for click simulation
         # ToTensord(keys=("image", "label", "guidance"), device=device, track_meta=False),
-        ToTensord(keys=("image", "label"), device=device, track_meta=False),
+        ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         # OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
         #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
@@ -237,7 +251,7 @@ def get_click_transforms(device, args):
         
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
+        ToTensord(keys=("image", "label", "pred"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
         # PrintDatad(),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),

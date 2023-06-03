@@ -14,7 +14,7 @@ import logging
 import random
 import warnings
 import time
-from typing import Dict, Hashable, List, Mapping, Optional, Union
+from typing import Dict, Hashable, List, Mapping, Optional, Union, Iterable
 from pynvml import *
 
 import numpy as np
@@ -27,6 +27,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor
 from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
+from monai.transforms import CenterSpatialCropd
 from monai.utils import min_version, optional_import
 from monai.data.meta_tensor import MetaTensor
 
@@ -53,6 +54,64 @@ logger = get_logger()
 distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
+def threshold_foreground(x):
+    return x > 0.005
+
+
+class DetachTensorsd(MapTransform):
+    def __init__(self, keys: KeysCollection = None):
+        """
+        Normalize label values according to label names dictionary
+
+        Args:
+            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+            label_names: all label names
+        """
+        super().__init__(keys)
+
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d: Dict = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = d[key].detach()
+        # exit(0)
+        return d
+
+class CheckTheAmountOfInformationLossByCropd(MapTransform):
+    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
+        """
+        Normalize label values according to label names dictionary
+
+        Args:
+            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+            label_names: all label names
+        """
+        super().__init__(keys)
+        self.roi_size = roi_size
+        self.label_names = label_names
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d: Dict = dict(data)
+        for key in self.key_iterator(d):
+            if key == "label":
+                label = d[key]
+                new_data = {"label": label.clone()}
+                # copy the label and crop it to the desired size
+                cropped_label = CenterSpatialCropd(keys="label", roi_size=self.roi_size)(new_data)["label"]
+
+                # label_num_el = torch.numel(label)
+                for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):
+                    # Only count non-background lost labels
+                    if key_label != "background":
+                        sum_label = torch.sum(label == idx).item()
+                        sum_cropped_label = torch.sum(cropped_label == idx).item()
+                        # then check how much of the labels is lost
+                        lost_pixels = sum_label - sum_cropped_label
+                        lost_pixels_ratio = lost_pixels / sum_label * 100
+                        logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
+            else: 
+                raise UserWarning("This transform only applies to key 'label'")
+        return d
 
 class PrintDatad(MapTransform):
     def __init__(self, keys: KeysCollection = None):

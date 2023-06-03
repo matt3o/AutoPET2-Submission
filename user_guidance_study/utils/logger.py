@@ -14,7 +14,10 @@ def setup_loggers(args=None):
     # (%(name)s)
     formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] %(funcName)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     streamHandler.setFormatter(formatter)
-    streamHandler.setLevel(logging.INFO)
+    if args is not None and args.debug:
+        streamHandler.setLevel(logging.DEBUG)
+    else:
+        streamHandler.setLevel(logging.INFO)
     logger.addHandler(streamHandler)
     
     if args is not None and not args.no_log:
@@ -22,6 +25,10 @@ def setup_loggers(args=None):
         log_file_path = f"{args.output}/log.txt"
         fileHandler = logging.FileHandler(log_file_path)
         fileHandler.setFormatter(formatter)
+        if args.debug:
+            fileHandler.setLevel(logging.DEBUG)
+        else:
+            fileHandler.setLevel(logging.INFO)
         logger.addHandler(fileHandler)
         logger.info(f"Logging all the data to '{log_file_path}'")
     else:
@@ -31,7 +38,10 @@ def setup_loggers(args=None):
     for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
         l = logging.getLogger(_)
         l.handlers.clear()
-        l.setLevel(logging.INFO)
+        if args is not None and args.debug:
+            l.setLevel(logging.DEBUG)
+        else:
+            l.setLevel(logging.INFO)
         l.addHandler(streamHandler)
         if args is not None and not args.no_log:
             l.addHandler(fileHandler)

@@ -79,6 +79,31 @@ torch.backends.cudnn.allow_tf32 = True
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+class CustomLoader:
+    def __init__(self, name: Optional[str] = None):
+        self._name = name
+
+    def attach(self, engine: Engine) -> None:
+        """
+        Args:
+            engine: Ignite Engine, it can be a trainer, validator or evaluator.
+        """
+        if self._name is None:
+            self.logger = engine.logger
+        engine.add_event_handler(Events.EPOCH_COMPLETED, self)
+
+
+    def __call__(self, engine: Engine) -> None:
+        """
+        Args:
+            engine: Ignite Engine, it can be a trainer, validator or evaluator.
+        """
+        self.logger.warning("Events.EPOCH_COMPLETED")
+        self.logger.warning(get_gpu_usage(self.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
+        torch.cuda.empty_cache()
+        self.logger.warning(get_gpu_usage(self.device, used_memory_only=False, context="Events.EPOCH_COMPLETED after empty_cache()"))
+
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
@@ -214,6 +239,7 @@ def create_trainer(args):
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
         TensorBoardStatsHandler(log_dir=args.output, output_transform=lambda x: None),
+        CustomLoader(),
         # CheckpointSaver(
         #     save_dir=args.output,
         #     save_dict={"net": network},
@@ -294,6 +320,7 @@ def create_trainer(args):
             save_final=True,
             final_filename="checkpoint.pt",
         ),
+        CustomLoader(),
     ]
     
 

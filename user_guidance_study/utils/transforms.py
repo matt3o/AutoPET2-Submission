@@ -27,7 +27,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor
 from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
-from monai.transforms import CenterSpatialCropd
+from monai.transforms import CenterSpatialCropd, Compose, CropForegroundd
 from monai.utils import min_version, optional_import
 from monai.data.meta_tensor import MetaTensor
 
@@ -95,9 +95,10 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
         for key in self.key_iterator(d):
             if key == "label":
                 label = d[key]
-                new_data = {"label": label.clone()}
+                new_data = {"label": label.clone(), "image": d["image"].clone()}
                 # copy the label and crop it to the desired size
-                cropped_label = CenterSpatialCropd(keys="label", roi_size=self.roi_size)(new_data)["label"]
+                cropped_label = Compose([CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+                               CenterSpatialCropd(keys="label", roi_size=self.roi_size)])(new_data)["label"]
 
                 # label_num_el = torch.numel(label)
                 for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):

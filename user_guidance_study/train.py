@@ -189,8 +189,8 @@ def create_trainer(args):
         inferer=SimpleInferer()
         train_inferer = eval_inferer = inferer
     elif args.inferer == "SlidingWindowInferer":
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian", overlap=0)
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian", overlap=0)
     else:
         raise UserWarning("Invalid Inferer selected")
 

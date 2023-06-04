@@ -48,11 +48,11 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
-            #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest")),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             ### Random Transforms ###
-            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
+            #RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
@@ -83,7 +83,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            #CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             # Todo try to remove the Padding

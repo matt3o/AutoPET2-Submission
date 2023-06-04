@@ -27,7 +27,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor
 from monai.networks.layers import GaussianFilter
 from monai.transforms.transform import MapTransform, Randomizable, Transform
-from monai.transforms import CenterSpatialCropd
+from monai.transforms import CenterSpatialCropd, Compose, CropForegroundd
 from monai.utils import min_version, optional_import
 from monai.data.meta_tensor import MetaTensor
 
@@ -43,16 +43,16 @@ from utils.distance_transform import get_distance_transform, get_choice_from_dis
 from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
 from utils.logger import setup_loggers, get_logger
 
+#logger = logging.getLogger("interactive_segmentation")
+#logger.setLevel(logging.INFO)
+
 # Has to be reinitialized for some weird reason here
 # Otherwise the logger only works for the click_transforms and never for the pre_transform
 setup_loggers()
 logger = get_logger()
 
-#logger = logging.getLogger("interactive_segmentation")
-#logger.setLevel(logging.INFO)
-
-distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
-distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+#distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
+#distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
 def threshold_foreground(x):
     return x > 0.005
@@ -95,9 +95,10 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
         for key in self.key_iterator(d):
             if key == "label":
                 label = d[key]
-                new_data = {"label": label.clone()}
+                new_data = {"label": label.clone(), "image": d["image"].clone()}
                 # copy the label and crop it to the desired size
-                cropped_label = CenterSpatialCropd(keys="label", roi_size=self.roi_size)(new_data)["label"]
+                cropped_label = Compose([CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+                               CenterSpatialCropd(keys="label", roi_size=self.roi_size)])(new_data)["label"]
 
                 # label_num_el = torch.numel(label)
                 for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):
@@ -147,6 +148,36 @@ class PrintGPUUsaged(MapTransform):
         print_gpu_usage(device=self.device, used_memory_only=True)
         # exit(0)
         return d
+
+
+class InitLoggerd(MapTransform):
+    def __init__(self, args, new_logger):
+        """ Has to be reinitialized for some weird reason here, I think this is due to the data transform
+        being on an extra thread
+        Otherwise the logger only works for the click_transforms and never for the pre_transform
+        """
+        global logger
+        super().__init__(None)
+        logger = new_logger
+        
+        self.loglevel = logging.INFO
+        if args.debug:
+            self.loglevel = logging.DEBUG
+
+        self.log_file_folder = args.output
+        if args.no_log: 
+            self.log_file_folder = None
+
+        setup_loggers(self.loglevel, self.log_file_folder)
+        logger = get_logger()
+
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]):
+        global logger
+        if logger is None: 
+            setup_loggers(self.loglevel, self.log_file_folder)
+        logger = get_logger()
+        return data
 
 
 class NormalizeLabelsInDatasetd(MapTransform):

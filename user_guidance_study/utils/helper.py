@@ -25,6 +25,7 @@ def get_actual_cuda_index_of_device(device:torch.device):
 
 def gpu_usage(device:torch.device, used_memory_only=False):
     # empty the cache first
+    # torch.cuda.empty_cache()
     nvmlInit()
     cuda_index = get_actual_cuda_index_of_device(device)
     h = nvmlDeviceGetHandleByIndex(cuda_index)

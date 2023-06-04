@@ -57,7 +57,8 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
-crop_size = (192,192,256)
+#crop_size = (192,192,256)
+crop_size = (224,224,320)
 #crop_size = (128,128,128)
 #crop_size = (300,300,400)
 

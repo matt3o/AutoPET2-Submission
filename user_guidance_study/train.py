@@ -98,10 +98,8 @@ class CustomLoader:
         Args:
             engine: Ignite Engine, it can be a trainer, validator or evaluator.
         """
-        self.logger.warning("Events.EPOCH_COMPLETED")
-        self.logger.warning(get_gpu_usage(self.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
-        torch.cuda.empty_cache()
-        self.logger.warning(get_gpu_usage(self.device, used_memory_only=False, context="Events.EPOCH_COMPLETED after empty_cache()"))
+        self.logger.warning(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
+        self.logger.critical(torch.cuda.memory_summary())
 
 
 
@@ -111,7 +109,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    logger.critical(torch.cuda.memory_summary())
+    #logger.critical(torch.cuda.memory_summary())
+    
     
 
 sys.excepthook = handle_exception
@@ -290,7 +289,7 @@ def create_trainer(args):
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True) #,batch=True)
     
     if args.novograd:
         optimizer = Novograd(network.parameters(), args.learning_rate)
@@ -542,7 +541,7 @@ def main():
 
     # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()
-    args.caller_args = sys.argv[1:]
+    args.caller_args = sys.argv
     args.env = os.environ
     args.git = get_git_information()
 
@@ -575,7 +574,15 @@ def main():
 
     args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 
-    setup_loggers(args)
+    if args.debug:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    if args.no_log:
+        log_folder_path = None
+    else:
+        log_folder_path = args.output
+    setup_loggers(loglevel, log_folder_path)
     logger = get_logger()
     logger.info(f"CPU Count: {os.cpu_count()}")
     logger.info(f"Num threads: {torch.get_num_threads()}")

@@ -2,7 +2,7 @@ import logging
 
 logger = None
 
-def setup_loggers(args=None):
+def setup_loggers(loglevel=logging.INFO, log_file_folder=None,):
     global logger
     logger = logging.getLogger("interactive_segmentation")
     if (logger.hasHandlers()):
@@ -14,21 +14,16 @@ def setup_loggers(args=None):
     # (%(name)s)
     formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] %(funcName)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     streamHandler.setFormatter(formatter)
-    if args is not None and args.debug:
-        streamHandler.setLevel(logging.DEBUG)
-    else:
-        streamHandler.setLevel(logging.INFO)
+    streamHandler.setLevel(loglevel)
     logger.addHandler(streamHandler)
-    
-    if args is not None and not args.no_log:
+    fileHandler = None
+
+    if log_file_folder is not None:
     # Add the file handler
-        log_file_path = f"{args.output}/log.txt"
+        log_file_path = f"{log_file_folder}/log.txt"
         fileHandler = logging.FileHandler(log_file_path)
         fileHandler.setFormatter(formatter)
-        if args.debug:
-            fileHandler.setLevel(logging.DEBUG)
-        else:
-            fileHandler.setLevel(logging.INFO)
+        fileHandler.setLevel(loglevel)
         logger.addHandler(fileHandler)
         logger.info(f"Logging all the data to '{log_file_path}'")
     else:
@@ -37,13 +32,11 @@ def setup_loggers(args=None):
     # Set logging level for external libraries
     for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
         l = logging.getLogger(_)
-        l.handlers.clear()
-        if args is not None and args.debug:
-            l.setLevel(logging.DEBUG)
-        else:
-            l.setLevel(logging.INFO)
+        if l.hasHandlers():
+            l.handlers.clear()
+        l.propagate = False
         l.addHandler(streamHandler)
-        if args is not None and not args.no_log:
+        if fileHandler is not None:
             l.addHandler(fileHandler)
             
 

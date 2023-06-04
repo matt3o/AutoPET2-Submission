@@ -11,6 +11,7 @@ from utils.transforms import (
     DetachTensorsd,
     CheckTheAmountOfInformationLossByCropd,
     threshold_foreground,
+    InitLoggerd,
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -56,14 +57,15 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
-#crop_size = (192,192,256)
+crop_size = (192,192,256)
 #crop_size = (128,128,128)
-crop_size = (300,300,400)
+#crop_size = (300,300,400)
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
         t_train = [
+            InitLoggerd(args, logger),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
@@ -84,6 +86,7 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
+            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device), # sids np array on cpu
@@ -108,13 +111,14 @@ def get_pre_transforms(labels, device, args):
             # It just uses more and more memory without offering real advantages
         ]
         t_val = [
+            InitLoggerd(args, logger),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys=["label"], roi_size=crop_size, label_names=labels),
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=crop_size, label_names=labels),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             CenterSpatialCropd(keys=["image", "label"], roi_size=crop_size),
             #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
@@ -124,6 +128,7 @@ def get_pre_transforms(labels, device, args):
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
+            #            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
@@ -211,6 +216,7 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
+        InitLoggerd(args, logger),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         DetachTensorsd(keys=("image", "label", "pred")),

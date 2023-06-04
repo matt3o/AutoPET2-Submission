@@ -43,16 +43,16 @@ from utils.distance_transform import get_distance_transform, get_choice_from_dis
 from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
 from utils.logger import setup_loggers, get_logger
 
+#logger = logging.getLogger("interactive_segmentation")
+#logger.setLevel(logging.INFO)
+
 # Has to be reinitialized for some weird reason here
 # Otherwise the logger only works for the click_transforms and never for the pre_transform
 setup_loggers()
 logger = get_logger()
 
-#logger = logging.getLogger("interactive_segmentation")
-#logger.setLevel(logging.INFO)
-
-distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
-distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+#distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
+#distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
 def threshold_foreground(x):
     return x > 0.005
@@ -148,6 +148,36 @@ class PrintGPUUsaged(MapTransform):
         print_gpu_usage(device=self.device, used_memory_only=True)
         # exit(0)
         return d
+
+
+class InitLoggerd(MapTransform):
+    def __init__(self, args, new_logger):
+        """ Has to be reinitialized for some weird reason here, I think this is due to the data transform
+        being on an extra thread
+        Otherwise the logger only works for the click_transforms and never for the pre_transform
+        """
+        global logger
+        super().__init__(None)
+        logger = new_logger
+        
+        self.loglevel = logging.INFO
+        if args.debug:
+            self.loglevel = logging.DEBUG
+
+        self.log_file_folder = args.output
+        if args.no_log: 
+            self.log_file_folder = None
+
+        setup_loggers(self.loglevel, self.log_file_folder)
+        logger = get_logger()
+
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]):
+        global logger
+        if logger is None: 
+            setup_loggers(self.loglevel, self.log_file_folder)
+        logger = get_logger()
+        return data
 
 
 class NormalizeLabelsInDatasetd(MapTransform):

@@ -36,7 +36,6 @@ from monai.transforms import (
     ToTensord,
     CenterSpatialCropd,
     RandCropByPosNegLabeld,
-    EnsureTyped,
     DeleteItemsd,
     CuCIMd, 
     RandCuCIMd,
@@ -87,7 +86,7 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
             
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device), # sids np array on cpu
@@ -103,7 +102,6 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False)
@@ -129,7 +127,6 @@ def get_pre_transforms(labels, device, args):
             # Todo try to remove the Padding
             #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             # Transforms for click simulation
-            #            EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
@@ -143,7 +140,6 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
             #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
             # DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False)
@@ -261,7 +257,6 @@ def get_click_transforms(device, args):
         ToTensord(keys=("image", "label", "pred"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
         # PrintDatad(),
         # ToTensord(keys=("image", "label"), device=device, track_meta=False),
-        # EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
     ]
 
     return Compose(t)

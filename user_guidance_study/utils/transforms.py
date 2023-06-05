@@ -143,10 +143,13 @@ class PrintGPUUsaged(MapTransform):
         super().__init__(keys)
         self.device = device
 
+
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         # print_gpu_usage(device=self.device, used_memory_only=True)
-        logger.info(f"Current reserved memory: {torch.cuda.memory_reserved(self.device) / (1024**2)} MB")
+        # torch.cuda.empty_cache()
+        logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**2)} MB")
+        # logger.info(torch.cuda.memory_summary())
         # exit(0)
         return d
 

@@ -80,10 +80,14 @@ torch.backends.cudnn.allow_tf32 = True
 
 
 def oom_observer(device, alloc, device_alloc, device_free):
+    logger.critical(torch.cuda.memory_summary(device))
     # snapshot right after an OOM happened
     print('saving allocated state during OOM')
     snapshot = torch.cuda.memory._snapshot()
     dump(snapshot, open(f'{output_dir}/oom_snapshot.pickle', 'wb'))
+    # logger.critical(snapshot)
+    torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
+    torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)
 
 
 

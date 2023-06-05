@@ -23,6 +23,8 @@ from typing import Optional
 import pprint
 import uuid
 import shutil
+from pickle import dump
+
 
 # Things needed to debug the Interaction class
 import resource
@@ -35,7 +37,7 @@ import cupy as cp
 from utils.logger import setup_loggers, get_logger
 
 logger = None
-
+output_dir = None
 
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
 from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device, get_git_information
@@ -76,6 +78,15 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 
+
+def oom_observer(device, alloc, device_alloc, device_free):
+    # snapshot right after an OOM happened
+    print('saving allocated state during OOM')
+    snapshot = torch.cuda.memory._snapshot()
+    dump(snapshot, open(f'{output_dir}/oom_snapshot.pickle', 'wb'))
+
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -98,8 +109,8 @@ class CustomLoader:
         Args:
             engine: Ignite Engine, it can be a trainer, validator or evaluator.
         """
-        self.logger.warning(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
-        self.logger.critical(torch.cuda.memory_summary())
+        self.logger.info(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
+        self.logger.info(torch.cuda.memory_summary())
 
 
 
@@ -109,7 +120,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    #logger.critical(torch.cuda.memory_summary())
+    oom_observer(None, None, None, None)
+    logger.critical(torch.cuda.memory_summary())
     
     
 
@@ -417,6 +429,7 @@ def run(args):
             whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
 
             start_time = time.time()
+            # torch._C._cuda_attach_out_of_memory_observer(cb)
             
             try:
                 if not args.eval_only:
@@ -424,14 +437,16 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
+                oom_observer(None, None, None, None)
                 logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
-                raise
+                
             except RuntimeError as e:
                 if "cuDNN" in str(e):
                     # Got a cuDNN error
                     pass
+                oom_observer(None, None, None, None)
                 logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
-                raise
+                
             finally:
                 stopFlag.set()
                 logger.info(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
@@ -461,6 +476,12 @@ def run(args):
 
 def main():
     global logger
+    global output_dir
+    torch.cuda.init()
+    torch.cuda.memory._record_memory_history(True)
+    #torch._C._cuda_attach_out_of_memory_observer(oom_observer)
+
+    
     torch.set_num_threads(int(os.cpu_count() / 3)) # Limit number of threads to 1/3 of resources
     parser = argparse.ArgumentParser()
 
@@ -560,6 +581,8 @@ def main():
 
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)
+    
+    output_dir = args.output
     
     if args.throw_away_cache:
         args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"

@@ -59,7 +59,8 @@ logger = logging.getLogger("interactive_segmentation")
 #crop_size = (192,192,256)
 crop_size = (224,224,320)
 #crop_size = (128,128,128)
-#crop_size = (300,300,400)
+#crop_size = (320,320,416)
+# crop_size multiples of sliding window with overlap 0.25 (default): 128, 224, 320, 416, 512
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]

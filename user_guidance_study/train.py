@@ -477,8 +477,8 @@ def run(args):
 def main():
     global logger
     global output_dir
-    torch.cuda.init()
-    torch.cuda.memory._record_memory_history(True)
+    # torch.cuda.init()
+    # torch.cuda.memory._record_memory_history(True)
     #torch._C._cuda_attach_out_of_memory_observer(oom_observer)
 
     

@@ -469,6 +469,7 @@ def run(args):
             model_ts = torch.jit.script(trainer.network)
             torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
     finally:
+        logger.info(f"#### LOGGED ALL DATA TO {args.output} ############")
         # Cleanup
         if args.throw_away_cache:
             logger.info("Cleaning up..")

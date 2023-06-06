@@ -3,3 +3,4 @@ output/*
 utils/__pycache__/*
 __pycache__/*
 *.pt
+.ipynb_checkpoints/

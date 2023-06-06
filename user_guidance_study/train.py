@@ -80,7 +80,8 @@ torch.backends.cudnn.allow_tf32 = True
 
 
 def oom_observer(device, alloc, device_alloc, device_free):
-    logger.critical(torch.cuda.memory_summary(device))
+    if device is not None and logger is not None:
+        logger.critical(torch.cuda.memory_summary(device))
     # snapshot right after an OOM happened
     print('saving allocated state during OOM')
     snapshot = torch.cuda.memory._snapshot()
@@ -124,7 +125,6 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    oom_observer(None, None, None, None)
     logger.critical(torch.cuda.memory_summary())
     
     
@@ -441,14 +441,14 @@ def run(args):
                 else:
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
-                oom_observer(None, None, None, None)
+                oom_observer(device, None, None, None)
                 logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 
             except RuntimeError as e:
                 if "cuDNN" in str(e):
                     # Got a cuDNN error
                     pass
-                oom_observer(None, None, None, None)
+                oom_observer(device, None, None, None)
                 logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
                 
             finally:

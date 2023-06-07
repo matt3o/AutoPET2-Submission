@@ -590,7 +590,9 @@ def main():
         args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
         current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
         args.epochs = args.epochs - current_epoch # Reset epochs based on previous model
-
+    
+    if os.path.isdir(args.output):
+        raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)
     

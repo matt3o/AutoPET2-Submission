@@ -386,12 +386,13 @@ def run(args):
     for arg in vars(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
+    device = torch.device(f"cuda:{args.gpu}")
 
     if args.export:
         logger.info(
             "{}:: Loading PT Model from: {}".format(args.gpu, args.input)
         )
-        device = torch.device(f"cuda:{args.gpu}")
+        
         network = get_network(args.network, args.labels).to(device)
 
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
@@ -422,7 +423,7 @@ def run(args):
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
     stopFlag = threading.Event()
-    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", torch.device(f"cuda:{args.gpu}"), stopFlag)
+    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device, stopFlag)
     logger.info(f"Logging GPU usage to {args.output}/usage.csv")
     # TODO test this on torch v2 
     # torch.set_default_device(f"cuda:{args.gpu}")
@@ -450,18 +451,18 @@ def run(args):
                     evaluator.run()
             except torch.cuda.OutOfMemoryError:
                 oom_observer(device, None, None, None)
-                logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+                logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                 
             except RuntimeError as e:
                 if "cuDNN" in str(e):
                     # Got a cuDNN error
                     pass
                 oom_observer(device, None, None, None)
-                logger.critical(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+                logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                 
             finally:
                 stopFlag.set()
-                logger.info(get_gpu_usage(torch.device(f"cuda:{args.gpu}"), used_memory_only=False, context="ERROR"))
+                logger.info(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                 logger.info("Total Training Time {}".format(time.time() - start_time))
                 logger.info(f"\n{wp.get_times_summary_pd()}")
                 gpu_thread.join()

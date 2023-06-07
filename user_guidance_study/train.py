@@ -258,8 +258,7 @@ def create_trainer(args):
         TensorBoardStatsHandler(log_dir=args.output, output_transform=lambda x: None),
         CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=20),
-        GarbageCollector(log_level=20)
+        GarbageCollector(log_level=20, trigger_event="iteration"),
         # CheckpointSaver(
         #     save_dir=args.output,
         #     save_dict={"net": network},
@@ -342,8 +341,7 @@ def create_trainer(args):
         ),
         CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=20),
-        GarbageCollector(log_level=20),
+        GarbageCollector(log_level=20, trigger_event="iteration"),
     ]
     
 

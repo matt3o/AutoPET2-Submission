@@ -12,6 +12,7 @@ from utils.transforms import (
     CheckTheAmountOfInformationLossByCropd,
     threshold_foreground,
     InitLoggerd,
+    NoOpd,
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -78,6 +79,9 @@ def get_pre_transforms(labels, device, args):
             #ToCupyd(keys="image", device=device),
             #CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
             
+            # Needed for the UNet together with the SimpleInferer
+            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+
             ### Random Transforms ###
             #RandCuCIMd(name="color_jitter", keys="image", brightness=64.0 / 255.0, contrast=0.75, saturation=0.25, hue=0.04),
             #ToTensord("image", device=device),
@@ -126,8 +130,10 @@ def get_pre_transforms(labels, device, args):
             #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             #ToCupyd(keys="image"),
             #CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
-            # Todo try to remove the Padding
-            #DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
+            
+            # Needed for the UNet together with the SimpleInferer
+            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+            # # Needed for DynUNet
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),

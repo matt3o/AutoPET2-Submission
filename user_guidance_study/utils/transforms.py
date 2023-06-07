@@ -58,14 +58,21 @@ def threshold_foreground(x):
     return x > 0.005
 
 
+class NoOpd(MapTransform):
+    def __init__(self, keys: KeysCollection = None):
+        """
+        """
+        super().__init__(keys)
+
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        return data
+
+
 class DetachTensorsd(MapTransform):
     def __init__(self, keys: KeysCollection = None):
         """
-        Normalize label values according to label names dictionary
-
-        Args:
-            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
-            label_names: all label names
+        Detaches all passed tensors.
         """
         super().__init__(keys)
 
@@ -80,11 +87,7 @@ class DetachTensorsd(MapTransform):
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
     def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
         """
-        Normalize label values according to label names dictionary
-
-        Args:
-            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
-            label_names: all label names
+        Prints how much information is lost due to the crop.
         """
         super().__init__(keys)
         self.roi_size = roi_size
@@ -117,11 +120,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
 class PrintDatad(MapTransform):
     def __init__(self, keys: KeysCollection = None):
         """
-        Normalize label values according to label names dictionary
-
-        Args:
-            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
-            label_names: all label names
+        Prints all the information inside data
         """
         super().__init__(keys)
 
@@ -134,11 +133,7 @@ class PrintDatad(MapTransform):
 class PrintGPUUsaged(MapTransform):
     def __init__(self, device, keys: KeysCollection = None):
         """
-        Normalize label values according to label names dictionary
-
-        Args:
-            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
-            label_names: all label names
+        Prints the GPU usage
         """
         super().__init__(keys)
         self.device = device
@@ -156,7 +151,10 @@ class PrintGPUUsaged(MapTransform):
 
 class InitLoggerd(MapTransform):
     def __init__(self, args, new_logger):
-        """ Has to be reinitialized for some weird reason here, I think this is due to the data transform
+        """ 
+        Initialises the logger inside the dataloader thread (if it is a separate thread).
+
+        Has to be reinitialized for some weird reason here, I think this is due to the data transform
         being on an extra thread
         Otherwise the logger only works for the click_transforms and never for the pre_transform
         """

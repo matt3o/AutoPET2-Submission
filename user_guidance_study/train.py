@@ -305,7 +305,7 @@ def create_trainer(args):
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True) #,batch=True)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
     
     if args.novograd:
         optimizer = Novograd(network.parameters(), args.learning_rate)

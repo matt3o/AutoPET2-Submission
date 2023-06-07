@@ -83,12 +83,12 @@ class Interaction:
             before_it = time.time()
             for j in range(self.max_interactions):
                 # logger.info('##### It: {} '.format(j))
-                inputs, labels = engine.prepare_batch(batchdata, engine.state.device) # never move directly to device, will loose too much GPU memory
+                inputs, labels = engine.prepare_batch(batchdata) # never move directly to device, will loose too much GPU memory
 
-                # inputs = inputs.to(engine.state.device)
+                inputs = inputs.to(engine.state.device)
                 if j == 0:
                     logger.info("inputs.shape is {}".format(inputs.shape))
-                # labels = labels.to(engine.state.device)
+                labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()

@@ -74,17 +74,11 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
-            #CenterSpatialCropd(keys=["image", "la/tmp/dataial_size=[96, 96, 128], mode=("area", "nearest")),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            #ToCupyd(keys="image", device=device),
-            #CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
-            
             # Needed for the UNet together with the SimpleInferer
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
 
             ### Random Transforms ###
-            #RandCuCIMd(name="color_jitter", keys="image", brightness=64.0 / 255.0, contrast=0.75, saturation=0.25, hue=0.04),
-            #ToTensord("image", device=device),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
@@ -107,10 +101,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            # ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
-            # DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
-            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
             PrintGPUUsaged(device),
@@ -126,14 +117,11 @@ def get_pre_transforms(labels, device, args):
             CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=crop_size, label_names=labels),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             CenterSpatialCropd(keys=["image", "label"], roi_size=crop_size),
-            #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
-            #ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            #ToCupyd(keys="image"),
-            #CuCIMd(name="scale_intensity_range", keys="image", a_min=0.0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             
             # Needed for the UNet together with the SimpleInferer
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
-            # # Needed for DynUNet
+
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
@@ -148,10 +136,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            #ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
-            # DeleteItemsd(keys=("discrepancy")),
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
-            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             PrintGPUUsaged(device),
         ]
     else: # MSD Spleen
@@ -226,21 +211,9 @@ def get_click_transforms(device, args):
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         DetachTensorsd(keys=("image", "label", "pred")),
-        # ToTensord(keys=("image","label", "pred"), device=torch.device("cpu"), track_meta=False),
-        # Transforms for click simulation
-        # ToTensord(keys=("image", "label", "guidance"), device=device, track_meta=False),
         ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
+        
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
-        # OLDFindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
-        #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
-        #ToTensord(keys=("label", "pred"), device=torch.device("cpu")),
-        #ToNumpyd(keys=("image","label", "pred", "discrepancy")),
-        # OLDAddRandomGuidanceDeepEditd(
-        #     keys="NA",
-        #     guidance="guidance",
-        #     discrepancy="discrepancy",
-        #     probability="probability",
-        # ),
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",
@@ -262,10 +235,8 @@ def get_click_transforms(device, args):
                                     spacing=spacing),        # Overwrites the image entry
         
         # Delete all transforms (only needed for inversion I think)
-        # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
+        DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
         ToTensord(keys=("image", "label", "pred"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
-        # PrintDatad(),
-        # ToTensord(keys=("image", "label"), device=device, track_meta=False),
     ]
 
     return Compose(t)

@@ -623,6 +623,9 @@ def main():
     logger.info(f"CPU Count: {os.cpu_count()}")
     logger.info(f"Num threads: {torch.get_num_threads()}")
 
+    args.cwd = os.getcwd()
+
+
     run(args)
 
 if __name__ == "__main__":

@@ -288,18 +288,18 @@ def create_trainer(args):
         eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
 
     if args.optimizer == "Novograd":
-        optimizer = torch.optim.Novograd(network.parameters(), args.learning_rate)
+        optimizer = Novograd(network.parameters(), args.learning_rate)
     elif args.optimizer == "Adam": # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
     if args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=args.epochs)
-    elif args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, args.epochs) if num % (args.epochs/20) == 0], gamma=0.333, last_epoch=args.epochs)
-    elif args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = 20, power = 2, last_epoch=args.epochs)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=args.current_epoch)
+    elif args.scheduler == "MultiStepLR":
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, args.epochs) if num % (args.epochs/20) == 0], gamma=0.333, last_epoch=args.current_epoch)
+    elif args.scheduler == "PolynomialLR":
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = 20, power = 2, last_epoch=args.current_epoch)
     elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = 32, eta_min = 1e-6, last_epoch=args.epochs)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = 32, eta_min = 1e-6, last_epoch=args.current_epoch)
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -405,22 +405,29 @@ def run(args):
         torch.jit.save(model_ts, os.path.join(args.output))
         return
 
-    if not os.path.exists(args.output):
-        logger.info(
-            "output path [{}] does not exist. creating it now.".format(args.output)
-        )
-        os.makedirs(args.output, exist_ok=True)
-
     # Init the Inferer
     args.sw_roi_size = eval(args.sw_roi_size)
-    args.crop_spatial_size = eval(args.crop_spatial_size)
+    assert len(args.sw_roi_size) == 3
+
+    if args.val_crop_size == "None":
+        args.val_crop_size = None
+    else:
+        args.val_crop_size = eval(args.val_crop_size)
+        assert len(args.val_crop_size) == 3
+
+    if args.train_crop_size == "None":
+        args.train_crop_size = None
+    else:
+        args.train_crop_size = eval(args.train_crop_size)
+        assert len(args.train_crop_size) == 3
 
     # verify both have a valid size (for Unet with seven layers)
-    assert len(args.sw_roi_size) == 3 and len(args.crop_spatial_size) == 3
-    if args.network == "dynunet":
-        for size in args.crop_spatial_size:
+     
+    if args.network == "dynunet" and args.inferer == "SimpleInferer":
+        assert args.train_crop_size == args.val_crop_size, "For the SimpleInferer the train and val crop size have to match!"
+        for size in args.train_crop_size:
             assert (size % 64) == 0
-    
+
     # click-generation
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
@@ -520,13 +527,14 @@ def main():
     parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
-    parser.add_argument("--crop_spatial_size", default="(128,128,128)", action='store')
+    parser.add_argument("--train_crop_size", default="(128,128,128)", action='store')
+    parser.add_argument("--val_crop_size", default="None", action='store')
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')
     parser.add_argument("--num_workers", type=int, default=1)
     parser.add_argument("-e", "--epochs", type=int, default=100)
-    parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
+    parser.add_argument("-lr", "--learning_rate", type=float, default=0.001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
     parser.add_argument("--scheduler", default="StepLR", choices=["StepLR", "MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
     parser.add_argument("--model_weights", type=str, default='None')
@@ -591,10 +599,11 @@ def main():
 
     # Restoring previous model if resume flag is True
     args.model_filepath = args.model_weights
+    args.current_epoch = -1
     if args.best_val_weights:
         args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
-        current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
-        args.epochs = args.epochs - current_epoch # Reset epochs based on previous model
+        args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
+        args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
     
     if os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")

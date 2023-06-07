@@ -311,13 +311,22 @@ def create_trainer(args):
 
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
     
-    if args.novograd:
-        optimizer = Novograd(network.parameters(), args.learning_rate)
-    else: # default
+    if args.optimizer == "Novograd":
+        optimizer = torch.optim.Novograd(network.parameters(), args.learning_rate)
+    elif args.optimizer == "Adam": # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
+    if args.scheduler == "StepLR":
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=args.epochs)
+    elif args.scheduler == "StepLR":
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, args.epochs) if num % (args.epochs/20) == 0], gamma=0.333, last_epoch=args.epochs)
+    elif args.scheduler == "StepLR":
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = 20, power = 2, last_epoch=args.epochs)
+    elif args.scheduler == "CosineAnnealingLR":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = 32, eta_min = 1e-6, last_epoch=args.epochs)
 
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1)
+
+
 
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
@@ -523,7 +532,8 @@ def main():
     parser.add_argument("--num_workers", type=int, default=1)
     parser.add_argument("-e", "--epochs", type=int, default=100)
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
-    parser.add_argument("--novograd", default=False, action='store_true')
+    parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
+    parser.add_argument("--scheduler", default="StepLR", choices=["StepLR", "MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 

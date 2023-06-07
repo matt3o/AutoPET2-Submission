@@ -57,6 +57,7 @@ from monai.handlers import (
     TensorBoardStatsHandler,
     ValidationHandler,
     from_engine,
+    GarbageCollector,
 )
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
@@ -114,6 +115,7 @@ class CustomLoader:
         Args:
             engine: Ignite Engine, it can be a trainer, validator or evaluator.
         """
+        torch.cuda.empty_cache()
         self.logger.info(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
         self.logger.info(torch.cuda.memory_summary())
 
@@ -255,6 +257,9 @@ def create_trainer(args):
         StatsHandler(output_transform=lambda x: None),
         TensorBoardStatsHandler(log_dir=args.output, output_transform=lambda x: None),
         CustomLoader(),
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        GarbageCollector(log_level=20),
+        GarbageCollector(log_level=20)
         # CheckpointSaver(
         #     save_dir=args.output,
         #     save_dict={"net": network},
@@ -336,6 +341,9 @@ def create_trainer(args):
             final_filename="checkpoint.pt",
         ),
         CustomLoader(),
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        GarbageCollector(log_level=20),
+        GarbageCollector(log_level=20),
     ]
     
 

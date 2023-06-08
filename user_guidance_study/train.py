@@ -260,14 +260,14 @@ def create_trainer(args):
         CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event="iteration"),
-        # CheckpointSaver(
-        #     save_dir=args.output,
-        #     save_dict={"net": network},
-        #     save_key_metric=True,
-        #     save_final=True,
-        #     save_interval=args.save_interval,
-        #     final_filename="pretrained_deepedit_" + args.network + ".pt",
-        # ),
+        CheckpointSaver(
+             save_dir=args.output,
+             save_dict={"net": network},
+             save_key_metric=True,
+             save_final=True,
+             save_interval=args.save_interval,
+             final_filename="pretrained_deepedit_" + args.network + ".pt",
+        ),
     ]
     
 

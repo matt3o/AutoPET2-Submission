@@ -237,7 +237,7 @@ def create_trainer(args):
     numel_train = len(train_loader.dataset)
     numel_val = len(val_loader.dataset)
 
-    # define training components
+    # NETWORK - define training components
     network = get_network(args.network, args.labels, args).to(device)
 
     print('Number of parameters:', f"{count_parameters(network):,}")
@@ -252,7 +252,36 @@ def create_trainer(args):
             torch.load(args.model_filepath, map_location=map_location)['net']
         )
 
-    
+     # INFERER
+    if args.inferer == "SimpleInferer":
+        inferer=SimpleInferer()
+        train_inferer = eval_inferer = inferer
+    elif args.inferer == "SlidingWindowInferer":
+        # Reduce if there is an OOM
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
+
+    # OPTIMIZER
+    if args.optimizer == "Novograd":
+        optimizer = Novograd(network.parameters(), args.learning_rate)
+    elif args.optimizer == "Adam": # default
+        optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
+
+    MAX_EPOCHS = args.epochs
+    ITERATIONS_PER_EPOCH = numel_train
+    CURRENT_EPOCH = args.current_epoch
+
+    # SCHEDULER
+    if args.scheduler == "StepLR":
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=CURRENT_EPOCH)
+    elif args.scheduler == "MultiStepLR":
+        # Do a x step descent
+        steps = 20
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ITERATIONS_PER_EPOCH * num for num in range(0, MAX_EPOCHS) if num % (MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
+    elif args.scheduler == "PolynomialLR":
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = ITERATIONS_PER_EPOCH * MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+    # elif args.scheduler == "CosineAnnealingLR":
+    #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -281,33 +310,6 @@ def create_trainer(args):
                 output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
             )
 
-    if args.inferer == "SimpleInferer":
-        inferer=SimpleInferer()
-        train_inferer = eval_inferer = inferer
-    elif args.inferer == "SlidingWindowInferer":
-        # Reduce if there is an OOM
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
-
-    if args.optimizer == "Novograd":
-        optimizer = Novograd(network.parameters(), args.learning_rate)
-    elif args.optimizer == "Adam": # default
-        optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
-
-    MAX_EPOCHS = args.epochs
-    ITERATIONS_PER_EPOCH = numel_train
-    CURRENT_EPOCH = args.current_epoch
-
-    if args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=CURRENT_EPOCH)
-    elif args.scheduler == "MultiStepLR":
-        # Do a x step descent
-        steps = 20
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ITERATIONS_PER_EPOCH * num for num in range(0, MAX_EPOCHS) if num % (MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
-    elif args.scheduler == "PolynomialLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = ITERATIONS_PER_EPOCH * MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
-    # elif args.scheduler == "CosineAnnealingLR":
-    #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
 
     evaluator = SupervisedEvaluator(
         device=device,

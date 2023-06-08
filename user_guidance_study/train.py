@@ -286,8 +286,9 @@ def create_trainer(args):
         inferer=SimpleInferer()
         train_inferer = eval_inferer = inferer
     elif args.inferer == "SlidingWindowInferer":
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, overlap=0)
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian")
+        # Reduce if there is an OOM
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
 
     if args.optimizer == "Novograd":
         optimizer = Novograd(network.parameters(), args.learning_rate)

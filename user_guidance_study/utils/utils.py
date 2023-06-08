@@ -13,6 +13,7 @@ from utils.transforms import (
     threshold_foreground,
     InitLoggerd,
     NoOpd,
+    # GarbageCollectord,
 )
 from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
 from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
@@ -100,7 +101,8 @@ def get_pre_transforms(labels, device, args):
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
-            PrintGPUUsaged(device),
+            # GarbageCollectord(),
+            # PrintGPUUsaged(device),
         ]
         t_val = [
             InitLoggerd(args, logger),
@@ -133,11 +135,13 @@ def get_pre_transforms(labels, device, args):
                                         device=device, 
                                         spacing=spacing),
             ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
-            PrintGPUUsaged(device),
+            # GarbageCollectord(),
+            # PrintGPUUsaged(device),
         ]
     else: # MSD Spleen
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
@@ -152,7 +156,7 @@ def get_pre_transforms(labels, device, args):
             RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
             Resized(keys=("image", "label"), spatial_size=[128, 128, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
-            ToTensord(keys=("image", "guidance", "label"), device=device),
+            
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             #ToTensord(keys=("image", "guidance"), device=device),
@@ -168,10 +172,11 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu')), # TODO: check why we need this on the CPU
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu')), # TODO: check why we need this on the CPU
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
@@ -181,7 +186,7 @@ def get_pre_transforms(labels, device, args):
 
             Resized(keys=("image", "label"), spatial_size=[256, 256, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
-            ToTensord(keys=("image", "guidance", "label"), device=device),
+            # ToTensord(keys=("image", "guidance", "label"), device=device),
             FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
             AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
@@ -195,7 +200,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu')),
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu')),
         ]
     return Compose(t_train), Compose(t_val)
 
@@ -206,7 +211,7 @@ def get_click_transforms(device, args):
         InitLoggerd(args, logger),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        DetachTensorsd(keys=("image", "label", "pred")),
+        # DetachTensorsd(keys=("image", "label", "pred")),
         ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
         
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
@@ -217,7 +222,7 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
-        DeleteItemsd(keys=("discrepancy")),
+        # DeleteItemsd(keys=("discrepancy")),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,
@@ -231,8 +236,9 @@ def get_click_transforms(device, args):
                                     spacing=spacing),        # Overwrites the image entry
         
         # Delete all transforms (only needed for inversion I think)
-        DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
-        ToTensord(keys=("image", "label", "pred"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
+        # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
+        # ToTensord(keys=("image", "label", "pred"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
+        # GarbageCollectord(),
     ]
 
     return Compose(t)
@@ -251,6 +257,7 @@ def get_post_transforms(labels):
         # # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
         # PrintDatad()
+        # GarbageCollectord(),
     ]
     return Compose(t)
 

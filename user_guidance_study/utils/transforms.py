@@ -15,6 +15,8 @@ import random
 import warnings
 import time
 from typing import Dict, Hashable, List, Mapping, Optional, Union, Iterable
+import gc
+
 from pynvml import *
 
 import numpy as np
@@ -57,6 +59,15 @@ logger = get_logger()
 def threshold_foreground(x):
     return x > 0.005
 
+# class GarbageCollectord(MapTransform):
+#     def __init__(self, keys: KeysCollection = None):
+#         """
+#         """
+#         super().__init__(keys)
+
+#     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+#         gc.collect()
+#         return data
 
 class NoOpd(MapTransform):
     def __init__(self, keys: KeysCollection = None):
@@ -146,6 +157,7 @@ class PrintGPUUsaged(MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         # print_gpu_usage(device=self.device, used_memory_only=True)
+        # gc.collect()
         # torch.cuda.empty_cache()
         logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**2)} MB")
         # logger.info(torch.cuda.memory_summary())
@@ -200,7 +212,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self.label_names = label_names
         self.device = device
     
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -218,9 +230,9 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
             d["label_names"] = new_label_names
             if isinstance(d[key], MetaTensor):
-                d[key].array = label.to(torch.device("cpu"))
+                d[key].array = label #.to(torch.device("cpu"))
             else:
-                d[key] = label.to(torch.device("cpu"))
+                d[key] = label #.to(torch.device("cpu"))
         return d
 
 
@@ -357,7 +369,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 print("[ERROR] Signal is None")
             return signal
 
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -421,14 +433,14 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=torch.device("cpu")) #.astype(np.float32) # FN
-        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=torch.device("cpu")) #.astype(np.float32) # FP
+        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=self.device) #torch.device("cpu")) #.astype(np.float32) # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=self.device) #torch.device("cpu")) #.astype(np.float32) # FP
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
         return self.disparity(label, pred)
 
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -436,6 +448,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
             if key == "label":
                 assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
                 all_discrepancies = {}
+                # TODO remove this cuda moval code
                 if not d[key].is_cuda:
                     d[key] = d[key].to(device=self.device)
                     label_was_on_cuda = False
@@ -595,7 +608,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             self.is_pos = True
         return guidance
 
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -644,11 +657,10 @@ class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
     """
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        before = time.time()
         for key in self.key_iterator(d):
             if key == "pred":
                 for idx, (key_label, _) in enumerate(d["label_names"].items()):
@@ -656,8 +668,7 @@ class SplitPredsLabeld(MapTransform):
                         d[f"pred_{key_label}"] = d[key][idx + 1, ...][None]
                         d[f"label_{key_label}"] = d["label"][idx + 1, ...][None]
             elif key != "pred":
-                logger.info("This is only for pred key")
-        logger.debug("SplitPredsLabeld.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+                logger.info("This transform is only for pred key")
         return d
 
 
@@ -733,7 +744,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                 else:
                     # Clicks are created using this convention Channel Height Width Depth (CHWD)
                     label_guidance.append([g[0], g[-2], g[-1], sid])  # Assume channel is first and depth is last CHWD
-        return torch.tensor(label_guidance, dtype=torch.int32, device=torch.device("cpu"))
+        return torch.tensor(label_guidance, dtype=torch.int32, device=self.device)#torch.device("cpu"))
 
     def _randomize(self, d, key_label):
         sids = d.get(self.sids_key).get(key_label) if d.get(self.sids_key) is not None else None
@@ -746,7 +757,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
             sid = None
         self.sid[key_label] = sid
 
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -809,7 +820,7 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
             sids[key_label] = np.asarray(l_ids)
         return sids
 
-    @torch.no_grad()
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)

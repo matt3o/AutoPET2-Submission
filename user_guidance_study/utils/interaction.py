@@ -83,12 +83,12 @@ class Interaction:
             before_it = time.time()
             for j in range(self.max_interactions):
                 # logger.info('##### It: {} '.format(j))
-                inputs, labels = engine.prepare_batch(batchdata) # never move directly to device, will loose too much GPU memory
+                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device) # never move directly to device, will loose too much GPU memory
 
-                inputs = inputs.to(engine.state.device)
+                # inputs = inputs.to(engine.state.device)
                 if j == 0:
                     logger.info("inputs.shape is {}".format(inputs.shape))
-                labels = labels.to(engine.state.device)
+                # labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
@@ -126,7 +126,7 @@ class Interaction:
 
                 for i in range(len(batchdata_list)):
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
-                    before = time.time()
+                    # before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
                     # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
                     # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256

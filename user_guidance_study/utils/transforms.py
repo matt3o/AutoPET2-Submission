@@ -100,8 +100,12 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                 label = d[key]
                 new_data = {"label": label.clone(), "image": d["image"].clone()}
                 # copy the label and crop it to the desired size
-                cropped_label = Compose([CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
-                               CenterSpatialCropd(keys="label", roi_size=self.roi_size)])(new_data)["label"]
+                t = []
+                t.append(CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground))
+                if self.roi_size is not None:
+                    t.append(CenterSpatialCropd(keys="label", roi_size=self.roi_size))
+                
+                cropped_label = Compose(t)(new_data)["label"]
 
                 # label_num_el = torch.numel(label)
                 for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):

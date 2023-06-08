@@ -57,10 +57,6 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
-#crop_size = (192,192,256)
-crop_size = (224,224,320)
-#crop_size = (128,128,128)
-#crop_size = (320,320,416)
 # crop_size multiples of sliding window with overlap 0.25 (default): 128, 224, 320, 416, 512
 
 def get_pre_transforms(labels, device, args):
@@ -80,7 +76,7 @@ def get_pre_transforms(labels, device, args):
 
             ### Random Transforms ###
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
-            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
+            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.train_crop_size, pos=0.6, neg=0.4) if args.train_crop_size is not None else NoOpd(),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
@@ -114,9 +110,9 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=crop_size, label_names=labels),
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=crop_size),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             
             # Needed for the UNet together with the SimpleInferer

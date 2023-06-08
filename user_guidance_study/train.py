@@ -235,6 +235,8 @@ def create_trainer(args):
     post_transform = get_post_transforms(args.labels)
 
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
+    numel_train = len(train_loader.dataset)
+    numel_val = len(val_loader.dataset)
 
     # define training components
     network = get_network(args.network, args.labels, args).to(device)
@@ -292,14 +294,20 @@ def create_trainer(args):
     elif args.optimizer == "Adam": # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
+    MAX_EPOCHS = args.epochs
+    ITERATIONS_PER_EPOCH = numel_train
+    CURRENT_EPOCH = args.current_epoch
+
     if args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=args.current_epoch)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "MultiStepLR":
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, args.epochs) if num % (args.epochs/20) == 0], gamma=0.333, last_epoch=args.current_epoch)
+        # Do a x step descent
+        steps = 20
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ITERATIONS_PER_EPOCH * num for num in range(0, MAX_EPOCHS) if num % (MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = 20, power = 2, last_epoch=args.current_epoch)
-    elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = 32, eta_min = 1e-6, last_epoch=args.current_epoch)
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = ITERATIONS_PER_EPOCH * MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+    # elif args.scheduler == "CosineAnnealingLR":
+    #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -528,7 +536,7 @@ def main():
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
     parser.add_argument("--train_crop_size", default="(128,128,128)", action='store')
-    parser.add_argument("--val_crop_size", default="None", action='store')
+    parser.add_argument("--val_crop_size", default="(224,224,320)", action='store')
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')
@@ -536,7 +544,7 @@ def main():
     parser.add_argument("-e", "--epochs", type=int, default=100)
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
-    parser.add_argument("--scheduler", default="StepLR", choices=["StepLR", "MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
+    parser.add_argument("--scheduler", default="StepLR", choices=["StepLR", "MultiStepLR", "PolynomialLR"])
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 

@@ -66,22 +66,22 @@ def get_pre_transforms(labels, device, args):
         t_train = [
             InitLoggerd(args, logger),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
-            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            # Needed for the UNet together with the SimpleInferer
-            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
 
             ### Random Transforms ###
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.train_crop_size, pos=0.6, neg=0.4) if args.train_crop_size is not None else NoOpd(),
+            # Needed for the UNet together with the SimpleInferer
+            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
+            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
             
             # Transforms for click simulation
@@ -98,7 +98,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
             # GarbageCollectord(),
@@ -107,7 +107,6 @@ def get_pre_transforms(labels, device, args):
         t_val = [
             InitLoggerd(args, logger),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
-            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
@@ -116,9 +115,10 @@ def get_pre_transforms(labels, device, args):
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            
             # Needed for the UNet together with the SimpleInferer
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
 
             # Transforms for click simulation
             FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
@@ -134,7 +134,7 @@ def get_pre_transforms(labels, device, args):
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
                                         spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
             # GarbageCollectord(),
             # PrintGPUUsaged(device),
         ]
@@ -212,7 +212,7 @@ def get_click_transforms(device, args):
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         # DetachTensorsd(keys=("image", "label", "pred")),
-        ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
+        # ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
         
         FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         AddRandomGuidanceDeepEditd(
@@ -234,7 +234,7 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        # Overwrites the image entry
-        
+        # PrintGPUUsaged(device),
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),
         # ToTensord(keys=("image", "label", "pred"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
@@ -299,8 +299,9 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     train_ds = PersistentDataset(
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
-    train_loader = ThreadDataLoader(
-        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
+    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
+    train_loader = DataLoader(
+        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -310,7 +311,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = ThreadDataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
+    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

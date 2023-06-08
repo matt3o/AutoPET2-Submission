@@ -79,7 +79,6 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 
-
 def oom_observer(device, alloc, device_alloc, device_free):
     if device is not None and logger is not None:
         logger.critical(torch.cuda.memory_summary(device))
@@ -287,8 +286,8 @@ def create_trainer(args):
         train_inferer = eval_inferer = inferer
     elif args.inferer == "SlidingWindowInferer":
         # Reduce if there is an OOM
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=4, mode="gaussian")
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
 
     if args.optimizer == "Novograd":
         optimizer = Novograd(network.parameters(), args.learning_rate)
@@ -538,6 +537,8 @@ def main():
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
     parser.add_argument("--train_crop_size", default="(128,128,128)", action='store')
     parser.add_argument("--val_crop_size", default="(224,224,320)", action='store')
+    parser.add_argument("--sw_batch_size", type=int, default=1)
+    
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')

@@ -597,6 +597,7 @@ def main():
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
     parser.add_argument("--no_log", default=False, action='store_true')
+    parser.add_argument("--dont_check_output_dir", default=False, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
@@ -621,7 +622,8 @@ def main():
         args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
         args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
     
-    if os.path.isdir(args.output):
+    
+    if not dont_check_output_dir and os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)

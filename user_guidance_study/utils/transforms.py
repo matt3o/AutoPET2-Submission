@@ -96,13 +96,14 @@ class DetachTensorsd(MapTransform):
         return d
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
+    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names, logger):
         """
         Prints how much information is lost due to the crop.
         """
         super().__init__(keys)
         self.roi_size = roi_size
         self.label_names = label_names
+        self.logger = logger
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -127,7 +128,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                         # then check how much of the labels is lost
                         lost_pixels = sum_label - sum_cropped_label
                         lost_pixels_ratio = lost_pixels / sum_label * 100
-                        logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
+                        self.logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
             else: 
                 raise UserWarning("This transform only applies to key 'label'")
         return d

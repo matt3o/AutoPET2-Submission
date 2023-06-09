@@ -111,7 +111,7 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels, logger=logger),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs

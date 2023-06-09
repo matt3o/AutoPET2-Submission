@@ -64,7 +64,7 @@ def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
         t_train = [
-            InitLoggerd(args, logger),
+            InitLoggerd(args),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
@@ -105,13 +105,13 @@ def get_pre_transforms(labels, device, args):
             # PrintGPUUsaged(device),
         ]
         t_val = [
-            InitLoggerd(args, logger),
+            InitLoggerd(args),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels, logger=logger),
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
@@ -208,7 +208,7 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
-        InitLoggerd(args, logger),
+        InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         # DetachTensorsd(keys=("image", "label", "pred")),

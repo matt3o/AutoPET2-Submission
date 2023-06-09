@@ -50,9 +50,9 @@ from utils.logger import setup_loggers, get_logger
 
 # Has to be reinitialized for some weird reason here
 # Otherwise the logger only works for the click_transforms and never for the pre_transform
-setup_loggers()
-logger = get_logger()
-
+#setup_loggers()
+#logger = get_logger()
+logger = None
 #distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 #distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
@@ -96,14 +96,13 @@ class DetachTensorsd(MapTransform):
         return d
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names, logger):
+    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
         """
         Prints how much information is lost due to the crop.
         """
         super().__init__(keys)
         self.roi_size = roi_size
         self.label_names = label_names
-        self.logger = logger
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -128,7 +127,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                         # then check how much of the labels is lost
                         lost_pixels = sum_label - sum_cropped_label
                         lost_pixels_ratio = lost_pixels / sum_label * 100
-                        self.logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
+                        logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
             else: 
                 raise UserWarning("This transform only applies to key 'label'")
         return d
@@ -167,7 +166,7 @@ class PrintGPUUsaged(MapTransform):
 
 
 class InitLoggerd(MapTransform):
-    def __init__(self, args, new_logger):
+    def __init__(self, args):
         """ 
         Initialises the logger inside the dataloader thread (if it is a separate thread).
 
@@ -177,7 +176,6 @@ class InitLoggerd(MapTransform):
         """
         global logger
         super().__init__(None)
-        logger = new_logger
         
         self.loglevel = logging.INFO
         if args.debug:
@@ -186,7 +184,6 @@ class InitLoggerd(MapTransform):
         self.log_file_folder = args.output
         if args.no_log: 
             self.log_file_folder = None
-
         setup_loggers(self.loglevel, self.log_file_folder)
         logger = get_logger()
 

@@ -272,14 +272,16 @@ def create_trainer(args):
     CURRENT_EPOCH = args.current_epoch
 
     # SCHEDULER
+    # WARNING LrScheduleHandler works per default on the epoch level contrary the scheduler
+    # Therefore one step == one epoch!
     if args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1, last_epoch=CURRENT_EPOCH)
-    elif args.scheduler == "MultiStepLR":
-        # Do a x step descent
-        steps = 20
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ITERATIONS_PER_EPOCH * num for num in range(0, MAX_EPOCHS) if num % (MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
+    # elif args.scheduler == "MultiStepLR":
+    #     # Do a x step descent
+    #     steps = 20
+    #     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters = ITERATIONS_PER_EPOCH * MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     # elif args.scheduler == "CosineAnnealingLR":
     #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
     # define event-handlers for engine

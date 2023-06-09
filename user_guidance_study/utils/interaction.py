@@ -77,7 +77,7 @@ class Interaction:
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
         guidance_label_overlap = 0.0
-        logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs},Iter {engine.state.iteration - 1 % engine.state.epoch_length}/{engine.state.epoch_length}")
+        logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {(engine.state.iteration - 1 % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             before_it = time.time()

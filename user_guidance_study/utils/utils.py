@@ -64,9 +64,10 @@ def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
         t_train = [
+            InitLoggerd(args, logger),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device, logger=logger),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
@@ -84,8 +85,8 @@ def get_pre_transforms(labels, device, args):
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
             
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device, logger=logger), # sids np array on cpu
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device, logger=logger), 
+            FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device), # sids np array on cpu
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device), 
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -96,9 +97,7 @@ def get_pre_transforms(labels, device, args):
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
-                                        spacing=spacing,
-                                        logger=logger
-                                        ),
+                                        spacing=spacing),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
             # NOTE this can be set to the GPU immediatly however it does not have the intended effect
             # It just uses more and more memory without offering real advantages
@@ -106,14 +105,15 @@ def get_pre_transforms(labels, device, args):
             # PrintGPUUsaged(device),
         ]
         t_val = [
+            InitLoggerd(args, logger),
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device, logger=logger),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels, logger=logger),
-            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground, logger=logger),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size, logger=logger) if args.val_crop_size is not None else NoOpd(),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             # Needed for the UNet together with the SimpleInferer
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
@@ -121,8 +121,8 @@ def get_pre_transforms(labels, device, args):
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
 
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device, logger=logger),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device, logger=logger),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -133,9 +133,7 @@ def get_pre_transforms(labels, device, args):
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
                                         device=device, 
-                                        spacing=spacing,
-                                        logger=logger,
-                                        ),
+                                        spacing=spacing),
             # ToTensord(keys=("image", "label"), device=torch.device('cpu'), allow_missing_keys=True, track_meta=False),
             # GarbageCollectord(),
             # PrintGPUUsaged(device),
@@ -210,19 +208,19 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
+        InitLoggerd(args, logger),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         # DetachTensorsd(keys=("image", "label", "pred")),
         # ToTensord(keys=("image", "label", "pred"), device=device, track_meta=False),
         
-        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device, logger=logger),
+        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
-            logger=logger
         ),
         # DeleteItemsd(keys=("discrepancy")),
         AddGuidanceSignalDeepEditd(keys="image",
@@ -235,9 +233,7 @@ def get_click_transforms(device, args):
                                     exp_geos=args.exp_geos,
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
-                                    spacing=spacing, 
-                                    logger=logger,
-                                    ),        # Overwrites the image entry
+                                    spacing=spacing),        # Overwrites the image entry
         # PrintGPUUsaged(device),
         # Delete all transforms (only needed for inversion I think)
         # DeleteItemsd(keys=("label_names_transforms", "guidance_transforms", "image_transforms", "label_transforms", "pred_transforms")),

@@ -436,7 +436,7 @@ def run(args):
     # verify both have a valid size (for Unet with seven layers)
      
     if args.network == "dynunet" and args.inferer == "SimpleInferer":
-        assert args.train_crop_size == args.val_crop_size, "For the SimpleInferer the train and val crop size have to match!"
+        #assert args.train_crop_size == args.val_crop_size, "For the SimpleInferer the train and val crop size have to match!"
         for size in args.train_crop_size:
             assert (size % 64) == 0
 

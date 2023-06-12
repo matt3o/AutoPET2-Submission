@@ -24,6 +24,7 @@ import pprint
 import uuid
 import shutil
 from pickle import dump
+import signal
 
 
 # Things needed to debug the Interaction class
@@ -90,6 +91,26 @@ def oom_observer(device, alloc, device_alloc, device_free):
     torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
     torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)
 
+
+class TerminationHandler:
+    def __init__(self, args):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        self.args = args
+
+    def exit_gracefully(self, *args):
+        logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
+        self.cleanup()
+        sys.exit(99)
+
+    def cleanup(self):
+        logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
+        # Cleanup
+        if self.args.throw_away_cache:
+            logger.info("Cleaning up..")
+            shutil.rmtree(self.args.cache_dir, ignore_errors=True)
+        else:
+            logger.info("Leaving cache dir as it is..")
 
 
 def count_parameters(model):
@@ -453,6 +474,7 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
+        terminator = TerminationHandler(args)
         
         with wp:           
             trainer, evaluator = create_trainer(args)
@@ -501,15 +523,7 @@ def run(args):
             model_ts = torch.jit.script(trainer.network)
             torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
     finally:
-        logger.info(f"#### LOGGED ALL DATA TO {args.output} ############")
-        # Cleanup
-        if args.throw_away_cache:
-            logger.info("Cleaning up..")
-            shutil.rmtree(args.cache_dir, ignore_errors=True)
-        else:
-            logger.info("Leaving cache dir as it is..")
-
-
+        terminator.cleanup()
 
 def main():
     global logger

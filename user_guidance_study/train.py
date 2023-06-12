@@ -254,8 +254,8 @@ def create_trainer(args):
 
      # INFERER
     if args.inferer == "SimpleInferer":
-        inferer=SimpleInferer()
-        train_inferer = eval_inferer = inferer
+        train_inferer = SimpleInferer()
+        eval_inferer = SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
         # Reduce if there is an OOM
         train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")

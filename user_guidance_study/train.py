@@ -638,7 +638,7 @@ def main():
         args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
     
     
-    if not dont_check_output_dir and os.path.isdir(args.output):
+    if not args.dont_check_output_dir and os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)

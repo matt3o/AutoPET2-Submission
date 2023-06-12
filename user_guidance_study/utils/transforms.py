@@ -50,9 +50,9 @@ from utils.logger import setup_loggers, get_logger
 
 # Has to be reinitialized for some weird reason here
 # Otherwise the logger only works for the click_transforms and never for the pre_transform
-setup_loggers()
-global_logger = get_logger()
-
+#setup_loggers()
+#logger = get_logger()
+logger = None
 #distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
 #distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
 
@@ -70,14 +70,10 @@ def threshold_foreground(x):
 #         return data
 
 class NoOpd(MapTransform):
-    def __init__(self, keys: KeysCollection = None, logger = None):
+    def __init__(self, keys: KeysCollection = None):
         """
         """
         super().__init__(keys)
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
 
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
@@ -85,16 +81,11 @@ class NoOpd(MapTransform):
 
 
 class DetachTensorsd(MapTransform):
-    def __init__(self, keys: KeysCollection = None, logger=None):
+    def __init__(self, keys: KeysCollection = None):
         """
         Detaches all passed tensors.
         """
         super().__init__(keys)
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
@@ -105,18 +96,13 @@ class DetachTensorsd(MapTransform):
         return d
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names, logger=None):
+    def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
         """
         Prints how much information is lost due to the crop.
         """
         super().__init__(keys)
         self.roi_size = roi_size
         self.label_names = label_names
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -141,41 +127,31 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                         # then check how much of the labels is lost
                         lost_pixels = sum_label - sum_cropped_label
                         lost_pixels_ratio = lost_pixels / sum_label * 100
-                        self.logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
+                        logger.info(f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping") 
             else: 
                 raise UserWarning("This transform only applies to key 'label'")
         return d
 
 class PrintDatad(MapTransform):
-    def __init__(self, keys: KeysCollection = None, logger = None):
+    def __init__(self, keys: KeysCollection = None):
         """
         Prints all the information inside data
         """
         super().__init__(keys)
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        self.logger.info(describe_batch_data(d))
+        logger.info(describe_batch_data(d))
         # exit(0)
         return d
 
 class PrintGPUUsaged(MapTransform):
-    def __init__(self, device, keys: KeysCollection = None, logger=None):
+    def __init__(self, device, keys: KeysCollection = None):
         """
         Prints the GPU usage
         """
         super().__init__(keys)
         self.device = device
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
@@ -183,47 +159,45 @@ class PrintGPUUsaged(MapTransform):
         # print_gpu_usage(device=self.device, used_memory_only=True)
         # gc.collect()
         # torch.cuda.empty_cache()
-        self.logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**2)} MB")
+        logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**2)} MB")
         # logger.info(torch.cuda.memory_summary())
         # exit(0)
         return d
 
 
-# class InitLoggerd(MapTransform):
-#     def __init__(self, args, new_logger):
-#         """ 
-#         Initialises the logger inside the dataloader thread (if it is a separate thread).
+class InitLoggerd(MapTransform):
+    def __init__(self, args):
+        """ 
+        Initialises the logger inside the dataloader thread (if it is a separate thread).
 
-#         Has to be reinitialized for some weird reason here, I think this is due to the data transform
-#         being on an extra thread
-#         Otherwise the logger only works for the click_transforms and never for the pre_transform
-#         """
-#         global logger
-#         super().__init__(None)
-#         logger = new_logger
+        Has to be reinitialized for some weird reason here, I think this is due to the data transform
+        being on an extra thread
+        Otherwise the logger only works for the click_transforms and never for the pre_transform
+        """
+        global logger
+        super().__init__(None)
         
-#         self.loglevel = logging.INFO
-#         if args.debug:
-#             self.loglevel = logging.DEBUG
+        self.loglevel = logging.INFO
+        if args.debug:
+            self.loglevel = logging.DEBUG
 
-#         self.log_file_folder = args.output
-#         if args.no_log: 
-#             self.log_file_folder = None
+        self.log_file_folder = args.output
+        if args.no_log: 
+            self.log_file_folder = None
+        setup_loggers(self.loglevel, self.log_file_folder)
+        logger = get_logger()
 
-#         setup_loggers(self.loglevel, self.log_file_folder)
-#         logger = get_logger()
 
-
-#     def __call__(self, data: Mapping[Hashable, np.ndarray]):
-#         global logger
-#         if logger is None: 
-#             setup_loggers(self.loglevel, self.log_file_folder)
-#         logger = get_logger()
-#         return data
+    def __call__(self, data: Mapping[Hashable, np.ndarray]):
+        global logger
+        if logger is None: 
+            setup_loggers(self.loglevel, self.log_file_folder)
+        logger = get_logger()
+        return data
 
 
 class NormalizeLabelsInDatasetd(MapTransform):
-    def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False, device = None, logger=None):
+    def __init__(self, keys: KeysCollection, label_names=None, allow_missing_keys: bool = False, device = None):
         """
         Normalize label values according to label names dictionary
 
@@ -235,11 +209,8 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
         self.label_names = label_names
         self.device = device
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
     
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -290,7 +261,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         device = None,
         spacing = None,
         adaptive_sigma = False,
-        logger=None
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -307,12 +277,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
 
         self.gdt_th = 0 if self.exp_geos else self.gdt_th
         self.gdt = True if self.exp_geos else self.gdt
-
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
 
     def _get_signal(self, image, guidance, key_label):
@@ -407,6 +371,8 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
+        before = time.time()
+        # print_gpu_usage(self.device, used_memory_only=True, context="START AddGuidanceSignalDeepEditd")
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -432,6 +398,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         d[key].array = tmp_image
                     else:
                         d[key] = tmp_image
+                logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 raise UserWarning("This transform only applies to image key")
@@ -453,19 +420,12 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         pred_key: str = "pred",
         discrepancy_key: str = "discrepancy",
         allow_missing_keys: bool = False,
-        device = None,
-        logger=None,
+        device = None
     ):
         super().__init__(keys, allow_missing_keys)
         self.pred_key = pred_key
         self.discrepancy_key = discrepancy_key
         self.device = device
-        
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
     def disparity(self, label, pred):        
         disparity = label - pred
@@ -534,7 +494,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                     d[self.pred_key] = d[self.pred_key].to(device=torch.device("cpu"))
                 return d
             else:
-                self.logger.error("This transform only applies to 'label' key")
+                logger.error("This transform only applies to 'label' key")
         raise UserWarning
 
 
@@ -556,7 +516,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
         device=None,
-        logger=None,
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -568,10 +527,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.default_guidance = None
         self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
 
     def randomize(self, data: Dict[Hashable, np.ndarray]):
         probability = data[self.probability_key]
@@ -700,14 +655,7 @@ class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
     """
-    def __init__(self, keys: KeysCollection = None, logger = None):
-        super().__init__(keys)
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
-
+    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -718,7 +666,7 @@ class SplitPredsLabeld(MapTransform):
                         d[f"pred_{key_label}"] = d[key][idx + 1, ...][None]
                         d[f"label_{key_label}"] = d["label"][idx + 1, ...][None]
             elif key != "pred":
-                self.logger.info("This transform is only for pred key")
+                logger.info("This transform is only for pred key")
         return d
 
 
@@ -743,8 +691,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         sid_key: str = "sid",
         connected_regions: int = 5,
         allow_missing_keys: bool = False,
-        device = None,
-        logger=None,
+        device = None
     ):
         super().__init__(keys, allow_missing_keys)
         self.sids_key = sids_key
@@ -753,11 +700,6 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
         self.guidance_key = guidance_key
         self.connected_regions = connected_regions
         self.device = device
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
     def _apply(self, label, sid) -> np.array:
         # sid: single digit, label: array e.g. 1,128,128,128
@@ -809,7 +751,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
             if sid is None or sid not in sids:
                 sid = self.R.choice(sids, replace=False)
         else:
-            self.logger.warning(f"No slice IDs for label: {key_label}")
+            logger.warning(f"No slice IDs for label: {key_label}")
             sid = None
         self.sid[key_label] = sid
 
@@ -856,16 +798,10 @@ class FindAllValidSlicesMissingLabelsd(MapTransform):
         sids_key: key to store slices indices having valid label map.
     """
 
-    def __init__(self, keys: KeysCollection, sids_key="sids", allow_missing_keys: bool = False, device=None, logger=None):
+    def __init__(self, keys: KeysCollection, sids_key="sids", allow_missing_keys: bool = False, device=None):
         super().__init__(keys, allow_missing_keys)
         self.sids_key = sids_key
         self.device = device
-
-        if logger is None:
-            self.logger = global_logger
-        else:
-            self.logger = logger
-
 
     def _apply(self, label, d):
         assert type(label) == torch.Tensor or type(label) == MetaTensor

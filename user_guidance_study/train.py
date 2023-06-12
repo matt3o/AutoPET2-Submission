@@ -254,8 +254,8 @@ def create_trainer(args):
 
      # INFERER
     if args.inferer == "SimpleInferer":
-        inferer=SimpleInferer()
-        train_inferer = eval_inferer = inferer
+        train_inferer = SimpleInferer()
+        eval_inferer = SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
         # Reduce if there is an OOM
         train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
@@ -274,12 +274,12 @@ def create_trainer(args):
     # SCHEDULER
     # WARNING LrScheduleHandler works per default on the epoch level contrary the scheduler
     # Therefore one step == one epoch!
-    if args.scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
-    # elif args.scheduler == "MultiStepLR":
-    #     # Do a x step descent
-    #     steps = 20
-    #     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
+    #if args.scheduler == "StepLR":
+    #    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
+    if args.scheduler == "MultiStepLR":
+         # Do a x step descent
+        steps = 4
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
         lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     # elif args.scheduler == "CosineAnnealingLR":
@@ -550,9 +550,10 @@ def main():
     parser.add_argument("-a", "--amp", default=False, action='store_true')
     parser.add_argument("--num_workers", type=int, default=1)
     parser.add_argument("-e", "--epochs", type=int, default=100)
-    parser.add_argument("-lr", "--learning_rate", type=float, default=0.001)
+    # If learning rate is set to 0.001, the DiceCE will produce Nans?!?
+    parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
-    parser.add_argument("--scheduler", default="StepLR", choices=["StepLR", "MultiStepLR", "PolynomialLR"])
+    parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR"])
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 

@@ -76,6 +76,8 @@ import threading
 
 from monai.optimizers.novograd import Novograd
 
+from ignite.contrib.handlers.tensorboard_logger import *
+
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -317,7 +319,7 @@ def create_trainer(args):
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
-        TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
+        # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
         # CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event="iteration"),
@@ -380,6 +382,9 @@ def create_trainer(args):
                     output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
                 )
 
+    tb_logger = TensorboardLogger(log_dir=f"{args.output}/tensorboard")
+
+
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
         ValidationHandler(
@@ -388,11 +393,11 @@ def create_trainer(args):
         StatsHandler(
             tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
         ),
-        TensorBoardStatsHandler(
-            log_dir=args.output,
-            tag_name="train_loss",
-            output_transform=from_engine(["loss"], first=True),
-        ),
+        # TensorBoardStatsHandler(
+        #     log_dir=args.output,
+        #     tag_name="train_loss",
+        #     output_transform=from_engine(["loss"], first=True),
+        # ),
         CheckpointSaver(
             save_dir=args.output,
             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
@@ -430,7 +435,46 @@ def create_trainer(args):
         train_handlers=train_handlers,
     )
 
-    return trainer, evaluator
+
+    tb_logger.attach_output_handler(
+        evaluator,
+        event_name=Events.EPOCH_COMPLETED,
+        tag="1_validation",
+        metric_names=list(all_val_metrics.keys()),
+        global_step_transform=global_step_from_engine(trainer),
+    )
+
+    tb_logger.attach_output_handler(
+        trainer,
+        event_name=Events.EPOCH_COMPLETED,
+        tag="2_training",
+        metric_names=list(all_train_metrics.keys()),
+        global_step_transform=global_step_from_engine(trainer),
+    )
+
+    # tb_logger.attach_output_handler(
+    #     trainer,
+    #     event_name=Events.ITERATION_COMPLETED,
+    #     tag="training",
+    #     output_transform=lambda loss: {"loss": loss}
+    # )
+
+    tb_logger.attach_output_handler(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        tag="2_training",
+        output_transform=lambda x: x[0]["loss"],
+    )
+
+    tb_logger.attach_opt_params_handler(
+        trainer,
+        event_name=Events.ITERATION_STARTED,
+        optimizer=optimizer,
+        tag="3_params"
+    )
+
+
+    return trainer, evaluator, tb_logger
 
 
 def run(args):
@@ -493,40 +537,42 @@ def run(args):
         terminator = TerminationHandler(args)
         
         with wp:           
-            trainer, evaluator = create_trainer(args)
-            gpu_thread.start()
+            trainer, evaluator, tb_logger = create_trainer(args)
+            with tb_logger:
+                gpu_thread.start()
 
-            epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
-            iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
-            batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
-            innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
-            whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
+                epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
+                iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
+                batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+                innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
+                whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
 
-            start_time = time.time()
-            # torch._C._cuda_attach_out_of_memory_observer(cb)
-            
-            try:
-                if not args.eval_only:
-                    trainer.run()
-                else:
-                    evaluator.run()
-            except torch.cuda.OutOfMemoryError:
-                oom_observer(device, None, None, None)
-                logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                start_time = time.time()
+                # torch._C._cuda_attach_out_of_memory_observer(cb)
                 
-            except RuntimeError as e:
-                if "cuDNN" in str(e):
-                    # Got a cuDNN error
-                    pass
-                oom_observer(device, None, None, None)
-                logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
-                
-            finally:
-                stopFlag.set()
-                logger.info(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
-                logger.info("Total Training Time {}".format(time.time() - start_time))
-                logger.info(f"\n{wp.get_times_summary_pd()}")
-                gpu_thread.join()
+                try:
+                    if not args.eval_only:
+                        trainer.run()
+                    else:
+                        evaluator.run()
+                except torch.cuda.OutOfMemoryError:
+                    oom_observer(device, None, None, None)
+                    logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                    
+                except RuntimeError as e:
+                    if "cuDNN" in str(e):
+                        # Got a cuDNN error
+                        pass
+                    oom_observer(device, None, None, None)
+                    logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                    
+                finally:
+                    tb_logger.close()
+                    stopFlag.set()
+                    logger.info(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                    logger.info("Total Training Time {}".format(time.time() - start_time))
+                    logger.info(f"\n{wp.get_times_summary_pd()}")
+                    gpu_thread.join()
 
         if not args.eval_only:
             logger.info("{}:: Saving Final PT Model".format(args.gpu))

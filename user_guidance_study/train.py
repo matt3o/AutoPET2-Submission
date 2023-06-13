@@ -366,7 +366,7 @@ def create_trainer(args):
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True)
 
 
     all_train_metrics = dict()
@@ -471,6 +471,34 @@ def create_trainer(args):
         event_name=Events.ITERATION_STARTED,
         optimizer=optimizer,
         tag="3_params"
+    )
+
+    # Attach the logger to the trainer to log model's weights norm after each iteration
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=WeightsScalarHandler(network)
+    )
+
+    # Attach the logger to the trainer to log model's weights as a histogram after each epoch
+    tb_logger.attach(
+        trainer,
+        event_name=Events.EPOCH_COMPLETED,
+        log_handler=WeightsHistHandler(network)
+    )
+
+    # Attach the logger to the trainer to log model's gradients norm after each iteration
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=GradsScalarHandler(network)
+    )
+
+    # Attach the logger to the trainer to log model's gradients as a histogram after each epoch
+    tb_logger.attach(
+        trainer,
+        event_name=Events.EPOCH_COMPLETED,
+        log_handler=GradsHistHandler(network)
     )
 
 

@@ -220,10 +220,6 @@ def get_network(network, labels, args):
     set_track_meta(False)
     return network
 
-# def track_gpu_usage(output: str, device: torch.device):
-#     print_gpu_usage(device)
-#     get_gpu_usage(device)
-
 class GPU_Thread(threading.Thread):
     def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
         super().__init__()
@@ -313,15 +309,12 @@ def create_trainer(args):
         lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
         lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
-    # elif args.scheduler == "CosineAnnealingLR":
-    #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
+    elif args.scheduler == "CosineAnnealingLR":
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-7, last_epoch=CURRENT_EPOCH)
+        
+        
+        
     # define event-handlers for engine
-
-    def test(x):
-        print(x)
-        sys.exit(0)
-        return x
-
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
         TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
@@ -590,7 +583,7 @@ def main():
     # If learning rate is set to 0.001, the DiceCE will produce Nans?!?
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
-    parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR"])
+    parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 

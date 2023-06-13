@@ -270,8 +270,8 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                     p2 = max(0, min(int(point[-1]), sshape[-1] - 1))
                     signal[:, p1, p2] = 1.0
             
-            logger.info(f"Guidance length for {key_label}")
-            logger.info(guidance.shape[0])
+            # logger.info(f"Guidance length for {key_label}")
+            # logger.info(guidance.shape[0])
             # assert torch.sum(signal) - 5 < 0.001, f"Signal sum is {torch.sum(signal)}"
             # Apply a Gaussian filter to the signal
             if torch.max(signal[0]) > 0:
@@ -328,7 +328,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     @timeit
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         d: Dict = dict(data)
-        before = time.time()
+        # before = time.time()
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -339,12 +339,16 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
+                # assert len(guidance) == len(d["label_names"])
+
                 for key_label in guidance.keys():
                     # Getting signal based on guidance
                     assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
+                    # logger.info(f"guidance[key_label] {key_label}: {guidance[key_label]}")
                     if guidance[key_label] is not None and guidance[key_label].numel():
                         signal = self._get_signal(image, guidance[key_label].to(device=self.device), key_label=key_label)
                     else:
+                        # TODO can speed this up here
                         signal = self._get_signal(image, torch.Tensor([]).to(device=self.device), key_label=key_label)
                     assert signal.is_cuda
                     assert tmp_image.is_cuda
@@ -353,7 +357,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         d[key].array = tmp_image
                     else:
                         d[key] = tmp_image
-                logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
+                # logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 raise UserWarning("This transform only applies to image key")
@@ -465,7 +469,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.is_pos = None
         self.is_other = None
         self.default_guidance = None
-        self.guidance: Dict[str, List[List[int]]] = {}
+        # self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
 
     def randomize(self, data: Mapping[Hashable, torch.Tensor]):
@@ -518,30 +522,40 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         # d: Dict = dict(data)
         d = data
-        guidance = d[self.guidance_key]
+        guidance = d.get(self.guidance_key, None)
+        if guidance is None:
+            # Initialize the guidance dict
+            d[self.guidance_key] = {}
+            # guidance = d.get(self.guidance_key)
         discrepancy = d[self.discrepancy_key]
         self.randomize(data)
 
         if self._will_interact:
             for key_label in d["label_names"].keys():
-                tmp_gui = guidance[key_label]
+                tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
+                
+                # if tmp_gui is None:
+                #     d[self.guidance_key][key_label] = 
+                # else:
                 assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
-
-                if tmp_gui is None:
-                    self.guidance[key_label] = torch.tensor([])
-                else:
-                    self.guidance[key_label] = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
-                    assert self.guidance[key_label].dim() == 2, f"self.guidance[key_label].shape()  {self.guidance[key_label].shape}"
+                # assert tmp_gui.numel() > 0
+                # logger.info(f"tmp_gui for {key_label}: {tmp_gui}")
+                # Filter out -1 values
+                if tmp_gui.numel() > 0:
+                    tmp_gui = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
+                    assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
 
             # Add guidance according to discrepancy
-            for key_label in d["label_names"].keys():
+            # for key_label in d["label_names"].keys():
                 # Add guidance based on discrepancy
-                self.guidance[key_label] = self.add_guidance(self.guidance[key_label], discrepancy[key_label], d["label_names"], d["label"])
+                d[self.guidance_key][key_label] = self.add_guidance(tmp_gui, discrepancy[key_label], d["label_names"], d["label"])
+                # logger.info(f"d[self.guidance_key][key_label]: {d[self.guidance_key][key_label]}")
 
-        if d[self.guidance_key].keys() == self.guidance.keys():
-            d[self.guidance_key] = self.guidance
-        else:
-            raise UserWarning("The keys don't match")
+        # assert len(d[self.guidance_key]) == len(d["label_names"])
+        # if d[self.guidance_key].keys() == self.guidance.keys():
+        #     d[self.guidance_key] = self.guidance
+        # else:
+        #     raise UserWarning("The keys don't match")
 
         return d
 

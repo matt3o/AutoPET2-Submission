@@ -79,21 +79,37 @@ class Interaction:
         guidance_label_overlap = 0.0
         logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
+
+        # Set up the initial batch data
+        in_channels=1 + len(self.args.labels)
+        logger.info(f"in_channels: {in_channels}")
+        batchdata_list = decollate_batch(batchdata)
+        for i in range(len(batchdata_list)):
+            # logger.info(batchdata_list[i][CommonKeys.IMAGE].shape)
+            tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
+            # logger.info(f"tmp_image.shape {tmp_image.shape}")
+            assert len(tmp_image.shape) == 4
+            new_shape = list(tmp_image.shape)
+            new_shape[0] = in_channels
+            inputs = torch.zeros(new_shape, device=engine.state.device)
+            inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
+            batchdata_list[i][CommonKeys.IMAGE] = inputs
+            # logger.info(batchdata_list[i][CommonKeys.IMAGE].shape)
+            # exit(0)
+            # for _ in range(1, in_channels + 1):
+            #     # self.number_intensity_ch==1, see AddGuidanceSignalDeepEditd
+            #     signal = torch.zeros_like(tmp_image)
+            #     tmp_image = torch.cat([tmp_image, signal], dim=0)
+            #     logger.info(f"tmp_image.shape {tmp_image.shape}")
+            #     # batchdata_list[0][CommonKeys.IMAGE][0] = batchdata_list[0][CommonKeys.IMAGE]
+            # batchdata_list[i][CommonKeys.IMAGE] = tmp_image
+            # assert tmp_image.shape[0] == 3, f"tmp_image.shape[0] is {tmp_image.shape[0]}"
+        batchdata = list_data_collate(batchdata_list)
+
+
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             before_it = time.time()
             for j in range(self.max_interactions):
-                # decollate/collate batchdata to execute click transforms
-                batchdata_list = decollate_batch(batchdata)
-                
-                for i in range(len(batchdata_list)):
-                    batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
-                    # before = time.time()
-                    batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
-                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
-                    # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
-
-                batchdata = list_data_collate(batchdata_list)
-
                 inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
 
                 # inputs = inputs.to(engine.state.device)
@@ -133,7 +149,20 @@ class Interaction:
 
                 if j <= 9 and self.args.save_nifti:
                     self.debug_viz(inputs, labels, preds, j)
+
+
+                # decollate/collate batchdata to execute click transforms
+                batchdata_list = decollate_batch(batchdata)
                 
+                for i in range(len(batchdata_list)):
+                    batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
+                    # before = time.time()
+                    batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
+                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
+                    # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
+
+                batchdata = list_data_collate(batchdata_list)
+
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
                 #del preds, gts, dice
                 #del inputs, labels, batchdata_list

@@ -38,62 +38,27 @@ import cupy as cp
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 from cupyx.scipy.ndimage import label as label_cp
 
-measure, _ = optional_import("skimage.measure", "0.14.2", min_version)
-
 from utils.distance_transform import get_distance_transform, get_choice_from_distance_transform_cp
 
 from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
 from utils.logger import setup_loggers, get_logger
 
-#logger = logging.getLogger("interactive_segmentation")
-#logger.setLevel(logging.INFO)
-
-# Has to be reinitialized for some weird reason here
-# Otherwise the logger only works for the click_transforms and never for the pre_transform
-#setup_loggers()
-#logger = get_logger()
 logger = None
-#distance_transform_cdt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_cdt")
-#distance_transform_edt, _ = optional_import("scipy.ndimage.morphology", name="distance_transform_edt")
+
 
 def threshold_foreground(x):
     return x > 0.005
 
-# class GarbageCollectord(MapTransform):
-#     def __init__(self, keys: KeysCollection = None):
-#         """
-#         """
-#         super().__init__(keys)
-
-#     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
-#         gc.collect()
-#         return data
-
 class NoOpd(MapTransform):
     def __init__(self, keys: KeysCollection = None):
         """
+        A transform which does nothing
         """
         super().__init__(keys)
-
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         return data
 
-
-class DetachTensorsd(MapTransform):
-    def __init__(self, keys: KeysCollection = None):
-        """
-        Detaches all passed tensors.
-        """
-        super().__init__(keys)
-
-
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
-        d: Dict = dict(data)
-        for key in self.key_iterator(d):
-            d[key] = d[key].detach()
-        # exit(0)
-        return d
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
     def __init__(self, keys: KeysCollection, roi_size:Iterable, label_names):
@@ -153,15 +118,9 @@ class PrintGPUUsaged(MapTransform):
         super().__init__(keys)
         self.device = device
 
-
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
-        # print_gpu_usage(device=self.device, used_memory_only=True)
-        # gc.collect()
-        # torch.cuda.empty_cache()
         logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**2)} MB")
-        # logger.info(torch.cuda.memory_summary())
-        # exit(0)
         return d
 
 
@@ -210,7 +169,6 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self.label_names = label_names
         self.device = device
     
-    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -282,14 +240,11 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     def _get_signal(self, image, guidance, key_label):
         dimensions = 3 if len(image.shape) > 3 else 2
         assert type(guidance) == torch.Tensor or type(guidance) == MetaTensor, f"guidance is {type(guidance)}, value {guidance}"
-        #guidance = guidance.tolist() if isinstance(guidance, np.ndarray) else guidance
-        #guidance = json.loads(guidance) if isinstance(guidance, str) else guidance
 
         if self.gdt or self.edt:
             assert self.disks
 
         if guidance.size()[0]:
-            # logger.warning(f"guidance.shape {guidance.shape}")
             first_point_size = guidance[0].numel()
             if dimensions == 3:
                 # Assume channel is first and depth is last CHWD
@@ -330,27 +285,27 @@ class AddGuidanceSignalDeepEditd(MapTransform):
 
                     if self.gdt or self.edt or self.adaptive_sigma:
                         raise UserWarning("Code no longer active")
-                        fact = 1.0 if (self.gdt or self.exp_geos or self.adaptive_sigma) else 0.0
-                        spacing  = self.spacing
-                        geos = generalised_geodesic3d(image.unsqueeze(0).to(self.device),
-                                                    signal[0].unsqueeze(0).unsqueeze(0).to(self.device),
-                                                    spacing,
-                                                    10e10,
-                                                    fact,
-                                                    4)
-                        if torch.max(geos.cpu()) > 0:
-                            geos = (geos - torch.min(geos)) / (torch.max(geos) - torch.min(geos))
-                        vals = geos[0][0].cpu().detach().numpy()
+                        # fact = 1.0 if (self.gdt or self.exp_geos or self.adaptive_sigma) else 0.0
+                        # spacing  = self.spacing
+                        # geos = generalised_geodesic3d(image.unsqueeze(0).to(self.device),
+                        #                             signal[0].unsqueeze(0).unsqueeze(0).to(self.device),
+                        #                             spacing,
+                        #                             10e10,
+                        #                             fact,
+                        #                             4)
+                        # if torch.max(geos.cpu()) > 0:
+                        #     geos = (geos - torch.min(geos)) / (torch.max(geos) - torch.min(geos))
+                        # vals = geos[0][0].cpu().detach().numpy()
 
-                        if len(vals[vals > 0]) == 0:
-                            theta = 0
-                        else:
-                            theta = np.percentile(vals[vals > 0], self.gdt_th)
-                        geos *= ((geos > theta) * 1.0)
+                        # if len(vals[vals > 0]) == 0:
+                        #     theta = 0
+                        # else:
+                        #     theta = np.percentile(vals[vals > 0], self.gdt_th)
+                        # geos *= ((geos > theta) * 1.0)
 
-                        if self.exp_geos: # Eponentialized Geodesic Distance (MIDeepSeg)
-                            geos = 1.0 - torch.exp(-geos)
-                        signal[0] = geos[0][0]
+                        # if self.exp_geos: # Eponentialized Geodesic Distance (MIDeepSeg)
+                        #     geos = 1.0 - torch.exp(-geos)
+                        # signal[0] = geos[0][0]
 
 
             if not (torch.min(signal[0]).item() >= 0 and torch.max(signal[0]).item() <= 1.0):
@@ -367,12 +322,10 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 print("[ERROR] Signal is None")
             return signal
 
-    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
         before = time.time()
-        # print_gpu_usage(self.device, used_memory_only=True, context="START AddGuidanceSignalDeepEditd")
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -393,7 +346,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                     assert signal.is_cuda
                     assert tmp_image.is_cuda
                     tmp_image = torch.cat([tmp_image, signal], dim=0)
-                    # tmp_image = tmp_image.to(torch.device("cpu"))
                     if isinstance(d[key], MetaTensor):
                         d[key].array = tmp_image
                     else:
@@ -431,14 +383,13 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=self.device) #torch.device("cpu")) #.astype(np.float32) # FN
-        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=self.device) #torch.device("cpu")) #.astype(np.float32) # FP
+        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=self.device) # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=self.device) # FP
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
         return self.disparity(label, pred)
 
-    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -446,17 +397,7 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
             if key == "label":
                 assert type(d[key]) == torch.Tensor and type(d[self.pred_key]) == torch.Tensor, "{}{}".format(type(d[key]), type(d[self.pred_key]))
                 all_discrepancies = {}
-                # TODO remove this cuda moval code
-                if not d[key].is_cuda:
-                    d[key] = d[key].to(device=self.device)
-                    label_was_on_cuda = False
-                else:
-                    label_was_on_cuda = True
-                if not d["pred"].is_cuda:
-                    d[self.pred_key] = d[self.pred_key].to(device=self.device)
-                    pred_was_on_cuda = False
-                else:
-                    pred_was_on_cuda = True
+                assert d[key].is_cuda and d["pred"].is_cuda
 
                 # label_names: e.g. [('spleen', 1), ('background', 0)]
                 for _, (label_key, label_value) in enumerate(d["label_names"].items()):
@@ -464,13 +405,13 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         label = torch.clone(d[key].detach())
                         # Label should be represented in 1
                         label[label != label_value] = 0
-                        label = (label > 0.5).to(dtype=torch.float32) #.astype(np.float32)
+                        label = (label > 0.5).to(dtype=torch.float32)
 
                         # Taking single prediction
                         pred = torch.clone(d[self.pred_key].detach())
                         pred[pred != label_value] = 0
                         # Prediction should be represented in one
-                        pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
+                        pred = (pred > 0.5).to(dtype=torch.float32)
                     else:
                         # TODO look into thos weird conversion - are they necessary?
                         # Taking single label
@@ -478,20 +419,15 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
                         label[label != label_value] = 1
                         label = 1 - label
                         # Label should be represented in 1
-                        label = (label > 0.5).to(dtype=torch.float32)#.astype(np.float32)
+                        label = (label > 0.5).to(dtype=torch.float32)
                         # Taking single prediction
                         pred = torch.clone(d[self.pred_key].detach())
                         pred[pred != label_value] = 1
                         pred = 1 - pred
                         # Prediction should be represented in one
-                        pred = (pred > 0.5).to(dtype=torch.float32)#.astype(np.float32)
+                        pred = (pred > 0.5).to(dtype=torch.float32)
                     all_discrepancies[label_key] = self._apply(label, pred)
                 d[self.discrepancy_key] = all_discrepancies
-                # Restore previous state of label and pred
-                if not label_was_on_cuda:
-                    d[key] = d[key].to(device=torch.device("cpu"))
-                if not pred_was_on_cuda:
-                    d[self.pred_key] = d[self.pred_key].to(device=torch.device("cpu"))
                 return d
             else:
                 logger.error("This transform only applies to 'label' key")
@@ -535,11 +471,8 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def find_guidance(self, discrepancy):
         if not discrepancy.is_cuda:
             discrepancy = discrepancy.to(device=self.device)
-        # before = time.time()
-        # logger.warning(f"discrepancy.dim: {discrepancy.dim()}")
         distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
         del discrepancy
-        # logger.warning(f"distance.dim(): {distance.dim()}")
         if torch.sum(distance) > 0:
             t = get_choice_from_distance_transform_cp(distance, device=self.device)
             del distance
@@ -547,31 +480,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         else:
             del distance
             return None
-
-        # # TODO any more GPU stuff possible?
-        # if torch.equal(discrepancy, torch.ones_like(discrepancy, device=self.device)):
-        #     # special case of the distance, this code shall behave like distance_transform_cdt from scipy
-        #     # which means it will return a vector full of -1s in this case
-        #     distance = torch.ones_like(discrepancy, device=self.device) * -1
-        # else:
-        #     with cp.cuda.Device(self.device.index):
-        #         discrepancy_cp = cp.asarray(discrepancy.squeeze())
-        #         assert len(discrepancy_cp.shape) == 3
-        #         distance = torch.as_tensor(distance_transform_edt_cupy(discrepancy_cp), device=self.device)
-#        distance = distance.flatten()
-#        distance_np = distance.detach().cpu().numpy()
-#        probability = np.exp(distance_np) - 1.0
-#        idx = np.where(distance_np > 0)[0]
-#
-#        if torch.sum(distance > 0) > 0:
-#            seed = self.R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-#            dst = distance[seed]
-#
-#            g = np.asarray(np.unravel_index(seed, discrepancy.shape)).transpose().tolist()[0]
-#            g[0] = dst[0].item()
-#            logger.debug("distance transform in AddRandomGuidance took {:1f} seconds..".format(time.time()- before))
-#            return g
-#        return None
 
     def add_guidance(self, guidance, discrepancy, label_names, labels):
 
@@ -597,16 +505,11 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if torch.sum(pos_discr) > 0:
             tmp_gui = self.find_guidance(pos_discr)
             if tmp_gui is not None:
-                # logger.info(f"guidance: {guidance}")
-                # logger.info(f"tmp_gui: {torch.Tensor(tmp_gui)}")
                 assert guidance.dtype == torch.int32
                 guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
-                # logger.info(guidance)
-#            guidance.append(self.find_guidance(pos_discr)) # sample from positive discrepancy (undersegmentation)
             self.is_pos = True
         return guidance
 
-    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -619,23 +522,11 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 tmp_gui = guidance[key_label]
                 assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
 
-#                tmp_gui = tmp_gui.tolist() if isinstance(tmp_gui, np.ndarray) else tmp_gui
-#                tmp_gui = json.loads(tmp_gui) if isinstance(tmp_gui, str) else tmp_gui
-
                 if tmp_gui is None:
                     self.guidance[key_label] = torch.tensor([])
                 else:
-                    # logger.warning(f"tmp_gui: {tmp_gui}")
                     self.guidance[key_label] = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
-                    # logger.warning(f"self.guidance[key_label]: {self.guidance[key_label]}")
                     assert self.guidance[key_label].dim() == 2, f"self.guidance[key_label].shape()  {self.guidance[key_label].shape}"
-#                    for row in tmp_gui:
-#                        if row.any(-1)
-#                        if -1 in row:
-#                            continue
-#                        else:
-#
-#                    self.guidance[key_label] = [j for j in tmp_gui if -1 not in j] # Filter guidances with -1 as index
 
             # Add guidance according to discrepancy
             for key_label in d["label_names"].keys():
@@ -643,7 +534,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 self.guidance[key_label] = self.add_guidance(self.guidance[key_label], discrepancy[key_label], d["label_names"], d["label"])
 
         if d[self.guidance_key].keys() == self.guidance.keys():
-            # d[self.guidance_key] = update_guidance(d[self.guidance_key], self.guidance)
             d[self.guidance_key] = self.guidance
         else:
             raise UserWarning("Can this ever happen?")
@@ -655,7 +545,6 @@ class SplitPredsLabeld(MapTransform):
     """
     Split preds and labels for individual evaluation
     """
-    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -715,13 +604,11 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
 
         # THERE MAY BE MULTIPLE BLOBS FOR SINGLE LABEL IN THE SELECTED SLICE
         label = (label > 0.5).to(dtype=torch.float32)
-        # measure.label: Label connected regions of an integer array - Two pixels are connected
+        # Label connected regions of an integer array - Two pixels are connected
         # when they are neighbors and have the same value
-        # TODO: 2D code is modified but untested!
         with cp.cuda.Device(self.device.index):
             label_labeled = label_cp(cp.asarray(label))[0]
             blobs_labels = torch.as_tensor(label_labeled, device=self.device) if dims == 2 else label
-#            blobs_labels = torch.from_numpy(measure.label(label.to(dtype=torch.int32).cpu(), background=0)).to(device=self.device) if dims == 2 else label
 
         label_guidance = []
         # If the label is not present in this slice
@@ -742,7 +629,7 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                 else:
                     # Clicks are created using this convention Channel Height Width Depth (CHWD)
                     label_guidance.append([g[0], g[-2], g[-1], sid])  # Assume channel is first and depth is last CHWD
-        return torch.tensor(label_guidance, dtype=torch.int32, device=self.device)#torch.device("cpu"))
+        return torch.tensor(label_guidance, dtype=torch.int32, device=self.device)
 
     def _randomize(self, d, key_label):
         sids = d.get(self.sids_key).get(key_label) if d.get(self.sids_key) is not None else None
@@ -755,7 +642,6 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
             sid = None
         self.sid[key_label] = sid
 
-    # @torch.no_grad()
     @timeit
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d: Dict = dict(data)
@@ -776,10 +662,8 @@ class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
                         tmp_label = 1 - tmp_label
 
                     label_guidances[key_label] = self._apply(tmp_label, self.sid.get(key_label))
-                    # logger.warning(f"label_guidances[key_label] is {label_guidances[key_label]}")
 
                 if self.guidance_key in d.keys():
-                    #d[self.guidance_key] = update_guidance(d[self.guidance_key], label_guidances)
                     d[self.guidance_key] = label_guidances
                 else:
                     d[self.guidance_key] = label_guidances # Initialize Guidance Dict

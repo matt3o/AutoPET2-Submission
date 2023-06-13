@@ -7,8 +7,8 @@ from utils.transforms import (
     AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
     PrintDatad,
-    PrintGPUUsaged,
-    DetachTensorsd,
+    # PrintGPUUsaged,
+    # DetachTensorsd,
     CheckTheAmountOfInformationLossByCropd,
     threshold_foreground,
     InitLoggerd,
@@ -70,10 +70,10 @@ def get_pre_transforms(labels, device, args):
             NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
 
             ### Random Transforms ###
-            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.train_crop_size, pos=0.6, neg=0.4) if args.train_crop_size is not None else NoOpd(),
             # Needed for the UNet together with the SimpleInferer
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),

@@ -15,8 +15,6 @@ from utils.transforms import (
     NoOpd,
     # GarbageCollectord,
 )
-from utils.transforms_old import FindDiscrepancyRegionsDeepEditd as OLDFindDiscrepancyRegionsDeepEditd
-from utils.transforms_old import AddRandomGuidanceDeepEditd as OLDAddRandomGuidanceDeepEditd
 
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 

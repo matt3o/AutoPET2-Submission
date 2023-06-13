@@ -82,8 +82,19 @@ class Interaction:
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             before_it = time.time()
             for j in range(self.max_interactions):
-                # logger.info('##### It: {} '.format(j))
-                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device) # never move directly to device, will loose too much GPU memory
+                # decollate/collate batchdata to execute click transforms
+                batchdata_list = decollate_batch(batchdata)
+                
+                for i in range(len(batchdata_list)):
+                    batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
+                    # before = time.time()
+                    batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
+                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
+                    # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
+
+                batchdata = list_data_collate(batchdata_list)
+
+                inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
 
                 # inputs = inputs.to(engine.state.device)
                 if j == 0:
@@ -120,21 +131,9 @@ class Interaction:
                 batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
                 #del predictions
 
-                # decollate/collate batchdata to execute click transforms
-                batchdata_list = decollate_batch(batchdata, detach=True)
-                
-
-                for i in range(len(batchdata_list)):
-                    batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
-                    # before = time.time()
-                    batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
-                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
-                    # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
-
                 if j <= 9 and self.args.save_nifti:
                     self.debug_viz(inputs, labels, preds, j)
-
-                batchdata = list_data_collate(batchdata_list)
+                
                 # logger.info(describe_batch_data(batchdata, total_size_only=True))
                 #del preds, gts, dice
                 #del inputs, labels, batchdata_list

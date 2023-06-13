@@ -116,28 +116,38 @@ class TerminationHandler:
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-class CustomLoader:
-    def __init__(self, name: Optional[str] = None):
-        self._name = name
+# class CustomLoader:
+#     def __init__(self, all_train_metrics):
+#         # self._name = name
+#         self.all_train_metrics = all_train_metrics
+#         self.first = True
+#         self.engine = None
 
-    def attach(self, engine: Engine) -> None:
-        """
-        Args:
-            engine: Ignite Engine, it can be a trainer, validator or evaluator.
-        """
-        if self._name is None:
-            self.logger = engine.logger
-        engine.add_event_handler(Events.EPOCH_COMPLETED, self)
+#     def attach(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self._name is None:
+#             self.logger = engine.logger
+#         engine.add_event_handler(Events.EPOCH_COMPLETED, self)
+#         self.engine = engine
 
 
-    def __call__(self, engine: Engine) -> None:
-        """
-        Args:
-            engine: Ignite Engine, it can be a trainer, validator or evaluator.
-        """
-        torch.cuda.empty_cache()
-        self.logger.info(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
-        self.logger.info(torch.cuda.memory_summary())
+#     def __call__(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self.first:
+#             del all_train_metrics["val_mean_dice"]
+#             self.first = False
+#             self.engine.remove_event_handler(self)
+
+
+        # torch.cuda.empty_cache()
+        # self.logger.info(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
+        # self.logger.info(torch.cuda.memory_summary())
 
 
 
@@ -306,10 +316,16 @@ def create_trainer(args):
     # elif args.scheduler == "CosineAnnealingLR":
     #     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
     # define event-handlers for engine
+
+    def test(x):
+        print(x)
+        sys.exit(0)
+        return x
+
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
-        TensorBoardStatsHandler(log_dir=args.output, output_transform=lambda x: None),
-        CustomLoader(),
+        TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
+        # CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event="iteration"),
         CheckpointSaver(
@@ -327,11 +343,12 @@ def create_trainer(args):
     all_val_metrics["val_mean_dice"] = MeanDice(
         output_transform=from_engine(["pred", "label"]), include_background=False
     )
-    for key_label in args.labels:
-        if key_label != "background":
-            all_val_metrics[key_label + "_dice"] = MeanDice(
-                output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-            )
+    # Disabled since it led to weird artefacts in the Tensorboard diagram
+    # for key_label in args.labels:
+    #     if key_label != "background":
+    #         all_val_metrics[key_label + "_dice"] = MeanDice(
+    #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
+    #         )
 
 
     evaluator = SupervisedEvaluator(
@@ -356,6 +373,20 @@ def create_trainer(args):
 
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
 
+
+    all_train_metrics = dict()
+    all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
+                                               include_background=False)
+    if len(args.labels) > 2:
+        for key_label in args.labels:
+            if key_label != "background":
+                all_train_metrics[key_label + "_dice"] = MeanDice(
+                    output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
+                )
+                all_train_metrics[key_label + "_dice_with_bg"] = MeanDice(
+                    output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
+                )
+
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
         ValidationHandler(
@@ -376,20 +407,12 @@ def create_trainer(args):
             save_final=True,
             final_filename="checkpoint.pt",
         ),
-        CustomLoader(),
+        # CustomLoader(all_train_metrics),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event="iteration"),
     ]
     
 
-    all_train_metrics = dict()
-    all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
-                                               include_background=False)
-    for key_label in args.labels:
-        if key_label != "background":
-            all_train_metrics[key_label + "_dice"] = MeanDice(
-                output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-            )
 
     trainer = SupervisedTrainer(
         device=device,

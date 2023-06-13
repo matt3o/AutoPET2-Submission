@@ -194,7 +194,8 @@ def get_network(network, labels, args):
     if network == "dynunet":
         network = DynUNet(
             spatial_dims=3,
-            in_channels=len(labels) + 1,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
             out_channels=len(labels),
             kernel_size=[3, 3, 3, 3, 3 ,3],
             strides=[1, 2, 2, 2, 2, [2, 2, 1]],
@@ -208,7 +209,8 @@ def get_network(network, labels, args):
     elif network == "smalldynunet":
         network = DynUNet(
             spatial_dims=3,
-            in_channels=len(labels) + 1,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
             out_channels=len(labels),
             kernel_size=[3, 3, 3],
             strides=[1, 2, [2, 2, 1]],

@@ -82,28 +82,18 @@ class Interaction:
 
         # Set up the initial batch data
         in_channels=1 + len(self.args.labels)
-        logger.info(f"in_channels: {in_channels}")
         batchdata_list = decollate_batch(batchdata)
         for i in range(len(batchdata_list)):
-            # logger.info(batchdata_list[i][CommonKeys.IMAGE].shape)
             tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
-            # logger.info(f"tmp_image.shape {tmp_image.shape}")
             assert len(tmp_image.shape) == 4
             new_shape = list(tmp_image.shape)
             new_shape[0] = in_channels
+            # Set the signal to 0 for all input images
+            # image is on channel 0 of e.g. (1,128,128,128) and the signals get appended, so
+            # e.g. (3,128,128,128) for two labels
             inputs = torch.zeros(new_shape, device=engine.state.device)
             inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
             batchdata_list[i][CommonKeys.IMAGE] = inputs
-            # logger.info(batchdata_list[i][CommonKeys.IMAGE].shape)
-            # exit(0)
-            # for _ in range(1, in_channels + 1):
-            #     # self.number_intensity_ch==1, see AddGuidanceSignalDeepEditd
-            #     signal = torch.zeros_like(tmp_image)
-            #     tmp_image = torch.cat([tmp_image, signal], dim=0)
-            #     logger.info(f"tmp_image.shape {tmp_image.shape}")
-            #     # batchdata_list[0][CommonKeys.IMAGE][0] = batchdata_list[0][CommonKeys.IMAGE]
-            # batchdata_list[i][CommonKeys.IMAGE] = tmp_image
-            # assert tmp_image.shape[0] == 3, f"tmp_image.shape[0] is {tmp_image.shape[0]}"
         batchdata = list_data_collate(batchdata_list)
 
 

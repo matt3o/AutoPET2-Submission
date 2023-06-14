@@ -71,13 +71,16 @@ class Interaction:
         self.click_probability_key = click_probability_key
         self.max_interactions = max_interactions
         self.args = args
+        # self.state = 'train' if self.train else 'eval'
 
     @timeit
     def __call__(self, engine: Union[SupervisedTrainer, SupervisedEvaluator], batchdata: Dict[str, torch.Tensor]):
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
-        guidance_label_overlap = 0.0
-        logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
+        # guidance_label_overlap = 0.0
+        if not self.train:
+            # Evaluation does not print epoch / iteration information
+            logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
 
         # Set up the initial batch data
@@ -119,20 +122,16 @@ class Interaction:
                     else:
                         predictions = engine.inferer(inputs, engine.network)
                 
-                if self.args.save_nifti or self.args.debug:
+                if True or self.args.save_nifti or self.args.debug:
                     post_pred = AsDiscrete(argmax=True, to_onehot=2)
                     post_label = AsDiscrete(to_onehot=2)
-
-                    # print(predictions)
-                    # print(len(decollate_batch(predictions)))
-                    # print(len(decollate_batch(labels)))
 
                     preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
                     gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
                     dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
                     logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
 
-                state = 'train' if self.train else 'eval'
+                
 
                 batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
                 #del predictions

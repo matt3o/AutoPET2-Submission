@@ -92,6 +92,7 @@ class Interaction:
         batchdata_list = decollate_batch(batchdata)
         for i in range(len(batchdata_list)):
             tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
+            # logger.info(f"tmp_image.shape: {tmp_image.shape}")
             assert len(tmp_image.shape) == 4
             new_shape = list(tmp_image.shape)
             new_shape[0] = in_channels
@@ -101,7 +102,10 @@ class Interaction:
             inputs = torch.zeros(new_shape, device=engine.state.device)
             inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
             batchdata_list[i][CommonKeys.IMAGE] = inputs
+            # logger.info(inputs.shape)
+            # logger.info(torch.sum(inputs[0]))
         batchdata = list_data_collate(batchdata_list)
+        
 
 
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
@@ -177,12 +181,12 @@ class Interaction:
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
                 #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
             logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
-        else:
-            # zero out input guidance channels
-            batchdata_list = decollate_batch(batchdata, detach=True)
-            for i in range(1, len(batchdata_list[0][CommonKeys.IMAGE])):
-                batchdata_list[0][CommonKeys.IMAGE][i] *= 0
-            batchdata = list_data_collate(batchdata_list)
+        # else:
+        #     # zero out input guidance channels
+        #     batchdata_list = decollate_batch(batchdata, detach=True)
+        #     for i in range(1, len(batchdata_list[0][CommonKeys.IMAGE])):
+        #         batchdata_list[0][CommonKeys.IMAGE][i] *= 0
+        #     batchdata = list_data_collate(batchdata_list)
         
         # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
         #torch.cuda.empty_cache()

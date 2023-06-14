@@ -347,6 +347,8 @@ def create_trainer(args):
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
 
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True)
+
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -360,6 +362,8 @@ def create_trainer(args):
             label_names=args.labels,
             max_interactions=args.max_val_interactions,
             args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
         ),
         inferer=eval_inferer,
         postprocessing=post_transform,
@@ -368,7 +372,7 @@ def create_trainer(args):
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True)
+    
 
 
     all_train_metrics = dict()
@@ -427,6 +431,8 @@ def create_trainer(args):
             label_names=args.labels,
             max_interactions=args.max_train_interactions,
             args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
         ),
         optimizer=optimizer,
         loss_function=loss_function,

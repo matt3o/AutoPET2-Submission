@@ -61,6 +61,8 @@ class Interaction:
         click_probability_key: str = "probability",
         max_interactions: int = 1,
         args = None,
+        loss_function=None,
+        post_transform=None,
     ) -> None:
 
         self.deepgrow_probability = deepgrow_probability
@@ -71,6 +73,8 @@ class Interaction:
         self.click_probability_key = click_probability_key
         self.max_interactions = max_interactions
         self.args = args
+        self.loss_function = loss_function
+        self.post_transform = post_transform
         # self.state = 'train' if self.train else 'eval'
 
     @timeit
@@ -104,10 +108,11 @@ class Interaction:
             before_it = time.time()
             for j in range(self.max_interactions):
                 inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
-
                 # inputs = inputs.to(engine.state.device)
                 if j == 0:
                     logger.info("inputs.shape is {}".format(inputs.shape))
+                    # Make sure the signal is empty in the first iteration assertion holds
+                    assert torch.sum(inputs[:,1:,...]) == 0
                 # labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
@@ -122,14 +127,28 @@ class Interaction:
                     else:
                         predictions = engine.inferer(inputs, engine.network)
                 
-                if True or self.args.save_nifti or self.args.debug:
-                    post_pred = AsDiscrete(argmax=True, to_onehot=2)
-                    post_label = AsDiscrete(to_onehot=2)
+                batchdata["pred"] = predictions
 
-                    preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
-                    gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
-                    dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
-                    logger.info('It: {} Dice: {:.4f} Epoch: {}'.format(j, dice, engine.state.epoch))
+                if not self.train or self.args.save_nifti or self.args.debug:
+                    if self.loss_function is None or self.post_transform is None:
+                        post_pred = AsDiscrete(argmax=True, to_onehot=2)
+                        post_label = AsDiscrete(to_onehot=2)
+
+                        preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
+                        gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
+                        logger.info(preds.shape)
+
+                        dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
+                        logger.info(f'It: {j} Dice: {dice:.4f} Epoch: {engine.state.epoch}')
+                    else:
+                        # batchdata_list = decollate_batch(batchdata)
+                        self.post_transform(batchdata)
+                        # for i in range(len(batchdata_list)):
+                        #     batchdata_list[i] = self.post_transform(batchdata_list[i])
+                        loss = self.loss_function(batchdata["pred"], batchdata["label"])
+                        logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
+
+                    
 
                 
 

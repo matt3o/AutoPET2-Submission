@@ -117,6 +117,10 @@ class Interaction:
                     logger.info("inputs.shape is {}".format(inputs.shape))
                     # Make sure the signal is empty in the first iteration assertion holds
                     assert torch.sum(inputs[:,1:,...]) == 0
+                    logger.info(f"image file name: {batchdata['image_meta_dict']['filename_or_obj']}")
+                    logger.info(f"labe file name: {batchdata['label_meta_dict']['filename_or_obj']}")
+                    # logger.info(describe_batch_data(batchdata))
+                    # exit(0)
                 # labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
@@ -131,36 +135,31 @@ class Interaction:
                     else:
                         predictions = engine.inferer(inputs, engine.network)
                 
-                batchdata["pred"] = predictions
+                batchdata[CommonKeys.PRED] = predictions
+                tmp_batchdata = {"pred": predictions, "label": batchdata["label"], "label_names": batchdata["label_names"]}
 
                 if not self.train or self.args.save_nifti or self.args.debug:
-                    if self.loss_function is None or self.post_transform is None:
-                        post_pred = AsDiscrete(argmax=True, to_onehot=2)
-                        post_label = AsDiscrete(to_onehot=2)
+                    # if self.loss_function is None or self.post_transform is None:
+                    # post_pred = AsDiscrete(argmax=True, to_onehot=2)
+                    # post_label = AsDiscrete(to_onehot=2)
 
-                        preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
-                        gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
-                        logger.info(preds.shape)
+                    # preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
+                    # gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
+                    # logger.info(preds.shape)
 
-                        dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
-                        logger.info(f'It: {j} Dice: {dice:.4f} Epoch: {engine.state.epoch}')
-                    else:
-                        # batchdata_list = decollate_batch(batchdata)
-                        self.post_transform(batchdata)
-                        # for i in range(len(batchdata_list)):
-                        #     batchdata_list[i] = self.post_transform(batchdata_list[i])
-                        loss = self.loss_function(batchdata["pred"], batchdata["label"])
-                        logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
+                    # dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
+                    # logger.info(f'It: {j} Dice: {dice:.4f} Epoch: {engine.state.epoch}')
+                    # else:
+                    tmp_batchdata_list = decollate_batch(tmp_batchdata)
+                    # tmp_batchdata = self.post_transform(tmp_batchdata)
+                    for i in range(len(tmp_batchdata_list)):
+                        tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
+                    tmp_batchdata = list_data_collate(tmp_batchdata_list)
+                    loss = self.loss_function(batchdata["pred"], batchdata["label"])
+                    logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
 
-                    
-
-                
-
-                batchdata.update({CommonKeys.PRED: predictions}) # update predictions of this iteration
-                #del predictions
-
-                if j <= 9 and self.args.save_nifti:
-                    self.debug_viz(inputs, labels, preds, j)
+                    if j <= 9 and self.args.save_nifti:
+                        self.debug_viz(inputs, labels, tmp_batchdata["pred"], j)
 
 
                 # decollate/collate batchdata to execute click transforms

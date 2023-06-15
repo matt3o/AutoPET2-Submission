@@ -303,18 +303,16 @@ def create_trainer(args):
     CURRENT_EPOCH = args.current_epoch
 
     # SCHEDULER
-    # WARNING LrScheduleHandler works per default on the epoch level contrary the scheduler
-    # Therefore one step == one epoch!
     #if args.scheduler == "StepLR":
     #    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
     if args.scheduler == "MultiStepLR":
          # Do a x step descent
         steps = 4
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ITERATIONS_PER_EPOCH * num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=ITERATIONS_PER_EPOCH * MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=ITERATIONS_PER_EPOCH * MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
         
         
         
@@ -392,7 +390,10 @@ def create_trainer(args):
 
 
     train_handlers = [
-        LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
+        LrScheduleHandler(lr_scheduler=lr_scheduler, 
+                          print_lr=True,
+                          epoch_level=False,
+                          ),
         ValidationHandler(
             validator=evaluator, interval=args.val_freq, epoch_level=(not args.eval_only)
         ),

@@ -7,6 +7,12 @@
 
 [[ -n "$CUDA_VISIBLE_DEVICES" ]] && python train.py -a --disks --sigma 1 --inferer SlidingWindowInferer -i /projects/mhadlich_segmentation/AutoPET/AutoPET -o /projects/mhadlich_segmentation/data/22 -d /projects/mhadlich_segmentation/data/22/data -c /local/work/mhadlich/cache -e 400 --log
 
+python train.py -a --disks --sigma 1 --inferer SlidingWindowInferer -i /projects/mhadlich_segmentation/AutoPET/AutoPET -o /projects/mhadlich_segmentation/data/87 -d /projects/mhadlich_segmentation/data/87/data -c /local/work/mhadlich/cache -ta -e 200 -f 10 --sw_batch_size 32 --scheduler PolynomialLR
+
+Slurm run on IKIM:
+srun --partition GPUampere --gpus 1 -J 86 --time 4-00:00:00 bash -c "python train.py -a --disks --sigma 1 --inferer SimpleInferer -i /projects/mhadlich_segmentation/AutoPET/AutoPET -o /projects/mhadlich_segmentation/data/86 -d /projects/mhadlich_segmentation/data/86/data -c /local/work/mhadlich/cache -ta -e 200 -f 10 --val_crop_size '(192,192,256)'"
+
+
 
 ## For evaluation
 

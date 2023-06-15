@@ -81,7 +81,7 @@ class Interaction:
     def __call__(self, engine: Union[SupervisedTrainer, SupervisedEvaluator], batchdata: Dict[str, torch.Tensor]):
         if batchdata is None:
             raise ValueError("Must provide batch data for current iteration.")
-        # guidance_label_overlap = 0.0
+        
         if not self.train:
             # Evaluation does not print epoch / iteration information
             logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
@@ -92,7 +92,6 @@ class Interaction:
         batchdata_list = decollate_batch(batchdata)
         for i in range(len(batchdata_list)):
             tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
-            # logger.info(f"tmp_image.shape: {tmp_image.shape}")
             assert len(tmp_image.shape) == 4
             new_shape = list(tmp_image.shape)
             new_shape[0] = in_channels
@@ -102,8 +101,6 @@ class Interaction:
             inputs = torch.zeros(new_shape, device=engine.state.device)
             inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
             batchdata_list[i][CommonKeys.IMAGE] = inputs
-            # logger.info(inputs.shape)
-            # logger.info(torch.sum(inputs[0]))
         batchdata = list_data_collate(batchdata_list)
         
 
@@ -111,21 +108,18 @@ class Interaction:
         if np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
             before_it = time.time()
             for j in range(self.max_interactions):
+                # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
                 inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
-                # inputs = inputs.to(engine.state.device)
                 if j == 0:
                     logger.info("inputs.shape is {}".format(inputs.shape))
                     # Make sure the signal is empty in the first iteration assertion holds
                     assert torch.sum(inputs[:,1:,...]) == 0
+                    logger.info("WARNING: The file name prints dont work as of now, needs to be fixed")
                     logger.info(f"image file name: {batchdata['image_meta_dict']['filename_or_obj']}")
                     logger.info(f"labe file name: {batchdata['label_meta_dict']['filename_or_obj']}")
-                    # logger.info(describe_batch_data(batchdata))
-                    # exit(0)
-                # labels = labels.to(engine.state.device)
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()
-                #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="Before forward pass")
 
                 # Forward Pass
                 with torch.no_grad():
@@ -136,13 +130,13 @@ class Interaction:
                         predictions = engine.inferer(inputs, engine.network)
                 
                 batchdata[CommonKeys.PRED] = predictions
-                tmp_batchdata = {"pred": predictions, "label": batchdata["label"], "label_names": batchdata["label_names"]}
-
+                
                 if not self.train or self.args.save_nifti or self.args.debug:
                     loss = self.loss_function(batchdata["pred"], batchdata["label"])
                     logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
 
                     if j <= 9 and self.args.save_nifti:
+                        tmp_batchdata = {"pred": predictions, "label": batchdata["label"], "label_names": batchdata["label_names"]}
                         tmp_batchdata_list = decollate_batch(tmp_batchdata)
                         for i in range(len(tmp_batchdata_list)):
                             tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
@@ -150,36 +144,18 @@ class Interaction:
                         
                         self.debug_viz(inputs, labels, tmp_batchdata["pred"], j)
 
-
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata)
-                
                 for i in range(len(batchdata_list)):
                     batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                     # before = time.time()
                     batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform, TODO add patch sized transform
-                    # logger.info("self.click_transforms took {:.2f} seconds..".format(time.time()- before))
-                    # NOTE: Image size e.g. 3x192x192x256, label size 1x192x192x256
 
                 batchdata = list_data_collate(batchdata_list)
 
-                # logger.info(describe_batch_data(batchdata, total_size_only=True))
-                #del preds, gts, dice
-                #del inputs, labels, batchdata_list
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
-                #print_gpu_usage(device=engine.state.device, used_memory_only=False, context="after It")
             logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
-        # else:
-        #     # zero out input guidance channels
-        #     batchdata_list = decollate_batch(batchdata, detach=True)
-        #     for i in range(1, len(batchdata_list[0][CommonKeys.IMAGE])):
-        #         batchdata_list[0][CommonKeys.IMAGE][i] *= 0
-        #     batchdata = list_data_collate(batchdata_list)
-        
-        # print_gpu_usage(device=engine.state.device, used_memory_only=True, context="before empty_cache()")
-        #torch.cuda.empty_cache()
-        #print_gpu_usage(device=engine.state.device, used_memory_only=True, context="END interaction class")
-        # first item in batch only
+
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle
 

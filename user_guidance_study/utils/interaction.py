@@ -139,26 +139,15 @@ class Interaction:
                 tmp_batchdata = {"pred": predictions, "label": batchdata["label"], "label_names": batchdata["label_names"]}
 
                 if not self.train or self.args.save_nifti or self.args.debug:
-                    # if self.loss_function is None or self.post_transform is None:
-                    # post_pred = AsDiscrete(argmax=True, to_onehot=2)
-                    # post_label = AsDiscrete(to_onehot=2)
-
-                    # preds = torch.stack([post_pred(el) for el in decollate_batch(predictions)])
-                    # gts = torch.stack([post_label(el) for el in decollate_batch(labels)])
-                    # logger.info(preds.shape)
-
-                    # dice = compute_dice(preds, gts, include_background=True)[0, 1].item()
-                    # logger.info(f'It: {j} Dice: {dice:.4f} Epoch: {engine.state.epoch}')
-                    # else:
-                    tmp_batchdata_list = decollate_batch(tmp_batchdata)
-                    # tmp_batchdata = self.post_transform(tmp_batchdata)
-                    for i in range(len(tmp_batchdata_list)):
-                        tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
-                    tmp_batchdata = list_data_collate(tmp_batchdata_list)
                     loss = self.loss_function(batchdata["pred"], batchdata["label"])
                     logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
 
                     if j <= 9 and self.args.save_nifti:
+                        tmp_batchdata_list = decollate_batch(tmp_batchdata)
+                        for i in range(len(tmp_batchdata_list)):
+                            tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
+                        tmp_batchdata = list_data_collate(tmp_batchdata_list)
+                        
                         self.debug_viz(inputs, labels, tmp_batchdata["pred"], j)
 
 

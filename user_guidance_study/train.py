@@ -23,27 +23,27 @@ from typing import Optional
 import pprint
 import uuid
 import shutil
+from pickle import dump
+import signal
+
 
 # Things needed to debug the Interaction class
 import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (8*4096, rlimit[1]))
+resource.setrlimit(resource.RLIMIT_NOFILE, (8*8192, rlimit[1]))
 
 import torch
+import cupy as cp
+
+from utils.logger import setup_loggers, get_logger
 
 logger = None
+output_dir = None
 
-# dlprof profiling
-#PROFILING=True
-#if PROFILING:
-#    import nvidia_dlprof_pytorch_nvtx
-#    from monai.handlers.nvtx_handlers import MarkHandler, RangeHandler
-#    nvidia_dlprof_pytorch_nvtx.init()
-    
 from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
+from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device, get_git_information
 
 from utils.interaction import Interaction
-
 from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
 
 #from monai.config import print_config
@@ -58,6 +58,7 @@ from monai.handlers import (
     TensorBoardStatsHandler,
     ValidationHandler,
     from_engine,
+    GarbageCollector,
 )
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
@@ -71,11 +72,98 @@ import threading
 from monai.data import set_track_meta
 from monai.utils import set_determinism
 
-from utils.helperr import get_gpu_usage
+import threading
+
+from monai.optimizers.novograd import Novograd
+
+from ignite.contrib.handlers.tensorboard_logger import *
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
+
+def oom_observer(device, alloc, device_alloc, device_free):
+    if device is not None and logger is not None:
+        logger.critical(torch.cuda.memory_summary(device))
+    # snapshot right after an OOM happened
+    print('saving allocated state during OOM')
+    snapshot = torch.cuda.memory._snapshot()
+    dump(snapshot, open(f'{output_dir}/oom_snapshot.pickle', 'wb'))
+    # logger.critical(snapshot)
+    torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
+    torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)
+
+
+class TerminationHandler:
+    def __init__(self, args):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        self.args = args
+
+    def exit_gracefully(self, *args):
+        logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
+        self.cleanup()
+        sys.exit(99)
+
+    def cleanup(self):
+        logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
+        # Cleanup
+        if self.args.throw_away_cache:
+            logger.info("Cleaning up..")
+            shutil.rmtree(self.args.cache_dir, ignore_errors=True)
+        else:
+            logger.info("Leaving cache dir as it is..")
 
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+# class CustomLoader:
+#     def __init__(self, all_train_metrics):
+#         # self._name = name
+#         self.all_train_metrics = all_train_metrics
+#         self.first = True
+#         self.engine = None
+
+#     def attach(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self._name is None:
+#             self.logger = engine.logger
+#         engine.add_event_handler(Events.EPOCH_COMPLETED, self)
+#         self.engine = engine
+
+
+#     def __call__(self, engine: Engine) -> None:
+#         """
+#         Args:
+#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
+#         """
+#         if self.first:
+#             del all_train_metrics["val_mean_dice"]
+#             self.first = False
+#             self.engine.remove_event_handler(self)
+
+
+        # torch.cuda.empty_cache()
+        # self.logger.info(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
+        # self.logger.info(torch.cuda.memory_summary())
+
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    logger.critical(torch.cuda.memory_summary())
+    
+    
+
+sys.excepthook = handle_exception
 
 class GPU_Thread(threading.Thread):
     def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
@@ -106,7 +194,8 @@ def get_network(network, labels, args):
     if network == "dynunet":
         network = DynUNet(
             spatial_dims=3,
-            in_channels=len(labels) + 1,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
             out_channels=len(labels),
             kernel_size=[3, 3, 3, 3, 3 ,3],
             strides=[1, 2, 2, 2, 2, [2, 2, 1]],
@@ -120,7 +209,8 @@ def get_network(network, labels, args):
     elif network == "smalldynunet":
         network = DynUNet(
             spatial_dims=3,
-            in_channels=len(labels) + 1,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
             out_channels=len(labels),
             kernel_size=[3, 3, 3],
             strides=[1, 2, [2, 2, 1]],
@@ -134,10 +224,39 @@ def get_network(network, labels, args):
     set_track_meta(False)
     return network
 
+class GPU_Thread(threading.Thread):
+    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
+        super().__init__()
+        self.threadID = threadID
+        self.name = name
+        self.device = device
+        self.csv_file = open(f"{output_file}", "w")
+        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+        self.csv_file.write(header)
+        self.csv_file.write("\n")
+        self.csv_file.flush()
+        self.stopped = event
+
+    def __del__(self):
+        self.csv_file.flush()
+        self.csv_file.close()
+
+    def run(self):
+        while not self.stopped.wait(1):
+            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+            self.csv_file.write(usage)
+            self.csv_file.write("\n")
+            self.csv_file.flush()
+
+
 
 def create_trainer(args):
 
     set_determinism(seed=args.seed)
+    with cp.cuda.Device(args.gpu):
+        mempool = cp.get_default_memory_pool()
+        mempool.set_limit(size=14*1024**3)
+        cp.random.seed(seed=args.seed)
 
     device = torch.device(f"cuda:{args.gpu}")
 
@@ -146,12 +265,16 @@ def create_trainer(args):
     post_transform = get_post_transforms(args.labels)
 
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
+    numel_train = len(train_loader.dataset)
+    numel_val = len(val_loader.dataset)
 
-    # define training components
+    # NETWORK - define training components
     network = get_network(args.network, args.labels, args).to(device)
 
     print('Number of parameters:', f"{count_parameters(network):,}")
 
+    if args.model_filepath != 'None' and not args.resume:
+        raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
     if args.resume:
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
@@ -160,18 +283,55 @@ def create_trainer(args):
             torch.load(args.model_filepath, map_location=map_location)['net']
         )
 
-    
+     # INFERER
+    if args.inferer == "SimpleInferer":
+        train_inferer = SimpleInferer()
+        eval_inferer = SimpleInferer()
+    elif args.inferer == "SlidingWindowInferer":
+        # Reduce if there is an OOM
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
+
+    # OPTIMIZER
+    if args.optimizer == "Novograd":
+        optimizer = Novograd(network.parameters(), args.learning_rate)
+    elif args.optimizer == "Adam": # default
+        optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
+
+    MAX_EPOCHS = args.epochs
+    ITERATIONS_PER_EPOCH = numel_train
+    CURRENT_EPOCH = args.current_epoch
+
+    # SCHEDULER
+    # WARNING LrScheduleHandler works per default on the epoch level contrary the scheduler
+    # Therefore one step == one epoch!
+    #if args.scheduler == "StepLR":
+    #    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
+    if args.scheduler == "MultiStepLR":
+         # Do a x step descent
+        steps = 4
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
+    elif args.scheduler == "PolynomialLR":
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+    elif args.scheduler == "CosineAnnealingLR":
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
+        
+        
+        
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
-        TensorBoardStatsHandler(log_dir=args.output, output_transform=lambda x: None),
+        # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
+        # CustomLoader(),
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        GarbageCollector(log_level=10, trigger_event="iteration"),
         CheckpointSaver(
-            save_dir=args.output,
-            save_dict={"net": network},
-            save_key_metric=True,
-            save_final=True,
-            save_interval=args.save_interval,
-            final_filename="pretrained_deepedit_" + args.network + ".pt",
+             save_dir=args.output,
+             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
+             save_key_metric=True,
+             save_final=True,
+             save_interval=args.save_interval,
+             final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
     ]
     
@@ -180,20 +340,15 @@ def create_trainer(args):
     all_val_metrics["val_mean_dice"] = MeanDice(
         output_transform=from_engine(["pred", "label"]), include_background=False
     )
-    for key_label in args.labels:
-        if key_label != "background":
-            all_val_metrics[key_label + "_dice"] = MeanDice(
-                output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-            )
+    # Disabled since it led to weird artefacts in the Tensorboard diagram
+    # for key_label in args.labels:
+    #     if key_label != "background":
+    #         all_val_metrics[key_label + "_dice"] = MeanDice(
+    #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
+    #         )
 
-    if args.inferer == "SimpleInferer":
-        inferer=SimpleInferer()
-        train_inferer = eval_inferer = inferer
-    elif args.inferer == "SlidingWindowInferer":
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian", overlap=0)
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=1, mode="gaussian", overlap=0)
-    else:
-        raise UserWarning("Invalid Inferer selected")
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True)
+
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -207,6 +362,8 @@ def create_trainer(args):
             label_names=args.labels,
             max_interactions=args.max_val_interactions,
             args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
         ),
         inferer=eval_inferer,
         postprocessing=post_transform,
@@ -215,18 +372,24 @@ def create_trainer(args):
         val_handlers=val_handlers,
     )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True) #,batch=True)
-    if not args.fast:
-        optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
-    else:
-        # Idea from fast_training_tutorial
-        optimizer = torch.optim.SGD(
-                        network.parameters(),
-                        lr=args.learning_rate * 50,
-                        momentum=0.9,
-                        weight_decay=0.00004,)
+    
 
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.1)
+
+    all_train_metrics = dict()
+    all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
+                                               include_background=False)
+    if len(args.labels) > 2:
+        for key_label in args.labels:
+            if key_label != "background":
+                all_train_metrics[key_label + "_dice"] = MeanDice(
+                    output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
+                )
+                all_train_metrics[key_label + "_dice_with_bg"] = MeanDice(
+                    output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
+                )
+
+    tb_logger = TensorboardLogger(log_dir=f"{args.output}/tensorboard")
+
 
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
@@ -236,49 +399,24 @@ def create_trainer(args):
         StatsHandler(
             tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
         ),
-        TensorBoardStatsHandler(
-            log_dir=args.output,
-            tag_name="train_loss",
-            output_transform=from_engine(["loss"], first=True),
-        ),
+        # TensorBoardStatsHandler(
+        #     log_dir=args.output,
+        #     tag_name="train_loss",
+        #     output_transform=from_engine(["loss"], first=True),
+        # ),
         CheckpointSaver(
-            save_dir=args.output,# class CustomLoader:
-#     def __init__(self, name: Optional[str] = None):
-#         self._name = name
-        
-
-#     def attach(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         if self._name is None:
-#             self.logger = engine.logger
-#         engine.add_event_handler(Events.STARTED, self)
-
-
-#     def __call__(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         pass
+            save_dir=args.output,
             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
-            save_interval=args.save_interval * 2,
+            save_interval=args.save_interval,
             save_final=True,
             final_filename="checkpoint.pt",
         ),
+        # CustomLoader(all_train_metrics),
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        GarbageCollector(log_level=10, trigger_event="iteration"),
     ]
     
 
-    all_train_metrics = dict()
-    all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
-                                               include_background=False)
-    for key_label in args.labels:
-        if key_label != "background":
-            all_train_metrics[key_label + "_dice"] = MeanDice(
-                output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-            )
 
     trainer = SupervisedTrainer(
         device=device,
@@ -293,6 +431,8 @@ def create_trainer(args):
             label_names=args.labels,
             max_interactions=args.max_train_interactions,
             args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
         ),
         optimizer=optimizer,
         loss_function=loss_function,
@@ -303,19 +443,87 @@ def create_trainer(args):
         train_handlers=train_handlers,
     )
 
-    return trainer, evaluator
+
+    tb_logger.attach_output_handler(
+        evaluator,
+        event_name=Events.EPOCH_COMPLETED,
+        tag="1_validation",
+        metric_names=list(all_val_metrics.keys()),
+        global_step_transform=global_step_from_engine(trainer),
+    )
+
+    tb_logger.attach_output_handler(
+        trainer,
+        event_name=Events.EPOCH_COMPLETED,
+        tag="2_training",
+        metric_names=list(all_train_metrics.keys()),
+        global_step_transform=global_step_from_engine(trainer),
+    )
+
+    # tb_logger.attach_output_handler(
+    #     trainer,
+    #     event_name=Events.ITERATION_COMPLETED,
+    #     tag="training",
+    #     output_transform=lambda loss: {"loss": loss}
+    # )
+
+    tb_logger.attach_output_handler(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        tag="2_training",
+        output_transform=lambda x: x[0]["loss"],
+    )
+
+    tb_logger.attach_opt_params_handler(
+        trainer,
+        event_name=Events.ITERATION_STARTED,
+        optimizer=optimizer,
+        tag="3_params"
+    )
+
+    # Attach the logger to the trainer to log model's weights norm after each iteration
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=WeightsScalarHandler(network)
+    )
+
+    # Attach the logger to the trainer to log model's weights as a histogram after each epoch
+    tb_logger.attach(
+        trainer,
+        event_name=Events.EPOCH_COMPLETED,
+        log_handler=WeightsHistHandler(network)
+    )
+
+    # Attach the logger to the trainer to log model's gradients norm after each iteration
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=GradsScalarHandler(network)
+    )
+
+    # Attach the logger to the trainer to log model's gradients as a histogram after each epoch
+    tb_logger.attach(
+        trainer,
+        event_name=Events.EPOCH_COMPLETED,
+        log_handler=GradsHistHandler(network)
+    )
+
+
+    return trainer, evaluator, tb_logger
 
 
 def run(args):
     for arg in vars(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
+    device = torch.device(f"cuda:{args.gpu}")
 
     if args.export:
         logger.info(
             "{}:: Loading PT Model from: {}".format(args.gpu, args.input)
         )
-        device = torch.device(f"cuda:{args.gpu}")
+        
         network = get_network(args.network, args.labels).to(device)
 
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
@@ -326,56 +534,81 @@ def run(args):
         torch.jit.save(model_ts, os.path.join(args.output))
         return
 
-    if not os.path.exists(args.output):
-        logger.info(
-            "output path [{}] does not exist. creating it now.".format(args.output)
-        )
-        os.makedirs(args.output, exist_ok=True)
-
     # Init the Inferer
-    #if args.inferer == "SlidingWindowInferer":
     args.sw_roi_size = eval(args.sw_roi_size)
-    args.crop_spatial_size = eval(args.crop_spatial_size)
+    assert len(args.sw_roi_size) == 3
+
+    if args.val_crop_size == "None":
+        args.val_crop_size = None
+    else:
+        args.val_crop_size = eval(args.val_crop_size)
+        assert len(args.val_crop_size) == 3
+
+    if args.train_crop_size == "None":
+        args.train_crop_size = None
+    else:
+        args.train_crop_size = eval(args.train_crop_size)
+        assert len(args.train_crop_size) == 3
 
     # verify both have a valid size (for Unet with seven layers)
-    assert len(args.sw_roi_size) == 3 and len(args.crop_spatial_size) == 3
-    if args.network == "dynunet":
-        for size in args.crop_spatial_size:
+     
+    if args.network == "dynunet" and args.inferer == "SimpleInferer":
+        for size in args.train_crop_size:
             assert (size % 64) == 0
+        for size in args.val_crop_size:
+            assert (size % 64) == 0
+
 
     # click-generation
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
     stopFlag = threading.Event()
-    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", torch.device(f"cuda:{args.gpu}"), stopFlag)
-
+    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device, stopFlag)
+    logger.info(f"Logging GPU usage to {args.output}/usage.csv")
+    # TODO test this on torch v2 
+    # torch.set_default_device(f"cuda:{args.gpu}")
 
     try:
         wp = WorkflowProfiler()
+        terminator = TerminationHandler(args)
         
         with wp:           
-            trainer, evaluator = create_trainer(args)
-            gpu_thread.start()
+            trainer, evaluator, tb_logger = create_trainer(args)
+            with tb_logger:
+                gpu_thread.start()
 
-            epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
-            iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
-            batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
-            innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
-            whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
-            
+                epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
+                iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
+                batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+                innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
+                whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
 
-            start_time = time.time()
-            if not args.eval_only:
-                trainer.run()
-            else:
-                evaluator.run()
-            end_time = time.time()
-            logger.info("Total Training Time {}".format(end_time - start_time))
-            stopFlag.set()
-            gpu_thread.join()
-
-            logger.info("\n{}".format(wp.get_times_summary_pd()))
-
+                start_time = time.time()
+                # torch._C._cuda_attach_out_of_memory_observer(cb)
+                
+                try:
+                    if not args.eval_only:
+                        trainer.run()
+                    else:
+                        evaluator.run()
+                except torch.cuda.OutOfMemoryError:
+                    oom_observer(device, None, None, None)
+                    logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                    
+                except RuntimeError as e:
+                    if "cuDNN" in str(e):
+                        # Got a cuDNN error
+                        pass
+                    oom_observer(device, None, None, None)
+                    logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                    
+                finally:
+                    tb_logger.close()
+                    stopFlag.set()
+                    logger.info(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+                    logger.info("Total Training Time {}".format(time.time() - start_time))
+                    logger.info(f"\n{wp.get_times_summary_pd()}")
+                    gpu_thread.join()
 
         if not args.eval_only:
             logger.info("{}:: Saving Final PT Model".format(args.gpu))
@@ -388,14 +621,16 @@ def run(args):
             model_ts = torch.jit.script(trainer.network)
             torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
     finally:
-        # Cleanup
-        if args.delete_cache_after_finish:
-            logger.info("Cleaning up..")
-            shutil.rmtree(args.cache_dir, ignore_errors=True)
-
-
+        terminator.cleanup()
 
 def main():
+    global logger
+    global output_dir
+    # torch.cuda.init()
+    # torch.cuda.memory._record_memory_history(True)
+    #torch._C._cuda_attach_out_of_memory_observer(oom_observer)
+
+    
     torch.set_num_threads(int(os.cpu_count() / 3)) # Limit number of threads to 1/3 of resources
     parser = argparse.ArgumentParser()
 
@@ -405,7 +640,7 @@ def main():
     parser.add_argument("-d", "--data", default="/cvhci/temp/mhadlich/data")
     # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
-    parser.add_argument("-de", "--delete_cache_after_finish", default=True, action='store_true')
+    parser.add_argument("-ta", "--throw_away_cache", default=False, action='store_true')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
 
@@ -418,14 +653,19 @@ def main():
     parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
-    parser.add_argument("--crop_spatial_size", default="(128,128,128)", action='store')
+    parser.add_argument("--train_crop_size", default="(128,128,128)", action='store')
+    parser.add_argument("--val_crop_size", default="(224,224,320)", action='store')
+    parser.add_argument("--sw_batch_size", type=int, default=1)
+    
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')
-    parser.add_argument("--num_workers", type=int, default=2)
+    parser.add_argument("--num_workers", type=int, default=1)
     parser.add_argument("-e", "--epochs", type=int, default=100)
+    # If learning rate is set to 0.001, the DiceCE will produce Nans?!?
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
-    parser.add_argument("--fast", default=False, action='store_true')
+    parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
+    parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
     parser.add_argument("--model_weights", type=str, default='None')
     parser.add_argument("--best_val_weights", default=False, action='store_true')
 
@@ -469,68 +709,70 @@ def main():
     parser.add_argument("--conv1s", default=False, action='store_true')
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
-    parser.add_argument("-log", "--log_to_file", default=False, action='store_true')
+    parser.add_argument("--no_log", default=False, action='store_true')
+    parser.add_argument("--dont_check_output_dir", default=False, action='store_true')
+    parser.add_argument("--debug", default=False, action='store_true')
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
+    # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()
+    args.caller_args = sys.argv
+    args.env = os.environ
+    args.git = get_git_information()
 
 
     # For single label using one of the Medical Segmentation Decathlon
-    args.labels = {'spleen': 1, # careful this label name is linked in AddGuidanceSignalDeepEditd and probably has to be modified there first
+    args.labels = {'spleen': 1,
                    'background': 0
                    }
 
     # Restoring previous model if resume flag is True
     args.model_filepath = args.model_weights
+    args.current_epoch = -1
     if args.best_val_weights:
         args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
-        current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
-        args.epochs = args.epochs - current_epoch # Reset epochs based on previous model
-
+        args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
+        args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
+    
+    
+    if not args.dont_check_output_dir and os.path.isdir(args.output):
+        raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)
     
-    args.cache_dir = "{}/{}".format(args.cache_dir, uuid.uuid4())
+    output_dir = args.output
+    
+    if args.throw_away_cache:
+        args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
+    else:
+        args.cache_dir = f"{args.cache_dir}"
+
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
     
     if not os.path.exists(args.data):
         pathlib.Path(args.data).mkdir(parents=True)
 
-    setup_loggers(args)
+    args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
+
+    if args.debug:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    if args.no_log:
+        log_folder_path = None
+    else:
+        log_folder_path = args.output
+    setup_loggers(loglevel, log_folder_path)
+    logger = get_logger()
     logger.info(f"CPU Count: {os.cpu_count()}")
     logger.info(f"Num threads: {torch.get_num_threads()}")
 
+    args.cwd = os.getcwd()
+
+
     run(args)
-
-def setup_loggers(args):
-    global logger
-    logger = logging.getLogger()
-    if (logger.hasHandlers()):
-        logger.handlers.clear()
-    logger.propagate = False
-    logger.setLevel(logging.DEBUG)
-    # Add the stream handler
-    streamHandler = logging.StreamHandler()
-    formatter = logging.Formatter(fmt="[%(asctime)s.%(msecs)03d][%(levelname)s](%(name)s) - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    streamHandler.setFormatter(formatter)
-    streamHandler.setLevel(logging.INFO)
-    logger.addHandler(streamHandler)
-
-    if args.log_to_file:
-    # Add the file handler
-        log_file_path = "{}/log.txt".format(args.output)
-        fileHandler = logging.FileHandler(log_file_path)
-        fileHandler.setFormatter(formatter)
-        logger.addHandler(fileHandler)
-        logger.info("Logging all the data to '{}'".format(log_file_path))
-    else:
-        logger.info("Logging only to the console")
-
-    # Set logging level for external libraries
-    for _ in ("ignite.engine.engine.SupervisedTrainer", "ignite.engine.engine.SupervisedEvaluator"):
-        logging.getLogger(_).setLevel(logging.INFO)
 
 if __name__ == "__main__":
     main()

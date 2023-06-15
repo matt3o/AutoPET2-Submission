@@ -3,10 +3,18 @@ from utils.transforms import (
     AddRandomGuidanceDeepEditd,
     FindDiscrepancyRegionsDeepEditd,
     NormalizeLabelsInDatasetd,
-    FindAllValidSlicesMissingLabelsd,
-    AddInitialSeedPointMissingLabelsd,
     SplitPredsLabeld,
+    PrintDatad,
+    # PrintGPUUsaged,
+    # DetachTensorsd,
+    CheckTheAmountOfInformationLossByCropd,
+    threshold_foreground,
+    InitLoggerd,
+    NoOpd,
+    # GarbageCollectord,
 )
+
+from monai.transforms.transform import MapTransform, Randomizable, Transform
 
 from monai.transforms import (
     Activationsd,
@@ -26,90 +34,76 @@ from monai.transforms import (
     ToTensord,
     CenterSpatialCropd,
     RandCropByPosNegLabeld,
-    EnsureTyped,
+    DeleteItemsd,
+    CuCIMd, 
+    RandCuCIMd,
+    ToCupyd,
+    CropForegroundd,
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
+
 
 import torch
 import glob
 import os
 import logging
 
-logger = logging.getLogger(__name__)
+from utils.helper import describe_batch_data
+
+logger = logging.getLogger("interactive_segmentation")
+
+# crop_size multiples of sliding window with overlap 0.25 (default): 128, 224, 320, 416, 512
 
 def get_pre_transforms(labels, device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
         t_train = [
+            # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
+            InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
-            #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest")),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+
             ### Random Transforms ###
-            #RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.crop_spatial_size, pos=0.6, neg=0.4),
+            RandCropByPosNegLabeld(keys=("image", "label"), label_key="label", spatial_size=args.train_crop_size, pos=0.6, neg=0.4) if args.train_crop_size is not None else NoOpd(),
+            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(), # UNet needs this
             RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
             
-
-            # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
-            AddGuidanceSignalDeepEditd(keys="image",
-                                        guidance_key="guidance",
-                                        sigma=args.sigma,
-                                        disks=args.disks,
-                                        edt=args.edt,
-                                        gdt=args.gdt,
-                                        gdt_th=args.gdt_th,
-                                        exp_geos=args.exp_geos,
-                                        adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
-            #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            # Move to GPU
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
         t_val = [
+            # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
+            InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CenterSpatialCropd(keys=["image", "label"], roi_size=(192, 192, 256)),
-            #Resized(keys=("image", "label"), spatial_size=[96, 96, 128], mode=("area", "nearest"))
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            # Todo try to remove the Padding
-            DivisiblePadd(keys=["image", "label"], k=64, value=0), # Needed for DynUNet
-            # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
-            AddGuidanceSignalDeepEditd(keys="image",
-                                        guidance_key="guidance",
-                                        sigma=args.sigma,
-                                        disks=args.disks,
-                                        edt=args.edt,
-                                        gdt=args.gdt,
-                                        gdt_th=args.gdt_th,
-                                        exp_geos=args.exp_geos,
-                                        adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
-            #EnsureTyped(keys=("image", "label"), device=device, track_meta=False),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+
+            # Move to GPU
+            ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
     else: # MSD Spleen
         t_train = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             ScaleIntensityRanged(keys="image", a_min=-224, a_max=212, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
@@ -122,9 +116,11 @@ def get_pre_transforms(labels, device, args):
             RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
             Resized(keys=("image", "label"), spatial_size=[128, 128, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
+            
+            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
+            #ToTensord(keys=("image", "guidance"), device=device),
+            ToTensord(keys=("image"), device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -134,13 +130,15 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu')), # TODO: check why we need this on the CPU
+                                        device=device, 
+                                        spacing=spacing),
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu')), # TODO: check why we need this on the CPU
         ]
         t_val = [
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            ToTensord(keys=("image", "label"), device=device),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             ScaleIntensityRanged(keys="image", a_min=-224, a_max=212, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
@@ -148,9 +146,9 @@ def get_pre_transforms(labels, device, args):
 
             Resized(keys=("image", "label"), spatial_size=[256, 256, -1], mode=("area", "nearest")), # downsampled from 512x512x-1 to fit into memory
             # Transforms for click simulation
-            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids"),
-            ToTensord(keys=("image", "guidance"), device=device),
+            # ToTensord(keys=("image", "guidance", "label"), device=device),
+            FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
+            AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
             AddGuidanceSignalDeepEditd(keys="image",
                                         guidance_key="guidance",
                                         sigma=args.sigma,
@@ -160,8 +158,9 @@ def get_pre_transforms(labels, device, args):
                                         gdt_th=args.gdt_th,
                                         exp_geos=args.exp_geos,
                                         adaptive_sigma=args.adaptive_sigma,
-                                        device=device, spacing=spacing),
-            ToTensord(keys=("image", "label"), device=torch.device('cpu')),
+                                        device=device, 
+                                        spacing=spacing),
+            # ToTensord(keys=("image", "label"), device=torch.device('cpu')),
         ]
     return Compose(t_train), Compose(t_val)
 
@@ -169,18 +168,17 @@ def get_click_transforms(device, args):
     spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
 
     t = [
+        InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        ToNumpyd(keys=("image", "label", "pred")),
-        # Transforms for click simulation
-        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy"),
+        FindDiscrepancyRegionsDeepEditd(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         AddRandomGuidanceDeepEditd(
             keys="NA",
             guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
+            device=device,
         ),
-        ToTensord(keys=("image", "guidance"), device=device, track_meta=False),
         AddGuidanceSignalDeepEditd(keys="image",
                                     guidance_key="guidance",
                                     sigma=args.sigma,
@@ -190,8 +188,8 @@ def get_click_transforms(device, args):
                                     gdt_th=args.gdt_th,
                                     exp_geos=args.exp_geos,
                                     adaptive_sigma=args.adaptive_sigma,
-                                    device=device, spacing=spacing),        #
-        ToTensord(keys=("image", "label"), device=torch.device('cpu'), track_meta=False),
+                                    device=device, 
+                                    spacing=spacing),        # Overwrites the image entry
     ]
 
     return Compose(t)
@@ -247,8 +245,9 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     train_ds = PersistentDataset(
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
-    train_loader = ThreadDataLoader(
-        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn',
+    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
+    train_loader = DataLoader(
+        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -258,7 +257,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = ThreadDataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn')
+    val_loader = DataLoader(val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
+    )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(
             args.gpu, len(val_ds), total_l
@@ -266,3 +266,4 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
 
     return train_loader, val_loader
+

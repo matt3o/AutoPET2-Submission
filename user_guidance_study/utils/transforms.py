@@ -270,9 +270,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                     p2 = max(0, min(int(point[-1]), sshape[-1] - 1))
                     signal[:, p1, p2] = 1.0
             
-            # logger.info(f"Guidance length for {key_label}")
-            # logger.info(guidance.shape[0])
-            # assert torch.sum(signal) - 5 < 0.001, f"Signal sum is {torch.sum(signal)}"
             # Apply a Gaussian filter to the signal
             if torch.max(signal[0]) > 0:
                 signal_tensor = signal[0]
@@ -310,7 +307,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         #     geos = 1.0 - torch.exp(-geos)
                         # signal[0] = geos[0][0]
 
-
             if not (torch.min(signal[0]).item() >= 0 and torch.max(signal[0]).item() <= 1.0):
                 raise UserWarning('[WARNING] Bad signal values', torch.min(signal[0]), torch.max(signal[0]))
             if signal is None:
@@ -328,7 +324,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     @timeit
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         d: Dict = dict(data)
-        # before = time.time()
         for key in self.key_iterator(d):
             if key == "image":
                 image = d[key]
@@ -338,8 +333,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 guidance = d[self.guidance_key]
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
-
-                # assert len(guidance) == len(d["label_names"])
 
                 for key_label in guidance.keys():
                     # Getting signal based on guidance
@@ -357,7 +350,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                         d[key].array = tmp_image
                     else:
                         d[key] = tmp_image
-                # logger.debug("AddGuidanceSignalDeepEditd.__call__ took {:.1f} seconds to finish".format(time.time() - before))
                 return d
             else:
                 raise UserWarning("This transform only applies to image key")
@@ -480,13 +472,10 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if not discrepancy.is_cuda:
             discrepancy = discrepancy.to(device=self.device)
         distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
-        # del discrepancy
         if torch.sum(distance) > 0:
             t = get_choice_from_distance_transform_cp(distance, device=self.device)
-            # del distance
             return t
         else:
-            # del distance
             return None
 
     def add_guidance(self, guidance, discrepancy, label_names, labels):
@@ -526,7 +515,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if guidance is None:
             # Initialize the guidance dict
             d[self.guidance_key] = {}
-            # guidance = d.get(self.guidance_key)
         discrepancy = d[self.discrepancy_key]
         self.randomize(data)
 
@@ -534,28 +522,14 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             for key_label in d["label_names"].keys():
                 tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
                 
-                # if tmp_gui is None:
-                #     d[self.guidance_key][key_label] = 
-                # else:
                 assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
-                # assert tmp_gui.numel() > 0
-                # logger.info(f"tmp_gui for {key_label}: {tmp_gui}")
                 # Filter out -1 values
                 if tmp_gui.numel() > 0:
                     tmp_gui = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
                     assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
 
-            # Add guidance according to discrepancy
-            # for key_label in d["label_names"].keys():
                 # Add guidance based on discrepancy
                 d[self.guidance_key][key_label] = self.add_guidance(tmp_gui, discrepancy[key_label], d["label_names"], d["label"])
-                # logger.info(f"d[self.guidance_key][key_label]: {d[self.guidance_key][key_label]}")
-
-        # assert len(d[self.guidance_key]) == len(d["label_names"])
-        # if d[self.guidance_key].keys() == self.guidance.keys():
-        #     d[self.guidance_key] = self.guidance
-        # else:
-        #     raise UserWarning("The keys don't match")
 
         return d
 
@@ -578,173 +552,3 @@ class SplitPredsLabeld(MapTransform):
                 logger.info("This transform is only for pred key")
         return d
 
-
-class AddInitialSeedPointMissingLabelsd(Randomizable, MapTransform):
-    """
-    Add random guidance as initial seed point for a given label.
-    Note that the label is of size (C, D, H, W) or (C, H, W)
-    The guidance is of size (2, N, # of dims) where N is number of guidance added.
-    # of dims = 4 when C, D, H, W; # of dims = 3 when (C, H, W)
-    Args:
-        guidance_key: key to store guidance.
-        sids_key: key that represents lists of valid slice indices for the given label.
-        sid_key: key that represents the slice to add initial seed point.  If not present, random sid will be chosen.
-        connected_regions: maximum connected regions to use for adding initial points.
-    """
-
-    def __init__(
-        self,
-        keys: KeysCollection,
-        guidance_key: str = "guidance",
-        sids_key: str = "sids",
-        sid_key: str = "sid",
-        connected_regions: int = 5,
-        allow_missing_keys: bool = False,
-        device = None
-    ):
-        super().__init__(keys, allow_missing_keys)
-        self.sids_key = sids_key
-        self.sid_key = sid_key
-        self.sid: Dict[str, int] = dict()
-        self.guidance_key = guidance_key
-        self.connected_regions = connected_regions
-        self.device = device
-
-    def _apply(self, label:torch.Tensor, sid: int) -> torch.Tensor:
-        """
-        Args:
-            label: Is assumed to be an array of having a 1 where the value of label is keylabel (see __call__)
-                   There may not be multiple value in the label array otherwise think function will produce garbage
-            sid: single digit, label: array e.g. (1,128,128,128)"""
-        assert type(label) == torch.Tensor or type(label) == MetaTensor, "type(label): {} != torch.Tensor or MetaTensor".format(type(label))
-        
-        dimensions = 3 if len(label.shape) > 3 else 2
-        self.default_guidance = [-1] * (dimensions + 1)
-
-        dims = dimensions
-        if sid is not None and dimensions == 3:
-            dims = 2
-            label = label[0][..., sid][None]  # Assume channel is first and depth is last CHWD
-
-        # THERE MAY BE MULTIPLE BLOBS FOR SINGLE LABEL IN THE SELECTED SLICE
-        # label = (label > 0.5).to(dtype=torch.float32)
-        # Label connected regions of an integer array - Two pixels are connected
-        # when they are neighbors and have the same value
-        # with cp.cuda.Device(self.device.index):
-        #     label_labeled = label_cp(cp.asarray(label))[0]
-        #     blobs_labels = torch.as_tensor(label_labeled, device=self.device) if dims == 2 else label
-
-        label_guidance = []
-        # If the label is not present in this slice
-        if torch.max(label) <= 0:
-            label_guidance.append(self.default_guidance)
-        # else:
-        #     for ridx in range(1, 2 if dims == 3 else self.connected_regions + 1):
-        #         if dims == 2:
-        #             label = (blobs_labels == ridx).to(dtype=torch.float32)
-        #             if torch.sum(label) == 0:
-        #                 label_guidance.append(self.default_guidance)
-        #                 continue
-        else:
-            distance = get_distance_transform(label, self.device, verify_correctness=False)
-            g = get_choice_from_distance_transform_cp(distance, device=self.device)
-            if dimensions == 2 or dims == 3:
-                label_guidance.append(g)
-            else:
-                # Clicks are created using this convention Channel Height Width Depth (CHWD)
-                label_guidance.append([g[0], g[-2], g[-1], sid])  # Assume channel is first and depth is last CHWD
-        return torch.tensor(label_guidance, dtype=torch.int32, device=self.device)
-
-    def _randomize(self, d: Mapping[Hashable, torch.Tensor], key_label:str):
-        """Choose a single sid from all the valid sids for key_label inside the array label"""
-        sids = d.get(self.sids_key).get(key_label) if d.get(self.sids_key) is not None else None
-        sid = d.get(self.sid_key).get(key_label) if d.get(self.sid_key) is not None else None
-        if sids is not None and sids.size:
-            if sid is None or sid not in sids:
-                sid = self.R.choice(sids, replace=False)
-        else:
-            raise UserWarning(f"No slice IDs for label: {key_label}")
-            # logger.warning(f"No slice IDs for label: {key_label}")
-            # sid = None
-        self.sid[key_label] = sid
-
-    @timeit
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        # d: Dict = dict(data)
-        d = data
-        for key in self.key_iterator(d):
-            if key == "label":
-                label_guidances = {}
-                for key_label in d[self.sids_key].keys():
-                    # Randomize: Select a random slice
-                    self._randomize(d, key_label)
-                    # Generate guidance base on selected slice
-                    tmp_label = torch.clone(d[key].detach())
-                    assert tmp_label.is_cuda
-                    # Taking one label to create the guidance       
-                    if key_label != "background":
-                        tmp_label[tmp_label != float(d["label_names"][key_label])] = 0
-                    else:
-                        tmp_label[tmp_label != float(d["label_names"][key_label])] = 1
-                        tmp_label = 1 - tmp_label
-
-                    label_guidances[key_label] = self._apply(tmp_label, self.sid.get(key_label))
-
-                d[self.guidance_key] = label_guidances
-                # if self.guidance_key in d.keys():
-                # else:
-                #     d[self.guidance_key] = label_guidances # Initialize Guidance Dict
-                # del d[self.sids_key]
-                return d
-            else:
-                raise UserWarning("This transform only applies to label key")
-        raise UserWarning("No input keys selected")
-
-
-class FindAllValidSlicesMissingLabelsd(MapTransform):
-    """
-    Find/List all slices which have a label from label_names on it.
-    Label is assumed to be a 4D Volume with shape CHWD, where C=1.
-    Args:
-        sids_key: key to store slices indices having valid label map.
-    """
-
-    def __init__(self, keys: KeysCollection, sids_key="sids", allow_missing_keys: bool = False, device=None):
-        super().__init__(keys, allow_missing_keys)
-        self.sids_key = sids_key
-        self.device = device
-
-    def _apply(self, label, d):
-        assert type(label) == torch.Tensor or type(label) == MetaTensor
-        sids = {}
-        for key_label in d["label_names"].keys():
-            l_ids = []
-            for sid in range(label.shape[-1]):      # Assume channel is first and depth is last CHWD
-                if d["label_names"][key_label] in label[0][..., sid]:
-                    l_ids.append(sid)
-            if not len(l_ids):
-                # No valid slices with the given label_name / value found
-                l_ids = [-1] * 10
-            sids[key_label] = np.asarray(l_ids)
-        return sids
-
-    @timeit
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        # d: Dict = dict(data)
-        d = data
-        for key in self.key_iterator(d):
-            if key == "label":
-                label = d[key]
-                if label.shape[0] != 1:
-                    raise ValueError("Only supports single channel labels!")
-
-                if len(label.shape) != 4:  # only for 3D
-                    raise ValueError("Only supports label with shape CHWD!")
-
-                sids = self._apply(label, d)
-                if sids is not None and len(sids.keys()):
-                    d[self.sids_key] = sids
-                return d
-            else:
-                raise UserWarning("This transform only applies to label key")
-        raise UserWarning("No input to FindAllValidSlicesMissingLabelsd")

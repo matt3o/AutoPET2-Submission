@@ -82,21 +82,6 @@ def get_pre_transforms(labels, device, args):
             
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            
-            # Transforms for click simulation
-            # FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device), # sids np array on cpu
-            # AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device), 
-            # AddGuidanceSignalDeepEditd(keys="image",
-            #                             guidance_key="guidance",
-            #                             sigma=args.sigma,
-            #                             disks=args.disks,
-            #                             edt=args.edt,
-            #                             gdt=args.gdt,
-            #                             gdt_th=args.gdt_th,
-            #                             exp_geos=args.exp_geos,
-            #                             adaptive_sigma=args.adaptive_sigma,
-            #                             device=device, 
-            #                             spacing=spacing),
         ]
         t_val = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -114,20 +99,6 @@ def get_pre_transforms(labels, device, args):
 
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            # Transforms for click simulation
-            # FindAllValidSlicesMissingLabelsd(keys="label", sids_key="sids", device=device),
-            # AddInitialSeedPointMissingLabelsd(keys="label", guidance_key="guidance", sids_key="sids", device=device),
-            # AddGuidanceSignalDeepEditd(keys="image",
-            #                             guidance_key="guidance",
-            #                             sigma=args.sigma,
-            #                             disks=args.disks,
-            #                             edt=args.edt,
-            #                             gdt=args.gdt,
-            #                             gdt_th=args.gdt_th,
-            #                             exp_geos=args.exp_geos,
-            #                             adaptive_sigma=args.adaptive_sigma,
-            #                             device=device, 
-            #                             spacing=spacing),
         ]
     else: # MSD Spleen
         t_train = [

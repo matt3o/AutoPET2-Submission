@@ -32,6 +32,9 @@ from utils.helper import print_gpu_usage, get_total_size_of_all_tensors, describ
 logger = logging.getLogger("interactive_segmentation")
 np.seterr(all='raise')
 
+# To debug Nans, slows down code:
+# torch.autograd.set_detect_anomaly(True)
+
 
 class Interaction:
     """

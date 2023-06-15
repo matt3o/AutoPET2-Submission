@@ -117,7 +117,6 @@ class Interaction:
                     logger.info("inputs.shape is {}".format(inputs.shape))
                     # Make sure the signal is empty in the first iteration assertion holds
                     assert torch.sum(inputs[:,1:,...]) == 0
-                    logger.info("WARNING: The file name prints dont work as of now, needs to be fixed")
                     logger.info(f"image file name: {batchdata['image_meta_dict']['filename_or_obj']}")
                     logger.info(f"labe file name: {batchdata['label_meta_dict']['filename_or_obj']}")
 

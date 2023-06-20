@@ -637,7 +637,7 @@ def main():
     # Data
     parser.add_argument("-i", "--input", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-o", "--output", default="/cvhci/temp/mhadlich/output")
-    parser.add_argument("-d", "--data", default="/cvhci/temp/mhadlich/data")
+    parser.add_argument("-d", "--data", default="None")
     # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default='/cvhci/temp/mhadlich/cache')
     parser.add_argument("-ta", "--throw_away_cache", default=False, action='store_true')
@@ -721,11 +721,22 @@ def main():
     args.env = os.environ
     args.git = get_git_information()
 
-
     # For single label using one of the Medical Segmentation Decathlon
     args.labels = {'spleen': 1,
                    'background': 0
                    }
+
+    if args.debug:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    if args.no_log:
+        log_folder_path = None
+    else:
+        log_folder_path = args.output
+    setup_loggers(loglevel, log_folder_path)
+    logger = get_logger()
+
 
     # Restoring previous model if resume flag is True
     args.model_filepath = args.model_weights
@@ -751,21 +762,15 @@ def main():
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
     
+    if args.data is "None":
+        args.data = f"{args.output}/data"
+        logger.info(f"--data was None, so that {args.data} was selected instead")
+        
     if not os.path.exists(args.data):
         pathlib.Path(args.data).mkdir(parents=True)
 
     args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 
-    if args.debug:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    if args.no_log:
-        log_folder_path = None
-    else:
-        log_folder_path = args.output
-    setup_loggers(loglevel, log_folder_path)
-    logger = get_logger()
     logger.info(f"CPU Count: {os.cpu_count()}")
     logger.info(f"Num threads: {torch.get_num_threads()}")
 

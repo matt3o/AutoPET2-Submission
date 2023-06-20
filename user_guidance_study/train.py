@@ -310,7 +310,7 @@ def create_trainer(args):
         steps = 4
         lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
-        lr_scheduler =  (optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+        lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
         

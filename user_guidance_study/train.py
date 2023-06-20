@@ -481,33 +481,35 @@ def create_trainer(args):
         tag="3_params"
     )
 
-    # Attach the logger to the trainer to log model's weights norm after each iteration
-    tb_logger.attach(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED,
-        log_handler=WeightsScalarHandler(network)
-    )
+    # for debugging 
+    
+    # # Attach the logger to the trainer to log model's weights norm after each iteration
+    # tb_logger.attach(
+    #     trainer,
+    #     event_name=Events.ITERATION_COMPLETED,
+    #     log_handler=WeightsScalarHandler(network)
+    # )
 
-    # Attach the logger to the trainer to log model's weights as a histogram after each epoch
-    tb_logger.attach(
-        trainer,
-        event_name=Events.EPOCH_COMPLETED,
-        log_handler=WeightsHistHandler(network)
-    )
+    # # Attach the logger to the trainer to log model's weights as a histogram after each epoch
+    # tb_logger.attach(
+    #     trainer,
+    #     event_name=Events.EPOCH_COMPLETED,
+    #     log_handler=WeightsHistHandler(network)
+    # )
 
-    # Attach the logger to the trainer to log model's gradients norm after each iteration
-    tb_logger.attach(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED,
-        log_handler=GradsScalarHandler(network)
-    )
+    # # Attach the logger to the trainer to log model's gradients norm after each iteration
+    # tb_logger.attach(
+    #     trainer,
+    #     event_name=Events.ITERATION_COMPLETED,
+    #     log_handler=GradsScalarHandler(network)
+    # )
 
-    # Attach the logger to the trainer to log model's gradients as a histogram after each epoch
-    tb_logger.attach(
-        trainer,
-        event_name=Events.EPOCH_COMPLETED,
-        log_handler=GradsHistHandler(network)
-    )
+    # # Attach the logger to the trainer to log model's gradients as a histogram after each epoch
+    # tb_logger.attach(
+    #     trainer,
+    #     event_name=Events.EPOCH_COMPLETED,
+    #     log_handler=GradsHistHandler(network)
+    # )
 
 
     return trainer, evaluator, tb_logger

@@ -762,7 +762,7 @@ def main():
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
     
-    if args.data is "None":
+    if args.data == "None":
         args.data = f"{args.output}/data"
         logger.info(f"--data was None, so that {args.data} was selected instead")
         

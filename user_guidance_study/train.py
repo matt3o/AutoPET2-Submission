@@ -726,6 +726,19 @@ def main():
                    'background': 0
                    }
 
+    # Restoring previous model if resume flag is True
+    args.model_filepath = args.model_weights
+    args.current_epoch = -1
+    if args.best_val_weights:
+        args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
+        args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
+        args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
+    
+    if not args.dont_check_output_dir and os.path.isdir(args.output):
+        raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
+    if not os.path.exists(args.output):
+        pathlib.Path(args.output).mkdir(parents=True)
+    
     if args.debug:
         loglevel = logging.DEBUG
     else:
@@ -737,23 +750,6 @@ def main():
     setup_loggers(loglevel, log_folder_path)
     logger = get_logger()
 
-
-    # Restoring previous model if resume flag is True
-    args.model_filepath = args.model_weights
-    args.current_epoch = -1
-    if args.best_val_weights:
-        args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
-        args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
-        args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
-    
-    
-    if not args.dont_check_output_dir and os.path.isdir(args.output):
-        raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
-    if not os.path.exists(args.output):
-        pathlib.Path(args.output).mkdir(parents=True)
-    
-    output_dir = args.output
-    
     if args.throw_away_cache:
         args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
     else:

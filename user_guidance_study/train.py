@@ -290,6 +290,7 @@ def create_trainer(args):
         train_inferer = SimpleInferer()
         eval_inferer = SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
+        # train_batch_size is limited due to this bug: https://github.com/Project-MONAI/MONAI/issues/6628
         train_batch_size = max(1,min(reduce(lambda x, y: x*y,[round(args.train_crop_size[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.sw_batch_size))
         logger.info(f"{train_batch_size=}")
         if args.val_crop_size != "None":

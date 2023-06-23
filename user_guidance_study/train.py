@@ -25,7 +25,8 @@ import uuid
 import shutil
 from pickle import dump
 import signal
-
+import math
+from functools import reduce
 
 # Things needed to debug the Interaction class
 import resource
@@ -166,7 +167,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 sys.excepthook = handle_exception
 
 class GPU_Thread(threading.Thread):
-    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
+    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device):#, event: threading.Event):
         super().__init__()
         self.threadID = threadID
         self.name = name
@@ -176,14 +177,15 @@ class GPU_Thread(threading.Thread):
         self.csv_file.write(header)
         self.csv_file.write("\n")
         self.csv_file.flush()
-        self.stopped = event
+        #self.stopped = event
+        self.stopFlag = threading.Event()
 
     def __del__(self):
         self.csv_file.flush()
         self.csv_file.close()
 
     def run(self):
-        while not self.stopped.wait(1):
+        while not self.stopFlag.wait(1):
             header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
             self.csv_file.write(usage)
             self.csv_file.write("\n")
@@ -224,29 +226,29 @@ def get_network(network, labels, args):
     set_track_meta(False)
     return network
 
-class GPU_Thread(threading.Thread):
-    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
-        super().__init__()
-        self.threadID = threadID
-        self.name = name
-        self.device = device
-        self.csv_file = open(f"{output_file}", "w")
-        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
-        self.csv_file.write(header)
-        self.csv_file.write("\n")
-        self.csv_file.flush()
-        self.stopped = event
+# class GPU_Thread(threading.Thread):
+#     def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
+#         super().__init__()
+#         self.threadID = threadID
+#         self.name = name
+#         self.device = device
+#         self.csv_file = open(f"{output_file}", "w")
+#         header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+#         self.csv_file.write(header)
+#         self.csv_file.write("\n")
+#         self.csv_file.flush()
+#         self.stopped = event
 
-    def __del__(self):
-        self.csv_file.flush()
-        self.csv_file.close()
+#     def __del__(self):
+#         self.csv_file.flush()
+#         self.csv_file.close()
 
-    def run(self):
-        while not self.stopped.wait(1):
-            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
-            self.csv_file.write(usage)
-            self.csv_file.write("\n")
-            self.csv_file.flush()
+#     def run(self):
+#         while not self.stopped.wait(1):
+#             header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+#             self.csv_file.write(usage)
+#             self.csv_file.write("\n")
+#             self.csv_file.flush()
 
 
 
@@ -288,9 +290,14 @@ def create_trainer(args):
         train_inferer = SimpleInferer()
         eval_inferer = SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
+        train_batch_size = max(1,min(reduce(lambda x, y: x*y,[round(args.train_crop_size[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.sw_batch_size))
+        logger.info(f"{train_batch_size=}")
+        if args.val_crop_size != "None":
+            val_batch_size = max(1,min(reduce(lambda x, y: x*y,[round((300,300,400)[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.sw_batch_size))
+            logger.info(f"{val_batch_size=}")
         # Reduce if there is an OOM
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=args.sw_batch_size, mode="gaussian")
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=train_batch_size, mode="gaussian")
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=val_batch_size, mode="gaussian")
 
     # OPTIMIZER
     if args.optimizer == "Novograd":
@@ -308,7 +315,14 @@ def create_trainer(args):
     if args.scheduler == "MultiStepLR":
          # Do a x step descent
         steps = 4
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[num for num in range(0, MAX_EPOCHS) if num % round(MAX_EPOCHS/steps) == 0][1:], gamma=0.333, last_epoch=CURRENT_EPOCH)
+        steps_per_epoch = round(MAX_EPOCHS/steps)
+        if steps_per_epoch < 1:
+            logger.error("Chosen number of epochs {MAX_EPOCHS}/{steps} < 0")
+            milestones= range(0, MAX_EPOCHS)
+        else:
+            milestones = [num for num in range(0, MAX_EPOCHS) if num % round(steps_per_epoch) == 0][1:]
+
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
         lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "CosineAnnealingLR":
@@ -564,8 +578,8 @@ def run(args):
     # click-generation
     logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
 
-    stopFlag = threading.Event()
-    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device, stopFlag)
+    
+    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device)
     logger.info(f"Logging GPU usage to {args.output}/usage.csv")
     # TODO test this on torch v2 
     # torch.set_default_device(f"cuda:{args.gpu}")
@@ -573,25 +587,27 @@ def run(args):
     try:
         wp = WorkflowProfiler()
         terminator = TerminationHandler(args)
+        trainer, evaluator, tb_logger = create_trainer(args)
+        gpu_thread.start()
         
-        with wp:           
-            trainer, evaluator, tb_logger = create_trainer(args)
-            with tb_logger:
-                gpu_thread.start()
-
-                epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
-                iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
-                batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
-                innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
-                whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
-
+        with tb_logger:         
+            with wp:
                 start_time = time.time()
                 # torch._C._cuda_attach_out_of_memory_observer(cb)
-                
                 try:
                     if not args.eval_only:
+                        epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
+                        iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
+                        batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
+                        innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
+                        whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
                         trainer.run()
                     else:
+                        epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(evaluator)
+                        iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(evaluator)
+                        batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(evaluator)
+                        innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(evaluator)
+                        whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(evaluator)
                         evaluator.run()
                 except torch.cuda.OutOfMemoryError:
                     oom_observer(device, None, None, None)
@@ -606,10 +622,9 @@ def run(args):
                     
                 finally:
                     tb_logger.close()
-                    stopFlag.set()
+                    gpu_thread.stopFlag.set()
                     logger.info(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                     logger.info("Total Training Time {}".format(time.time() - start_time))
-                    logger.info(f"\n{wp.get_times_summary_pd()}")
                     gpu_thread.join()
 
         if not args.eval_only:
@@ -623,6 +638,7 @@ def run(args):
             model_ts = torch.jit.script(trainer.network)
             torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
     finally:
+        logger.info(f"\n{wp.get_times_summary_pd()}")
         terminator.cleanup()
 
 def main():
@@ -741,6 +757,9 @@ def main():
     if not os.path.exists(args.output):
         pathlib.Path(args.output).mkdir(parents=True)
     
+    # for OOM debugging
+    output_dir = args.output
+
     if args.debug:
         loglevel = logging.DEBUG
     else:

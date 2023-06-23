@@ -113,12 +113,20 @@ class Interaction:
             for j in range(self.max_interactions):
                 # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
                 inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
+                #BCHW[D] ?
+
                 if j == 0:
                     logger.info("inputs.shape is {}".format(inputs.shape))
                     # Make sure the signal is empty in the first iteration assertion holds
                     assert torch.sum(inputs[:,1:,...]) == 0
                     logger.info(f"image file name: {batchdata['image_meta_dict']['filename_or_obj']}")
-                    logger.info(f"labe file name: {batchdata['label_meta_dict']['filename_or_obj']}")
+                    logger.info(f"label file name: {batchdata['label_meta_dict']['filename_or_obj']}")
+
+                    for i in range(len(batchdata["label"][0])):
+                        if torch.sum(batchdata["label"][i,0]) < 0.1:
+                            logger.warning("No valid labels for this sample (probably due to crop)")
+
+
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
                 engine.network.eval()

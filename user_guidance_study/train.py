@@ -345,7 +345,7 @@ def create_trainer(args):
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
 
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True)#, squared_pred=True)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
 
 
     evaluator = SupervisedEvaluator(

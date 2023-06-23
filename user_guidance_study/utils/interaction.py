@@ -133,18 +133,18 @@ class Interaction:
                 
                 batchdata[CommonKeys.PRED] = predictions
                 
-                if not self.train or self.args.save_nifti or self.args.debug:
-                    loss = self.loss_function(batchdata["pred"], batchdata["label"])
-                    logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
+                # if not self.train or self.args.save_nifti or self.args.debug:
+                loss = self.loss_function(batchdata["pred"], batchdata["label"])
+                logger.info(f'It: {j} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
 
-                    if j <= 9 and self.args.save_nifti:
-                        tmp_batchdata = {"pred": predictions, "label": batchdata["label"], "label_names": batchdata["label_names"]}
-                        tmp_batchdata_list = decollate_batch(tmp_batchdata)
-                        for i in range(len(tmp_batchdata_list)):
-                            tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
-                        tmp_batchdata = list_data_collate(tmp_batchdata_list)
-                        
-                        self.debug_viz(inputs, labels, tmp_batchdata["pred"], j)
+                if j <= 9 and self.args.save_nifti:
+                    tmp_batchdata = {"pred": predictions, "label": batchdata["label"], "label_names": batchdata["label_names"]}
+                    tmp_batchdata_list = decollate_batch(tmp_batchdata)
+                    for i in range(len(tmp_batchdata_list)):
+                        tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
+                    tmp_batchdata = list_data_collate(tmp_batchdata_list)
+                    
+                    self.debug_viz(inputs, labels, tmp_batchdata["pred"], j)
 
                 # decollate/collate batchdata to execute click transforms
                 batchdata_list = decollate_batch(batchdata)

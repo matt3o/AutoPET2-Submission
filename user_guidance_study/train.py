@@ -672,8 +672,8 @@ def main():
     parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
-    parser.add_argument("--train_crop_size", default="(128,128,128)", action='store')
-    parser.add_argument("--val_crop_size", default="(224,224,320)", action='store')
+    parser.add_argument("--train_crop_size", default="(224,224,224)", action='store')
+    parser.add_argument("--val_crop_size", default="None", action='store')
     parser.add_argument("--sw_batch_size", type=int, default=1)
     
 

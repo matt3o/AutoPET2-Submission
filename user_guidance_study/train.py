@@ -60,6 +60,7 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
     GarbageCollector,
+    CheckpointLoader,
 )
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
@@ -275,15 +276,9 @@ def create_trainer(args):
 
     print('Number of parameters:', f"{count_parameters(network):,}")
 
-    if args.model_filepath != 'None' and not args.resume:
-        raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
-    if args.resume:
-        logger.info("{}:: Loading Network...".format(args.gpu))
-        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-
-        network.load_state_dict(
-            torch.load(args.model_filepath, map_location=map_location)['net']
-        )
+        # network.load_state_dict(
+        #     torch.load(args.model_filepath, map_location=map_location)['net']
+        # )
 
      # INFERER
     if args.inferer == "SimpleInferer":
@@ -328,8 +323,15 @@ def create_trainer(args):
         lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
-        
-        
+    
+    ckpt_loader = None
+    if args.model_filepath != 'None' and not args.resume:
+        raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
+    if args.resume:
+        logger.info("{}:: Loading Network...".format(args.gpu))
+        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
+        ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
+
         
     # define event-handlers for engine
     val_handlers = [
@@ -347,7 +349,8 @@ def create_trainer(args):
              final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
     ]
-    
+    if ckpt_loader is not None:
+        val_handlers.append(ckpt_loader)
 
     all_val_metrics = dict()
     all_val_metrics["val_mean_dice"] = MeanDice(
@@ -430,7 +433,9 @@ def create_trainer(args):
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=10, trigger_event="iteration"),
     ]
-    
+    if ckpt_loader is not None:
+        train_handlers.append(ckpt_loader)
+
 
 
     trainer = SupervisedTrainer(

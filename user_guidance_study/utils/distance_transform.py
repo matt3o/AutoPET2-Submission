@@ -94,6 +94,9 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
 
         g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
         g[0] = dst.item()
+        mempool = cp.get_default_memory_pool()
+        mempool.free_all_blocks()
+
     return g
 
 

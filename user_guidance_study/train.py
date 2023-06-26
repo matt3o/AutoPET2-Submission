@@ -28,6 +28,13 @@ import signal
 import math
 from functools import reduce
 
+tmpdir = '/local/work/mhadlich/tmp'
+if os.environ.get("SLURM_JOB_ID") is not None:
+    os.environ['TMPDIR'] = '/local/work/mhadlich/tmp'
+
+if not os.path.exists(tmpdir):
+    pathlib.Path(tmpdir).mkdir(parents=True)
+
 # Things needed to debug the Interaction class
 import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -82,6 +89,7 @@ from ignite.contrib.handlers.tensorboard_logger import *
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+
 
 
 def oom_observer(device, alloc, device_alloc, device_free):
@@ -233,7 +241,7 @@ def create_trainer(args):
         eval_inferer = SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
         # train_batch_size is limited due to this bug: https://github.com/Project-MONAI/MONAI/issues/6628
-        train_batch_size = max(1,min(reduce(lambda x, y: x*y,[round(args.train_crop_size[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.sw_batch_size))
+        train_batch_size = max(1,reduce(lambda x, y: x*y,[round(args.train_crop_size[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]))
         logger.info(f"{train_batch_size=}")
         if args.val_crop_size != "None":
             val_batch_size = max(1,min(reduce(lambda x, y: x*y,[round((300,300,400)[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.sw_batch_size))

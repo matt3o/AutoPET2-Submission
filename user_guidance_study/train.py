@@ -691,7 +691,7 @@ def main():
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
     parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
     parser.add_argument("--model_weights", type=str, default='None')
-    parser.add_argument("--best_val_weights", default=False, action='store_true')
+    # parser.add_argument("--best_val_weights", default=False, action='store_true')
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1) # Epoch Level
@@ -753,10 +753,10 @@ def main():
     # Restoring previous model if resume flag is True
     args.model_filepath = args.model_weights
     args.current_epoch = -1
-    if args.best_val_weights:
-        args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
-        args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
-        args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
+    # if args.best_val_weights:
+    #     args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
+    #     args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
+    #     args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
     
     if not args.dont_check_output_dir and os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")

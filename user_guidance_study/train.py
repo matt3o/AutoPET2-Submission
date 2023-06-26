@@ -97,15 +97,25 @@ def oom_observer(device, alloc, device_alloc, device_free):
 
 
 class TerminationHandler:
-    def __init__(self, args):
+    def __init__(self, args, tb_logger, wp, gpu_thread):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.args = args
+        self.tb_logger = tb_logger
+        self.wp = wp
+        self.gpu_thread = gpu_thread
 
     def exit_gracefully(self, *args):
         logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
         self.cleanup()
+        self.join_threads()
+        logger.info(f"\n{self.wp.get_times_summary_pd()}")
         sys.exit(99)
+
+    def join_threads(self):
+        self.tb_logger.close()
+        self.gpu_thread.stopFlag.set()
+        self.gpu_thread.join()
 
     def cleanup(self):
         logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
@@ -261,13 +271,18 @@ def create_trainer(args):
     elif args.scheduler == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
     
-    ckpt_loader = None
+    # ckpt_loader = None
     if args.model_filepath != 'None' and not args.resume:
         raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
     if args.resume:
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-        ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
+        checkpoint = torch.load(args.model_filepath, map_location=map_location)
+        network.load_state_dict(checkpoint['net'])
+        optimizer.load_state_dict(checkpoint['opt'])
+        lr_scheduler.load_state_dict(checkpoint['lr'])
+        logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
+        # ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
 
         
     # define event-handlers for engine
@@ -286,8 +301,6 @@ def create_trainer(args):
              final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
     ]
-    if ckpt_loader is not None:
-        val_handlers.append(ckpt_loader)
 
     all_val_metrics = dict()
     all_val_metrics["val_mean_dice"] = MeanDice(
@@ -300,6 +313,7 @@ def create_trainer(args):
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
 
+    # squared_pred enables much faster convergence, possibly even better results in the long run
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
 
 
@@ -324,8 +338,6 @@ def create_trainer(args):
         key_val_metric=all_val_metrics,
         val_handlers=val_handlers,
     )
-
-    
 
 
     all_train_metrics = dict()
@@ -370,8 +382,6 @@ def create_trainer(args):
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=10, trigger_event="iteration"),
     ]
-    if ckpt_loader is not None:
-        train_handlers.append(ckpt_loader)
 
 
 
@@ -520,28 +530,28 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        terminator = TerminationHandler(args)
         trainer, evaluator, tb_logger = create_trainer(args)
         gpu_thread.start()
+        terminator = TerminationHandler(args, tb_logger, wp, gpu_thread)
         
         with tb_logger:         
             with wp:
                 start_time = time.time()
-                # torch._C._cuda_attach_out_of_memory_observer(cb)
+                for t, name in [(trainer, "trainer"), (evaluator, "evaluator")]:
+                    for event in [["Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED],
+                                  ["Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED],
+                                  ["Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED],
+                                  ["Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED],
+                                  ["Whole run", wp, Events.STARTED, Events.COMPLETED],
+                                   ]:
+                        event[0] = f"{name}: {event[0]}"
+                        print(*event)
+                        ProfileHandler(*event).attach(t)
+                
                 try:
                     if not args.eval_only:
-                        epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(trainer)
-                        iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(trainer)
-                        batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(trainer)
-                        innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(trainer)
-                        whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(trainer)
                         trainer.run()
                     else:
-                        epoch_h = ProfileHandler("Epoch", wp, Events.EPOCH_STARTED, Events.EPOCH_COMPLETED).attach(evaluator)
-                        iter_h = ProfileHandler("Iteration", wp, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED).attach(evaluator)
-                        batch_h = ProfileHandler("Batch generation", wp, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED).attach(evaluator)
-                        innter_iteration_h = ProfileHandler("Inner Iteration", wp, IterationEvents.INNER_ITERATION_STARTED, IterationEvents.INNER_ITERATION_COMPLETED).attach(evaluator)
-                        whole_run_h = ProfileHandler("Whole run", wp, Events.STARTED, Events.COMPLETED).attach(evaluator)
                         evaluator.run()
                 except torch.cuda.OutOfMemoryError:
                     oom_observer(device, None, None, None)
@@ -555,11 +565,9 @@ def run(args):
                     logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                     
                 finally:
-                    tb_logger.close()
-                    gpu_thread.stopFlag.set()
                     logger.info(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                     logger.info("Total Training Time {}".format(time.time() - start_time))
-                    gpu_thread.join()
+                    
 
         if not args.eval_only:
             logger.info("{}:: Saving Final PT Model".format(args.gpu))
@@ -572,8 +580,9 @@ def run(args):
             model_ts = torch.jit.script(trainer.network)
             torch.jit.save(model_ts, os.path.join(args.output, "pretrained_deepedit_" + args.network + "-final.ts"))
     finally:
-        logger.info(f"\n{wp.get_times_summary_pd()}")
         terminator.cleanup()
+        terminator.join_threads()
+        logger.info(f"\n{wp.get_times_summary_pd()}")
 
 def main():
     global logger

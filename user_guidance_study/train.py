@@ -120,40 +120,6 @@ class TerminationHandler:
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-# class CustomLoader:
-#     def __init__(self, all_train_metrics):
-#         # self._name = name
-#         self.all_train_metrics = all_train_metrics
-#         self.first = True
-#         self.engine = None
-
-#     def attach(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         if self._name is None:
-#             self.logger = engine.logger
-#         engine.add_event_handler(Events.EPOCH_COMPLETED, self)
-#         self.engine = engine
-
-
-#     def __call__(self, engine: Engine) -> None:
-#         """
-#         Args:
-#             engine: Ignite Engine, it can be a trainer, validator or evaluator.
-#         """
-#         if self.first:
-#             del all_train_metrics["val_mean_dice"]
-#             self.first = False
-#             self.engine.remove_event_handler(self)
-
-
-        # torch.cuda.empty_cache()
-        # self.logger.info(get_gpu_usage(engine.state.device, used_memory_only=False, context="Events.EPOCH_COMPLETED"))
-        # self.logger.info(torch.cuda.memory_summary())
-
-
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
@@ -227,31 +193,6 @@ def get_network(network, labels, args):
     set_track_meta(False)
     return network
 
-# class GPU_Thread(threading.Thread):
-#     def __init__(self, threadID: int, name: str, output_file: str, device: torch.device, event: threading.Event):
-#         super().__init__()
-#         self.threadID = threadID
-#         self.name = name
-#         self.device = device
-#         self.csv_file = open(f"{output_file}", "w")
-#         header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
-#         self.csv_file.write(header)
-#         self.csv_file.write("\n")
-#         self.csv_file.flush()
-#         self.stopped = event
-
-#     def __del__(self):
-#         self.csv_file.flush()
-#         self.csv_file.close()
-
-#     def run(self):
-#         while not self.stopped.wait(1):
-#             header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
-#             self.csv_file.write(usage)
-#             self.csv_file.write("\n")
-#             self.csv_file.flush()
-
-
 
 def create_trainer(args):
 
@@ -275,10 +216,6 @@ def create_trainer(args):
     network = get_network(args.network, args.labels, args).to(device)
 
     print('Number of parameters:', f"{count_parameters(network):,}")
-
-        # network.load_state_dict(
-        #     torch.load(args.model_filepath, map_location=map_location)['net']
-        # )
 
      # INFERER
     if args.inferer == "SimpleInferer":
@@ -480,13 +417,6 @@ def create_trainer(args):
         global_step_transform=global_step_from_engine(trainer),
     )
 
-    # tb_logger.attach_output_handler(
-    #     trainer,
-    #     event_name=Events.ITERATION_COMPLETED,
-    #     tag="training",
-    #     output_transform=lambda loss: {"loss": loss}
-    # )
-
     tb_logger.attach_output_handler(
         trainer,
         event_name=Events.ITERATION_COMPLETED,
@@ -587,8 +517,6 @@ def run(args):
     
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device)
     logger.info(f"Logging GPU usage to {args.output}/usage.csv")
-    # TODO test this on torch v2 
-    # torch.set_default_device(f"cuda:{args.gpu}")
 
     try:
         wp = WorkflowProfiler()
@@ -650,10 +578,6 @@ def run(args):
 def main():
     global logger
     global output_dir
-    # torch.cuda.init()
-    # torch.cuda.memory._record_memory_history(True)
-    #torch._C._cuda_attach_out_of_memory_observer(oom_observer)
-
     
     torch.set_num_threads(int(os.cpu_count() / 3)) # Limit number of threads to 1/3 of resources
     parser = argparse.ArgumentParser()
@@ -750,13 +674,8 @@ def main():
                    'background': 0
                    }
 
-    # Restoring previous model if resume flag is True
     args.model_filepath = args.model_weights
     args.current_epoch = -1
-    # if args.best_val_weights:
-    #     args.model_filepath = os.path.join(args.output, sorted([el for el in os.listdir(args.output) if 'net_key' in el])[-1])
-    #     args.current_epoch = sorted([int(el.split('.')[0].split('=')[1]) for el in os.listdir(args.output) if 'net_epoch' in el])[-1]
-    #     args.epochs = args.epochs - args.current_epoch # Reset epochs based on previous model
     
     if not args.dont_check_output_dir and os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")

@@ -30,10 +30,9 @@ from functools import reduce
 
 tmpdir = '/local/work/mhadlich/tmp'
 if os.environ.get("SLURM_JOB_ID") is not None:
-    os.environ['TMPDIR'] = '/local/work/mhadlich/tmp'
-
-if not os.path.exists(tmpdir):
-    pathlib.Path(tmpdir).mkdir(parents=True)
+    os.environ['TMPDIR'] = tmpdir
+    if not os.path.exists(tmpdir):
+        pathlib.Path(tmpdir).mkdir(parents=True)
 
 # Things needed to debug the Interaction class
 import resource
@@ -241,10 +240,10 @@ def create_trainer(args):
         eval_inferer = SimpleInferer()
     elif args.inferer == "SlidingWindowInferer":
         # train_batch_size is limited due to this bug: https://github.com/Project-MONAI/MONAI/issues/6628
-        train_batch_size = max(1,reduce(lambda x, y: x*y,[round(args.train_crop_size[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]))
+        train_batch_size = max(1,min(reduce(lambda x, y: x*y,[round(args.train_crop_size[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.train_sw_batch_size))
         logger.info(f"{train_batch_size=}")
         if args.val_crop_size != "None":
-            val_batch_size = max(1,min(reduce(lambda x, y: x*y,[round((300,300,400)[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.sw_batch_size))
+            val_batch_size = max(1,min(reduce(lambda x, y: x*y,[round((300,300,400)[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.val_sw_batch_size))
             logger.info(f"{val_batch_size=}")
         # Reduce if there is an OOM
         train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=train_batch_size, mode="gaussian")
@@ -620,7 +619,10 @@ def main():
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
     parser.add_argument("--train_crop_size", default="(224,224,224)", action='store')
     parser.add_argument("--val_crop_size", default="None", action='store')
-    parser.add_argument("--sw_batch_size", type=int, default=1)
+    # 1 on 24 Gb, 8 on 50 Gb,
+    parser.add_argument("--train_sw_batch_size", type=int, default=8)
+    parser.add_argument("--val_sw_batch_size", type=int, default=1)
+    # parser.add_argument("--sw_batch_limit", type=int, default=-1)
     
 
     # Training
@@ -677,6 +679,8 @@ def main():
     parser.add_argument("--no_log", default=False, action='store_true')
     parser.add_argument("--dont_check_output_dir", default=False, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
+    # small: 24, medium: 50 Gb, large 80 Gb
+    parser.add_argument("--gpu_size", default="small", choices=["small", "medium", "large"])
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
@@ -727,6 +731,9 @@ def main():
         
     if not os.path.exists(args.data):
         pathlib.Path(args.data).mkdir(parents=True)
+
+    # if args.gpu_size == "24":
+    #     args.sw_batch_limit = 1
 
     args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 

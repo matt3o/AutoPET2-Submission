@@ -600,7 +600,9 @@ def run(args):
     finally:
         terminator.cleanup()
         terminator.join_threads()
-        logger.info(f"\n{wp.get_times_summary_pd()}")
+        logger.info(f"\n{wp.get_times_summary()}")
+        with open(f"{output_dir}/profiling.csv", "w") as csv_file:
+            wp.dump_csv(csv_file)
 
 def main():
     global logger

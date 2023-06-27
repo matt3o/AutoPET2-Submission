@@ -11,6 +11,7 @@ from utils.transforms import (
     threshold_foreground,
     InitLoggerd,
     NoOpd,
+    ClearGPUMemoryd
     # GarbageCollectord,
 )
 
@@ -81,7 +82,7 @@ def get_pre_transforms(labels, device, args):
             
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            PrintGPUUsaged(device=device),
+            ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
         ]
         t_val = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -99,7 +100,7 @@ def get_pre_transforms(labels, device, args):
 
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            PrintGPUUsaged(device=device),
+            ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
         ]
     else: # MSD Spleen
         t_train = [
@@ -193,6 +194,7 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing),        # Overwrites the image entry
+        ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
     ]
 
     return Compose(t)

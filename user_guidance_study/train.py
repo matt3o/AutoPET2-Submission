@@ -79,6 +79,7 @@ from ignite.engine import Engine, Events
 import threading
 from monai.data import set_track_meta
 from monai.utils import set_determinism
+from ignite.handlers import TerminateOnNan
 
 import threading
 
@@ -391,7 +392,6 @@ def create_trainer(args):
     ]
 
 
-
     trainer = SupervisedTrainer(
         device=device,
         max_epochs=args.epochs,
@@ -416,6 +416,7 @@ def create_trainer(args):
         key_train_metric=all_train_metrics,
         train_handlers=train_handlers,
     )
+    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
 
     tb_logger.attach_output_handler(
@@ -487,6 +488,14 @@ def run(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
     device = torch.device(f"cuda:{args.gpu}")
+    cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_usage = gpu_usage(device, used_memory_only=False, context="ERROR")
+    if nv_total < 25000:
+        args.gpu_size = "small"
+    elif nv_total < 55000:
+        args.gpu_size = "medium"
+    else:
+        args.gpu_size = "large"
+    logger.info(f"Selected gpu size: {args.gpu_size}")
 
     if args.export:
         logger.info(
@@ -680,7 +689,7 @@ def main():
     parser.add_argument("--dont_check_output_dir", default=False, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
     # small: 24, medium: 50 Gb, large 80 Gb
-    parser.add_argument("--gpu_size", default="small", choices=["small", "medium", "large"])
+    # parser.add_argument("--gpu_size", default="small", choices=["small", "medium", "large"])
 
     parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 

@@ -293,8 +293,8 @@ def create_trainer(args):
         # ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
 
         
-    train_trigger_event = Events.ITERATION_COMPLETED(every=5)
-    val_trigger_event = Events.ITERATION_COMPLETED(every=5)
+    train_trigger_event = Events.ITERATION_COMPLETED(every=200) if args.gpu_size is "large" else Events.ITERATION_COMPLETED(every=20)
+    val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size is "large" else Events.ITERATION_COMPLETED(every=5)
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),

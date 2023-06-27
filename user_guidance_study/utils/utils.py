@@ -65,7 +65,7 @@ def get_pre_transforms(labels, device, args):
             InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
+            # NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
@@ -89,7 +89,7 @@ def get_pre_transforms(labels, device, args):
             InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
+            # NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),

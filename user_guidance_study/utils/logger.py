@@ -35,6 +35,7 @@ def setup_loggers(loglevel=logging.INFO, log_file_folder=None,):
         if l.hasHandlers():
             l.handlers.clear()
         l.propagate = False
+        logger.setLevel(loglevel)
         l.addHandler(streamHandler)
         if fileHandler is not None:
             l.addHandler(fileHandler)

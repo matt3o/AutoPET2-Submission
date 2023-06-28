@@ -153,7 +153,7 @@ sys.excepthook = handle_exception
 
 class GPU_Thread(threading.Thread):
     def __init__(self, threadID: int, name: str, output_file: str, device: torch.device):#, event: threading.Event):
-        super().__init__()
+        super().__init__(daemon=True)
         self.threadID = threadID
         self.name = name
         self.device = device

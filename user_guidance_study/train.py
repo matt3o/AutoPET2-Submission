@@ -39,6 +39,7 @@ import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (8*8192, rlimit[1]))
 
+import pandas as pd
 import torch
 import cupy as cp
 
@@ -293,8 +294,8 @@ def create_trainer(args):
         # ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
 
         
-    train_trigger_event = Events.ITERATION_COMPLETED(every=200) if args.gpu_size is "large" else Events.ITERATION_COMPLETED(every=20)
-    val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size is "large" else Events.ITERATION_COMPLETED(every=5)
+    train_trigger_event = Events.ITERATION_COMPLETED(every=200) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=50)
+    val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -600,9 +601,9 @@ def run(args):
     finally:
         terminator.cleanup()
         terminator.join_threads()
-        logger.info(f"\n{wp.get_times_summary()}")
-        with open(f"{output_dir}/profiling.csv", "w") as csv_file:
-            wp.dump_csv(csv_file)
+        pd.set_option('display.max_columns', None)
+        pd.set_option("display.max_rows", None)
+        logger.info(f"\n{wp.get_times_summary_pd()}")
 
 def main():
     global logger

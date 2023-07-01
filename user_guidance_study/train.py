@@ -288,10 +288,10 @@ def create_trainer(args):
         optimizer.load_state_dict(checkpoint['opt'])
         args.current_epoch = int(checkpoint['lr']["last_epoch"])
         CURRENT_EPOCH = args.current_epoch
-        MAX_EPOCHS = MAX_EPOCHS - CURRENT_EPOCH
+        MAX_EPOCHS = args.epochs - CURRENT_EPOCH
         assert MAX_EPOCHS > 0
         logger.critical("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {MAX_EPOCHS}")
+        logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {CURRENT_EPOCH + MAX_EPOCHS}")
         
         lr_scheduler.load_state_dict(checkpoint['lr'])
         logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
@@ -402,7 +402,7 @@ def create_trainer(args):
         GarbageCollector(log_level=20, trigger_event=train_trigger_event),
     ]
 
-
+    logger.info(f"{MAX_EPOCHS=}")
     trainer = SupervisedTrainer(
         device=device,
         max_epochs=MAX_EPOCHS,

@@ -260,12 +260,8 @@ def create_trainer(args):
     MAX_EPOCHS = args.epochs
     CURRENT_EPOCH = args.current_epoch
 
-
     # SCHEDULER
-    #if args.scheduler == "StepLR":
-    #    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
     if args.scheduler == "MultiStepLR":
-         # Do a x step descent
         steps = 4
         steps_per_epoch = round(MAX_EPOCHS/steps)
         if steps_per_epoch < 1:
@@ -273,12 +269,12 @@ def create_trainer(args):
             milestones= range(0, MAX_EPOCHS)
         else:
             milestones = [num for num in range(0, MAX_EPOCHS) if num % round(steps_per_epoch) == 0][1:]
-
         lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "PolynomialLR":
         lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
     elif args.scheduler == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
+
     
     # ckpt_loader = None
     if args.model_filepath != 'None' and not args.resume:
@@ -290,14 +286,16 @@ def create_trainer(args):
         checkpoint = torch.load(args.model_filepath, map_location=map_location)
         network.load_state_dict(checkpoint['net'])
         optimizer.load_state_dict(checkpoint['opt'])
-        lr_scheduler.load_state_dict(checkpoint['lr'])
-        logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
-        args.current_epoch = lr_scheduler.last_epoch
+        args.current_epoch = int(checkpoint['lr']["last_epoch"])
         CURRENT_EPOCH = args.current_epoch
         MAX_EPOCHS = MAX_EPOCHS - CURRENT_EPOCH
         assert MAX_EPOCHS > 0
         logger.critical("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {MAX_EPOCHS}")
+        
+        lr_scheduler.load_state_dict(checkpoint['lr'])
+        logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
+        
         
 
 
@@ -407,7 +405,7 @@ def create_trainer(args):
 
     trainer = SupervisedTrainer(
         device=device,
-        max_epochs=args.epochs,
+        max_epochs=MAX_EPOCHS,
         train_data_loader=train_loader,
         network=network,
         iteration_update=Interaction(

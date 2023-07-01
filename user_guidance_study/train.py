@@ -257,6 +257,9 @@ def create_trainer(args):
     elif args.optimizer == "Adam": # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
+    MAX_EPOCHS = args.epochs
+    CURRENT_EPOCH = args.current_epoch
+
 
     # SCHEDULER
     #if args.scheduler == "StepLR":
@@ -281,8 +284,6 @@ def create_trainer(args):
     if args.model_filepath != 'None' and not args.resume:
         raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
     
-    MAX_EPOCHS = args.epochs
-    CURRENT_EPOCH = args.current_epoch
     if args.resume:
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}

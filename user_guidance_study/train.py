@@ -538,10 +538,6 @@ def run(args):
         for size in args.val_crop_size:
             assert (size % 64) == 0
 
-
-    # click-generation
-    logger.warning("click_generation: This has not been implemented, so the value '{}' will be discarded for now!".format(args.click_generation))
-
     
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device)
     logger.info(f"Logging GPU usage to {args.output}/usage.csv")
@@ -663,20 +659,36 @@ def main():
     parser.add_argument("-dpv", "--deepgrow_probability_val", type=float, default=1.0)
 
     # Guidance Signal Click Generation
-    parser.add_argument("-cg", "--click_generation", default="non-corrective,random", 
-        choices=[
-        "non-corrective,random", # Sample a random pixel from the training patch
-        "corrective,global,random", # Extract all missclassified pixels, then sample one (from the whole volume), stop if probability (0.9) of stopping based on clicks (binomial distribution?)
-        "corrective,global,low dice", # Extract all missclassified pixels. While the dice score remains low (threshold 0.9 or 0.95), 
-        # continue sampling new clicks (stop at number of clicks to avoid infinite loops)
-        "corrective,global,hybrid low dice", # Same as 'corrective,global,random' but decide whether to sample new clicks
-        #  (based on the distribution on the dice, )
-        # ONLY relevant during evalution 
-        "corrective,patch-based,random", # Same as 'corrective,global,random' but only select those patches where the model was actually wrong (selection probability p*)
-        "corrective,patch-based,low dice", # Same as 'corrective,global,low dice' but do it per patch until below threshold or at click limit
-        "corrective,patch-based,hybrid low dice", # Same as 'corrective,global,hybrid low dice' but do the sampling on the patch with the lowest dice
-        # top 10 worst patches
-        ])
+    parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1,2,3,4])
+    args.train_click_generation_mapping = {
+        # Training only, so done on the patch of size train_crop_size
+        # Sample max_train_interactions amount of clicks simultaneously in the first and only iteration X. TODO decide if max_iter is fixed
+        1: "non-corrective,random,max_train_interactions stop",
+
+        # Sample clicks iteratively for the patch. Step when dice good enough (e.g. 0.9) or when max_train_interactions is reached
+        2: "corrective,random,dice threshold or max_train_interactions stop",
+
+        # Sample clicks iteratively for the patch. At each step sample p~(0,1). If p > 0.5 continue sampling TODO multiple p values allowed here
+        3: "corrective,random, probability based stop",
+
+        # Sample clicks iteratively for the patch. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
+        # If p > 0.5 continue sampling, then check if dice is good enough. If so no more clicks are required.
+        4: "corrective,global,probability and dice based threshold or max_train_interactions stop",
+    }
+
+    parser.add_argument("--vcg", "--val_click_generation", type=int, default=2, choices=[1,2])
+
+    args.val_click_generation_mapping = {
+        # Validation, so everthing is done on the full volume
+        # Subdivide volume into patches of size train_crop_size, calculate the dice score for each, then sample click on the worst one
+        1: "patch-based, max_val_interactions stop",
+        
+        # Sample directly from the global error
+        2: "global,max_val_interactions stop",
+    }
+
+    # click-generation
+    logger.warning("train_click_generation and val_click_generation: This has not been implemented!")
 
     # Guidance Signal Hyperparameters
     parser.add_argument("--sigma", type=int, default=1)

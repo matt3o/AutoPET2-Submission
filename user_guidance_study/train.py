@@ -391,7 +391,7 @@ def create_trainer(args):
         # ),
         CheckpointSaver(
             save_dir=args.output,
-            save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler, "epoch": },
+            save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
             save_interval=args.save_interval,
             save_final=True,
             final_filename="checkpoint.pt",

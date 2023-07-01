@@ -306,6 +306,7 @@ def create_trainer(args):
     val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
     # define event-handlers for engine
     val_handlers = [
+        StatsHandler(output_transform=lambda x: None),
         CheckpointSaver(
              save_dir=args.output,
              save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
@@ -314,7 +315,7 @@ def create_trainer(args):
              save_interval=args.save_interval,
              final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
-        StatsHandler(output_transform=lambda x: None),
+
         # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
         # CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423

@@ -257,9 +257,6 @@ def create_trainer(args):
     elif args.optimizer == "Adam": # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
-    MAX_EPOCHS = args.epochs
-    # ITERATIONS_PER_EPOCH = numel_train
-    CURRENT_EPOCH = args.current_epoch
 
     # SCHEDULER
     #if args.scheduler == "StepLR":
@@ -283,6 +280,9 @@ def create_trainer(args):
     # ckpt_loader = None
     if args.model_filepath != 'None' and not args.resume:
         raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
+    
+    MAX_EPOCHS = args.epochs
+    CURRENT_EPOCH = args.current_epoch
     if args.resume:
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
@@ -291,18 +291,20 @@ def create_trainer(args):
         optimizer.load_state_dict(checkpoint['opt'])
         lr_scheduler.load_state_dict(checkpoint['lr'])
         logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
-        # ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
+        args.current_epoch = lr_scheduler.last_epoch
+        CURRENT_EPOCH = args.current_epoch
+        MAX_EPOCHS = MAX_EPOCHS - CURRENT_EPOCH
+        assert MAX_EPOCHS > 0
+        logger.critical("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {MAX_EPOCHS}")
+        
+
 
         
     train_trigger_event = Events.ITERATION_COMPLETED(every=200) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=50)
     val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
     # define event-handlers for engine
     val_handlers = [
-        StatsHandler(output_transform=lambda x: None),
-        # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
-        # CustomLoader(),
-        # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=20, trigger_event=val_trigger_event),
         CheckpointSaver(
              save_dir=args.output,
              save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
@@ -311,6 +313,11 @@ def create_trainer(args):
              save_interval=args.save_interval,
              final_filename="pretrained_deepedit_" + args.network + ".pt",
         ),
+        StatsHandler(output_transform=lambda x: None),
+        # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
+        # CustomLoader(),
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        GarbageCollector(log_level=20, trigger_event=val_trigger_event),
     ]
 
     all_val_metrics = dict()
@@ -384,10 +391,11 @@ def create_trainer(args):
         # ),
         CheckpointSaver(
             save_dir=args.output,
-            save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
+            save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler, "epoch": },
             save_interval=args.save_interval,
             save_final=True,
             final_filename="checkpoint.pt",
+            n_saved=2,
         ),
         # CustomLoader(all_train_metrics),
         # https://github.com/Project-MONAI/MONAI/issues/3423

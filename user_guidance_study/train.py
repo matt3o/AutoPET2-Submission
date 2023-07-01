@@ -674,7 +674,7 @@ def main():
 
         # Sample clicks iteratively for the patch. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
         # If p > 0.5 continue sampling, then check if dice is good enough. If so no more clicks are required.
-        4: "corrective,global,probability and dice based threshold or max_train_interactions stop",
+        4: "corrective,random,probability and dice based threshold or max_train_interactions stop",
     }
 
     parser.add_argument("--vcg", "--val_click_generation", type=int, default=2, choices=[1,2])

@@ -28,11 +28,11 @@ import signal
 import math
 from functools import reduce
 
-tmpdir = '/local/work/mhadlich/tmp'
-if os.environ.get("SLURM_JOB_ID") is not None:
-    os.environ['TMPDIR'] = tmpdir
-    if not os.path.exists(tmpdir):
-        pathlib.Path(tmpdir).mkdir(parents=True)
+# tmpdir = '/local/work/mhadlich/tmp'
+# if os.environ.get("SLURM_JOB_ID") is not None:
+#     os.environ['TMPDIR'] = tmpdir
+#     if not os.path.exists(tmpdir):
+#         pathlib.Path(tmpdir).mkdir(parents=True)
 
 # Things needed to debug the Interaction class
 import resource

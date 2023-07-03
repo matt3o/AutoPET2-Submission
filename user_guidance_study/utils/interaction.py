@@ -87,7 +87,8 @@ class Interaction:
         
         if not self.train:
             # Evaluation does not print epoch / iteration information
-            logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
+            #logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
+            logger.info(f"### Interaction iteration {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
         print_gpu_usage(device=engine.state.device, used_memory_only=True, context="START interaction class")
 
         # Set up the initial batch data
@@ -165,7 +166,9 @@ class Interaction:
 
                 engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
             logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
-
+        
+        # Might be needed for sw_roi_size smaller than 128
+        #torch.cuda.empty_cache()
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle
 

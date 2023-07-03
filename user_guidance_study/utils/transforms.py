@@ -120,7 +120,6 @@ class PrintGPUUsaged(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         d = data
-        torch.cuda.empty_cache()
         logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB")
         return d
 
@@ -135,7 +134,8 @@ class ClearGPUMemoryd(MapTransform):
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         d = data
         torch.cuda.empty_cache()
-        logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB")
+        if logger is not None:
+            logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB")
         return d
 
 

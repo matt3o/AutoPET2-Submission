@@ -28,11 +28,11 @@ import signal
 import math
 from functools import reduce
 
-# tmpdir = '/local/work/mhadlich/tmp'
-# if os.environ.get("SLURM_JOB_ID") is not None:
-#     os.environ['TMPDIR'] = tmpdir
-#     if not os.path.exists(tmpdir):
-#         pathlib.Path(tmpdir).mkdir(parents=True)
+tmpdir = '/local/work/mhadlich/tmp'
+if os.environ.get("SLURM_JOB_ID") is not None:
+    os.environ['TMPDIR'] = tmpdir
+    if not os.path.exists(tmpdir):
+        pathlib.Path(tmpdir).mkdir(parents=True)
 
 # Things needed to debug the Interaction class
 import resource
@@ -116,9 +116,11 @@ class TerminationHandler:
 
     def exit_gracefully(self, *args):
         logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.max_rows", None)
+        logger.info(f"\n{self.wp.get_times_summary_pd()}")
         self.cleanup()
         self.join_threads()
-        logger.info(f"\n{self.wp.get_times_summary_pd()}")
         sys.exit(99)
 
     def join_threads(self):
@@ -130,7 +132,7 @@ class TerminationHandler:
         logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
         # Cleanup
         if self.args.throw_away_cache:
-            logger.info("Cleaning up..")
+            logger.info(f"Cleaning up the cache dir {self.args.cache_dir}")
             shutil.rmtree(self.args.cache_dir, ignore_errors=True)
         else:
             logger.info("Leaving cache dir as it is..")
@@ -299,9 +301,12 @@ def create_trainer(args):
         
 
 
-        
-    train_trigger_event = Events.ITERATION_COMPLETED(every=200) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=50)
-    val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+    if args.sw_roi_size[0] < 128:
+        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+    else:
+        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -609,7 +614,7 @@ def run(args):
     finally:
         terminator.cleanup()
         terminator.join_threads()
-        pd.set_option('display.max_columns', None)
+        pd.set_option("display.max_columns", None)
         pd.set_option("display.max_rows", None)
         logger.info(f"\n{wp.get_times_summary_pd()}")
 

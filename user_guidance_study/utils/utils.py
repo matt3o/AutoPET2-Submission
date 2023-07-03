@@ -82,7 +82,7 @@ def get_pre_transforms(labels, device, args):
             
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            ClearGPUMemoryd(device=device) if args.gpu_size != "large" else NoOpd(),
+            ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
         t_val = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -100,7 +100,7 @@ def get_pre_transforms(labels, device, args):
 
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            ClearGPUMemoryd(device=device) if args.gpu_size != "large" else NoOpd(),
+            ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
     else: # MSD Spleen
         t_train = [

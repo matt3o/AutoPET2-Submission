@@ -124,15 +124,18 @@ class PrintGPUUsaged(MapTransform):
         return d
 
 class ClearGPUMemoryd(MapTransform):
-    def __init__(self, device, keys: KeysCollection = None):
+    def __init__(self, device, keys: KeysCollection = None, garbage_collection: bool = True):
         """
         Prints the GPU usage
         """
         super().__init__(keys)
         self.device = device
+        self.garbage_collection = garbage_collection
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         d = data
+        if self.garbage_collection:
+            gc.collect()
         torch.cuda.empty_cache()
         if logger is not None:
             logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB")

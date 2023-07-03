@@ -278,28 +278,10 @@ def create_trainer(args):
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
 
     
+
     # ckpt_loader = None
     if args.model_filepath != 'None' and not args.resume:
         raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
-    
-    if args.resume:
-        logger.info("{}:: Loading Network...".format(args.gpu))
-        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-        checkpoint = torch.load(args.model_filepath, map_location=map_location)
-        network.load_state_dict(checkpoint['net'])
-        optimizer.load_state_dict(checkpoint['opt'])
-        args.current_epoch = int(checkpoint['lr']["last_epoch"])
-        CURRENT_EPOCH = args.current_epoch
-        MAX_EPOCHS = args.epochs - CURRENT_EPOCH
-        assert MAX_EPOCHS > 0
-        logger.critical("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {CURRENT_EPOCH + MAX_EPOCHS}")
-        
-        lr_scheduler.load_state_dict(checkpoint['lr'])
-        logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
-        
-        
-
 
     if args.sw_roi_size[0] < 128:
         train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
@@ -310,20 +292,15 @@ def create_trainer(args):
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
-        CheckpointSaver(
-             save_dir=args.output,
-             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
-             save_key_metric=True,
-             save_final=True,
-             save_interval=args.save_interval,
-             final_filename="pretrained_deepedit_" + args.network + ".pt",
-        ),
-
         # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
         # CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event=val_trigger_event),
     ]
+
+    # squared_pred enables much faster convergence, possibly even better results in the long run
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
+
 
     all_val_metrics = dict()
     all_val_metrics["val_mean_dice"] = MeanDice(
@@ -336,8 +313,6 @@ def create_trainer(args):
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
 
-    # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
 
 
     evaluator = SupervisedEvaluator(
@@ -361,6 +336,9 @@ def create_trainer(args):
         key_val_metric=all_val_metrics,
         val_handlers=val_handlers,
     )
+    # if handler is not None: 
+    #     handler(evaluator)
+    #     handler.attach(evaluator)
 
 
     all_train_metrics = dict()
@@ -382,7 +360,7 @@ def create_trainer(args):
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, 
                           print_lr=True,
-                          ),
+        ),
         ValidationHandler(
             validator=evaluator, interval=args.val_freq, epoch_level=(not args.eval_only)
         ),
@@ -394,20 +372,12 @@ def create_trainer(args):
         #     tag_name="train_loss",
         #     output_transform=from_engine(["loss"], first=True),
         # ),
-        CheckpointSaver(
-            save_dir=args.output,
-            save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
-            save_interval=args.save_interval,
-            save_final=True,
-            final_filename="checkpoint.pt",
-            n_saved=2,
-        ),
         # CustomLoader(all_train_metrics),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event=train_trigger_event),
     ]
 
-    logger.info(f"{MAX_EPOCHS=}")
+    # logger.info(f"{MAX_EPOCHS=}")
     trainer = SupervisedTrainer(
         device=device,
         max_epochs=MAX_EPOCHS,
@@ -432,6 +402,51 @@ def create_trainer(args):
         key_train_metric=all_train_metrics,
         train_handlers=train_handlers,
     )
+
+    save_dict = {'trainer': trainer, "net": network, "opt": optimizer, "lr": lr_scheduler}
+    CheckpointSaver(
+        save_dir=args.output,
+        save_dict=save_dict,
+        save_interval=args.save_interval,
+        save_final=True,
+        final_filename="checkpoint.pt",
+        n_saved=2,
+    ).attach(trainer)
+    CheckpointSaver(
+            save_dir=args.output,
+            save_dict=save_dict,
+            save_key_metric=True,
+            save_final=True,
+            save_interval=args.save_interval,
+            final_filename="pretrained_deepedit_" + args.network + ".pt",
+    ).attach(evaluator)
+
+    # handler = None
+    if args.resume:
+        logger.info("{}:: Loading Network...".format(args.gpu))
+        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
+        checkpoint = torch.load(args.model_filepath)
+        # print(*checkpoint['trainer'].items(), sep='\n')
+        
+        for key in save_dict:
+            assert key in checkpoint, f"key {key} has not been found in the save_dict! The file may be broken or incompatible (e.g. evaluator has not been run).\n file keys: {checkpoint.keys}"
+        # network.load_state_dict(checkpoint['net'])
+        # optimizer.load_state_dict(checkpoint['opt'])
+        # args.current_epoch = int(checkpoint['lr']["last_epoch"])
+        # print(f"#### CURRENT EPOCH: {args.current_epoch} ######")
+        # CURRENT_EPOCH = args.current_epoch
+        # MAX_EPOCHS = args.epochs - CURRENT_EPOCH
+        # assert MAX_EPOCHS > 0
+        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+        # logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {CURRENT_EPOCH + MAX_EPOCHS}")
+        
+        # lr_scheduler.load_state_dict(checkpoint['lr'])
+        # logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
+
+        handler = CheckpointLoader(load_path=args.model_filepath, load_dict=save_dict, map_location=map_location)
+        handler(trainer)
+        # exit(0)
+
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
 

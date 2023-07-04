@@ -68,7 +68,9 @@ from monai.handlers import (
     from_engine,
     GarbageCollector,
     CheckpointLoader,
+    IgniteMetric,
 )
+from monai.metrics import LossMetric
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
@@ -87,6 +89,8 @@ import threading
 from monai.optimizers.novograd import Novograd
 
 from ignite.contrib.handlers.tensorboard_logger import *
+
+from monai.handlers import DiceCEMetric
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -271,11 +275,11 @@ def create_trainer(args):
             milestones= range(0, MAX_EPOCHS)
         else:
             milestones = [num for num in range(0, MAX_EPOCHS) if num % round(steps_per_epoch) == 0][1:]
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333)
     elif args.scheduler == "PolynomialLR":
-        lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+        lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2)
     elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6)
 
     
 
@@ -303,9 +307,14 @@ def create_trainer(args):
 
 
     all_val_metrics = dict()
-    all_val_metrics["val_mean_dice"] = MeanDice(
-        output_transform=from_engine(["pred", "label"]), include_background=False
+    all_val_metrics["val_mean_dice"] = DiceCEMetric(
+        output_transform=from_engine(["pred", "label"]),
+        softmax=True, squared_pred=True,
     )
+
+    # all_val_metrics["val_mean_dice"] = MeanDice(
+    #     output_transform=from_engine(["pred", "label"]), include_background=False
+    # )
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
     #     if key_label != "background":
@@ -342,8 +351,13 @@ def create_trainer(args):
 
 
     all_train_metrics = dict()
-    all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
-                                               include_background=False)
+    # all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
+    #                                            include_background=False)
+    all_train_metrics["train_dice"] = DiceCEMetric(
+        output_transform=from_engine(["pred", "label"]),
+        softmax=True, squared_pred=True,
+    )
+
     if len(args.labels) > 2:
         for key_label in args.labels:
             if key_label != "background":

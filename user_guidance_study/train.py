@@ -90,7 +90,7 @@ from monai.optimizers.novograd import Novograd
 
 from ignite.contrib.handlers.tensorboard_logger import *
 
-from monai.handlers import DiceCEMetric
+# from monai.handlers import IgniteLossMetric
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -304,13 +304,13 @@ def create_trainer(args):
 
     # squared_pred enables much faster convergence, possibly even better results in the long run
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
-
+    
+    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
+    metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
+    ignite_metric = IgniteMetric(metric_fn=metric_fn, output_transform=from_engine(["pred", "label"]), save_details=True)
 
     all_val_metrics = dict()
-    all_val_metrics["val_mean_dice"] = DiceCEMetric(
-        output_transform=from_engine(["pred", "label"]),
-        softmax=True, squared_pred=True,
-    )
+    all_val_metrics["val_mean_dice"] = ignite_metric
 
     # all_val_metrics["val_mean_dice"] = MeanDice(
     #     output_transform=from_engine(["pred", "label"]), include_background=False
@@ -321,8 +321,6 @@ def create_trainer(args):
     #         all_val_metrics[key_label + "_dice"] = MeanDice(
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
-
-
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -353,10 +351,7 @@ def create_trainer(args):
     all_train_metrics = dict()
     # all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
     #                                            include_background=False)
-    all_train_metrics["train_dice"] = DiceCEMetric(
-        output_transform=from_engine(["pred", "label"]),
-        softmax=True, squared_pred=True,
-    )
+    all_train_metrics["train_dice"] = ignite_metric
 
     if len(args.labels) > 2:
         for key_label in args.labels:

@@ -664,17 +664,17 @@ def main():
     args.train_click_generation_mapping = {
         # Training only, so done on the patch of size train_crop_size
         # Sample max_train_interactions amount of clicks simultaneously in the first and only iteration X. TODO decide if max_iter is fixed
-        1: "non-corrective,random,max_train_interactions stop",
+        1: "non-corrective, random, max_train_interactions stop",
 
         # Sample clicks iteratively for the patch. Step when dice good enough (e.g. 0.9) or when max_train_interactions is reached
-        2: "corrective,random,dice threshold or max_train_interactions stop",
+        2: "corrective, random, dice threshold or max_train_interactions stop",
 
         # Sample clicks iteratively for the patch. At each step sample p~(0,1). If p > 0.5 continue sampling TODO multiple p values allowed here
-        3: "corrective,random, probability based stop",
+        3: "corrective, random, probability based stop",
 
         # Sample clicks iteratively for the patch. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
         # If p > 0.5 continue sampling, then check if dice is good enough. If so no more clicks are required.
-        4: "corrective,random,probability and dice based threshold or max_train_interactions stop",
+        4: "corrective, random, probability and dice based threshold or max_train_interactions stop",
     }
 
     parser.add_argument("--vcg", "--val_click_generation", type=int, default=2, choices=[1,2])
@@ -685,7 +685,7 @@ def main():
         1: "patch-based, max_val_interactions stop",
         
         # Sample directly from the global error
-        2: "global,max_val_interactions stop",
+        2: "global, max_val_interactions stop",
     }
 
     # click-generation

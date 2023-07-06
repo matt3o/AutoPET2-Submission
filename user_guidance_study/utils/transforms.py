@@ -234,6 +234,8 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         device = None,
         spacing = None,
         adaptive_sigma = False,
+        train_click_generation = 2,
+        val_click_generation = 2,
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -247,6 +249,8 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         self.device = device
         self.spacing = spacing
         self.adaptive_sigma = adaptive_sigma
+        self.train_click_generation = train_click_generation
+        self.val_click_generation = val_click_generation
 
         self.gdt_th = 0 if self.exp_geos else self.gdt_th
         self.gdt = True if self.exp_geos else self.gdt

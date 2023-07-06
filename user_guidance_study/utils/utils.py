@@ -193,7 +193,10 @@ def get_click_transforms(device, args):
                                     exp_geos=args.exp_geos,
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
-                                    spacing=spacing),        # Overwrites the image entry
+                                    spacing=spacing,
+                                    train_click_generation=args.train_click_generation,
+                                    val_click_generation=args.val_click_generation,
+                                    ),        # Overwrites the image entry
         ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
     ]
 

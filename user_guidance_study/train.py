@@ -80,7 +80,8 @@ from monai.handlers import (
 from monai.metrics import LossMetric
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
-from utils.dynunet import DynUNet
+# from utils.dynunet import DynUNet
+from monai.networks.nets.dynunet import DynUNet
 
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from monai.engines.utils import IterationEvents
@@ -204,8 +205,8 @@ def get_network(network, labels, args):
             norm_name="instance",
             deep_supervision=False,
             res_block=True,
-            conv1d=args.conv1d,
-            conv1s=args.conv1s,
+            # conv1d=args.conv1d,
+            # conv1s=args.conv1s,
         )
     elif network == "smalldynunet":
         network = DynUNet(
@@ -219,8 +220,8 @@ def get_network(network, labels, args):
             norm_name="instance",
             deep_supervision=False,
             res_block=True,
-            conv1d=args.conv1d,
-            conv1s=args.conv1s,
+            # conv1d=args.conv1d,
+            # conv1s=args.conv1s,
         )
     set_track_meta(False)
     return network

@@ -17,6 +17,7 @@ import time
 from typing import Dict, Hashable, List, Mapping, Optional, Union, Iterable
 import gc
 
+from enum import IntEnum
 from pynvml import *
 
 import numpy as np
@@ -45,6 +46,17 @@ from utils.logger import setup_loggers, get_logger
 
 logger = None
 
+class ClickGenerationStrategy(IntEnum):
+    GLOBAL_NON_CORRECTIVE = 1
+    GLOBAL_CORRECTIVE = 2
+    PATCH_BASED_CORRECTIVE = 3
+
+class StoppingCriterion(IntEnum):
+    MAX_ITER = 1
+    MAX_ITER_AND_PROBABILITY = 2
+    MAX_ITER_AND_DICE = 3
+    MAX_ITER_PROBABILITY_AND_DICE = 4
+    DEEPGROW_PROBABILITY = 5
 
 def threshold_foreground(x):
     return x > 0.005
@@ -226,7 +238,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        train: bool,
         guidance_key: str = "guidance",
         sigma: int = 3,
         number_intensity_ch: int = 1,
@@ -254,14 +265,6 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         self.device = device
         self.spacing = spacing
         self.adaptive_sigma = adaptive_sigma
-
-        if self.train:
-            self.click_generation = self.train_click_generation
-        else:
-            self.click_generation = self.val_click_generation
-        # self.train_click_generation = train_click_generation
-        # self.val_click_generation = val_click_generation
-
         self.gdt_th = 0 if self.exp_geos else self.gdt_th
         self.gdt = True if self.exp_geos else self.gdt
 
@@ -359,29 +362,26 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 assert image.is_cuda
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
 
-                if self.train_click_generation in [2,3,4] :
-                    guidance = d[self.guidance_key]
-                    # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
-                    # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
+                guidance = d[self.guidance_key]
+                # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
+                # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
-                    for key_label in guidance.keys():
-                        # Getting signal based on guidance
-                        assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
-                        # logger.info(f"guidance[key_label] {key_label}: {guidance[key_label]}")
-                        if guidance[key_label] is not None and guidance[key_label].numel():
-                            signal = self._get_corrective_signal(image, guidance[key_label].to(device=self.device), key_label=key_label)
-                        else:
-                            # TODO can speed this up here
-                            signal = self._get_corrective_signal(image, torch.Tensor([]).to(device=self.device), key_label=key_label)
-                        assert signal.is_cuda
-                        assert tmp_image.is_cuda
-                        tmp_image = torch.cat([tmp_image, signal], dim=0)
-                        if isinstance(d[key], MetaTensor):
-                            d[key].array = tmp_image
-                        else:
-                            d[key] = tmp_image
-                elif self.train_click_generation == 1:
-                    self._get_random_signal(image, key_label=key_label)
+                for key_label in guidance.keys():
+                    # Getting signal based on guidance
+                    assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
+                    # logger.info(f"guidance[key_label] {key_label}: {guidance[key_label]}")
+                    if guidance[key_label] is not None and guidance[key_label].numel():
+                        signal = self._get_corrective_signal(image, guidance[key_label].to(device=self.device), key_label=key_label)
+                    else:
+                        # TODO can speed this up here
+                        signal = self._get_corrective_signal(image, torch.Tensor([]).to(device=self.device), key_label=key_label)
+                    assert signal.is_cuda
+                    assert tmp_image.is_cuda
+                    tmp_image = torch.cat([tmp_image, signal], dim=0)
+                    if isinstance(d[key], MetaTensor):
+                        d[key].array = tmp_image
+                    else:
+                        d[key] = tmp_image
                 return d
             else:
                 raise UserWarning("This transform only applies to image key")
@@ -552,10 +552,10 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # Initialize the guidance dict
             d[self.guidance_key] = {}
         
-        click_generation_strategy = d[click_generation_strategy_key]
-        if click_generation_strategy == GLOBAL_NON_CORRECTIVE:
+        click_generation_strategy = d[self.click_generation_strategy_key]
+        if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             raise UserWarning("Not implemented")
-        elif click_generation_strategy == GLOBAL_CORRECTIVE:
+        elif click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE:
             discrepancy = d[self.discrepancy_key]
             self.randomize(data)
             if self._will_interact:
@@ -571,7 +571,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                     # Add guidance based on discrepancy
                     d[self.guidance_key][key_label] = self.add_guidance(tmp_gui, discrepancy[key_label], d["label_names"], d["label"])
 
-        elif click_generation_strategy == PATCH_BASED_CORRECTIVE:
+        elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             raise UserWarning("Not implemented")
         else:
             raise UserWarning("Unknown click strategy")

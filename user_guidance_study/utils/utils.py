@@ -82,7 +82,7 @@ def get_pre_transforms(labels, device, args):
             
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
+            # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
         t_val = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -100,7 +100,7 @@ def get_pre_transforms(labels, device, args):
 
             # Move to GPU
             ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
+            # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
     else: # MSD Spleen
         t_train = [
@@ -197,7 +197,7 @@ def get_click_transforms(device, args):
                                     train_click_generation=args.train_click_generation,
                                     val_click_generation=args.val_click_generation,
                                     ),        # Overwrites the image entry
-        ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
+        # ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
     ]
 
     return Compose(t)
@@ -254,8 +254,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
     # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
-    train_loader = ThreadDataLoader(
-        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
+    train_loader = DataLoader(
+        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -265,8 +265,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
-    val_loader = ThreadDataLoader(
-        val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
+    val_loader = DataLoader(
+        val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

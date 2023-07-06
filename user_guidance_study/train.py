@@ -68,7 +68,9 @@ from monai.handlers import (
     from_engine,
     GarbageCollector,
     CheckpointLoader,
+    IgniteMetric,
 )
+from monai.metrics import LossMetric
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from utils.dynunet import DynUNet
@@ -87,6 +89,8 @@ import threading
 from monai.optimizers.novograd import Novograd
 
 from ignite.contrib.handlers.tensorboard_logger import *
+
+# from monai.handlers import IgniteLossMetric
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -116,9 +120,11 @@ class TerminationHandler:
 
     def exit_gracefully(self, *args):
         logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.max_rows", None)
+        logger.info(f"\n{self.wp.get_times_summary_pd()}")
         self.cleanup()
         self.join_threads()
-        logger.info(f"\n{self.wp.get_times_summary_pd()}")
         sys.exit(99)
 
     def join_threads(self):
@@ -130,7 +136,7 @@ class TerminationHandler:
         logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
         # Cleanup
         if self.args.throw_away_cache:
-            logger.info("Cleaning up..")
+            logger.info(f"Cleaning up the cache dir {self.args.cache_dir}")
             shutil.rmtree(self.args.cache_dir, ignore_errors=True)
         else:
             logger.info("Leaving cache dir as it is..")
@@ -258,14 +264,10 @@ def create_trainer(args):
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
     MAX_EPOCHS = args.epochs
-    # ITERATIONS_PER_EPOCH = numel_train
     CURRENT_EPOCH = args.current_epoch
 
     # SCHEDULER
-    #if args.scheduler == "StepLR":
-    #    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1, last_epoch=CURRENT_EPOCH)
     if args.scheduler == "MultiStepLR":
-         # Do a x step descent
         steps = 4
         steps_per_epoch = round(MAX_EPOCHS/steps)
         if steps_per_epoch < 1:
@@ -273,29 +275,24 @@ def create_trainer(args):
             milestones= range(0, MAX_EPOCHS)
         else:
             milestones = [num for num in range(0, MAX_EPOCHS) if num % round(steps_per_epoch) == 0][1:]
-
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333)
     elif args.scheduler == "PolynomialLR":
-        lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2, last_epoch=CURRENT_EPOCH)
+        lr_scheduler =  torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power = 2)
     elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6, last_epoch=CURRENT_EPOCH)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6)
+
     
+
     # ckpt_loader = None
     if args.model_filepath != 'None' and not args.resume:
         raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
-    if args.resume:
-        logger.info("{}:: Loading Network...".format(args.gpu))
-        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-        checkpoint = torch.load(args.model_filepath, map_location=map_location)
-        network.load_state_dict(checkpoint['net'])
-        optimizer.load_state_dict(checkpoint['opt'])
-        lr_scheduler.load_state_dict(checkpoint['lr'])
-        logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
-        # ckpt_loader = CheckpointLoader(load_path=args.model_filepath, load_dict={"net": network, "opt": optimizer, "lr": lr_scheduler}, map_location=map_location)
 
-        
-    train_trigger_event = Events.ITERATION_COMPLETED(every=200) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=50)
-    val_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+    if args.sw_roi_size[0] < 128:
+        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+    else:
+        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -303,30 +300,27 @@ def create_trainer(args):
         # CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event=val_trigger_event),
-        CheckpointSaver(
-             save_dir=args.output,
-             save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
-             save_key_metric=True,
-             save_final=True,
-             save_interval=args.save_interval,
-             final_filename="pretrained_deepedit_" + args.network + ".pt",
-        ),
     ]
 
+    # squared_pred enables much faster convergence, possibly even better results in the long run
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
+    
+    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
+    metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
+    ignite_metric = IgniteMetric(metric_fn=metric_fn, output_transform=from_engine(["pred", "label"]), save_details=True)
+
     all_val_metrics = dict()
-    all_val_metrics["val_mean_dice"] = MeanDice(
-        output_transform=from_engine(["pred", "label"]), include_background=False
-    )
+    all_val_metrics["val_mean_dice"] = ignite_metric
+
+    # all_val_metrics["val_mean_dice"] = MeanDice(
+    #     output_transform=from_engine(["pred", "label"]), include_background=False
+    # )
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
     #     if key_label != "background":
     #         all_val_metrics[key_label + "_dice"] = MeanDice(
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
-
-    # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
-
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -349,11 +343,16 @@ def create_trainer(args):
         key_val_metric=all_val_metrics,
         val_handlers=val_handlers,
     )
+    # if handler is not None: 
+    #     handler(evaluator)
+    #     handler.attach(evaluator)
 
 
     all_train_metrics = dict()
-    all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
-                                               include_background=False)
+    # all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
+    #                                            include_background=False)
+    all_train_metrics["train_dice"] = ignite_metric
+
     if len(args.labels) > 2:
         for key_label in args.labels:
             if key_label != "background":
@@ -370,7 +369,7 @@ def create_trainer(args):
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, 
                           print_lr=True,
-                          ),
+        ),
         ValidationHandler(
             validator=evaluator, interval=args.val_freq, epoch_level=(not args.eval_only)
         ),
@@ -382,22 +381,15 @@ def create_trainer(args):
         #     tag_name="train_loss",
         #     output_transform=from_engine(["loss"], first=True),
         # ),
-        CheckpointSaver(
-            save_dir=args.output,
-            save_dict={"net": network, "opt": optimizer, "lr": lr_scheduler},
-            save_interval=args.save_interval,
-            save_final=True,
-            final_filename="checkpoint.pt",
-        ),
         # CustomLoader(all_train_metrics),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event=train_trigger_event),
     ]
 
-
+    # logger.info(f"{MAX_EPOCHS=}")
     trainer = SupervisedTrainer(
         device=device,
-        max_epochs=args.epochs,
+        max_epochs=MAX_EPOCHS,
         train_data_loader=train_loader,
         network=network,
         iteration_update=Interaction(
@@ -419,6 +411,51 @@ def create_trainer(args):
         key_train_metric=all_train_metrics,
         train_handlers=train_handlers,
     )
+
+    save_dict = {'trainer': trainer, "net": network, "opt": optimizer, "lr": lr_scheduler}
+    CheckpointSaver(
+        save_dir=args.output,
+        save_dict=save_dict,
+        save_interval=args.save_interval,
+        save_final=True,
+        final_filename="checkpoint.pt",
+        n_saved=2,
+    ).attach(trainer)
+    CheckpointSaver(
+            save_dir=args.output,
+            save_dict=save_dict,
+            save_key_metric=True,
+            save_final=True,
+            save_interval=args.save_interval,
+            final_filename="pretrained_deepedit_" + args.network + ".pt",
+    ).attach(evaluator)
+
+    # handler = None
+    if args.resume:
+        logger.info("{}:: Loading Network...".format(args.gpu))
+        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
+        checkpoint = torch.load(args.model_filepath)
+        # print(*checkpoint['trainer'].items(), sep='\n')
+        
+        for key in save_dict:
+            assert key in checkpoint, f"key {key} has not been found in the save_dict! The file may be broken or incompatible (e.g. evaluator has not been run).\n file keys: {checkpoint.keys}"
+        # network.load_state_dict(checkpoint['net'])
+        # optimizer.load_state_dict(checkpoint['opt'])
+        # args.current_epoch = int(checkpoint['lr']["last_epoch"])
+        # print(f"#### CURRENT EPOCH: {args.current_epoch} ######")
+        # CURRENT_EPOCH = args.current_epoch
+        # MAX_EPOCHS = args.epochs - CURRENT_EPOCH
+        # assert MAX_EPOCHS > 0
+        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+        # logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {CURRENT_EPOCH + MAX_EPOCHS}")
+        
+        # lr_scheduler.load_state_dict(checkpoint['lr'])
+        # logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
+
+        handler = CheckpointLoader(load_path=args.model_filepath, load_dict=save_dict, map_location=map_location)
+        handler(trainer)
+        # exit(0)
+
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
 
@@ -597,7 +634,7 @@ def run(args):
     finally:
         terminator.cleanup()
         terminator.join_threads()
-        pd.set_option('display.max_columns', None)
+        pd.set_option("display.max_columns", None)
         pd.set_option("display.max_rows", None)
         logger.info(f"\n{wp.get_times_summary_pd()}")
 

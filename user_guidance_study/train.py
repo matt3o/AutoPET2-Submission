@@ -776,17 +776,6 @@ def main():
     # args.model_filepath = args.model_weights
     args.current_epoch = -1
     
-    # Map click generation to the 3 modi in AddGuidanceSignalDeepEditd
-    if args.train_click_generation == 0:
-        args.train_click_generation = 
-    elif args.train_click_generation == 1:
-        args.train_click_generation = ClickGenerationStrategy.GLOBAL_CORRECTIVE
-    
-    if args.train_click_generation == 0:
-        args.train_click_generation = ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE
-    elif args.train_click_generation == 1:
-        args.train_click_generation = ClickGenerationStrategy.GLOBAL_CORRECTIVE
-
     if not args.dont_check_output_dir and os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
     if not os.path.exists(args.output):

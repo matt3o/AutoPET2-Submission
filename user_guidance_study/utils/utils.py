@@ -1,3 +1,5 @@
+from enum import Enum
+
 from utils.transforms import (
     AddGuidanceSignalDeepEditd,
     AddRandomGuidanceDeepEditd,
@@ -55,10 +57,24 @@ from utils.helper import describe_batch_data
 
 logger = logging.getLogger("interactive_segmentation")
 
+spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
+
+class ClickGenerationStrategy(Enum):
+    GLOBAL_NON_CORRECTIVE = 1
+    GLOBAL_CORRECTIVE = 2
+    PATCH_BASED_CORRECTIVE = 3
+
+class StoppingCriterion(Enum):
+    MAX_ITER = 1
+    MAX_ITER_AND_PROBABILITY = 2
+    MAX_ITER_AND_DICE = 3
+    MAX_ITER_PROBABILITY_AND_DICE = 4
+    DEEPGROW_PROBABILITY = 5
+
+
 # crop_size multiples of sliding window with overlap 0.25 (default): 128, 224, 320, 416, 512
 
 def get_pre_transforms(labels, device, args):
-    spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ]
     if args.dataset == 'AutoPET':
         t_train = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -168,9 +184,7 @@ def get_pre_transforms(labels, device, args):
         ]
     return Compose(t_train), Compose(t_val)
 
-def get_click_transforms(device, args):
-    spacing = [2.03642011, 2.03642011, 3.        ] if args.dataset == 'AutoPET' else [2 * 0.79296899, 2 * 0.79296899, 5.        ] # 2-factor because of the spatial size
-
+def get_click_transforms(device, args, click_generation: ClickGenerationStrategy):
     t = [
         InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
@@ -194,8 +208,6 @@ def get_click_transforms(device, args):
                                     adaptive_sigma=args.adaptive_sigma,
                                     device=device, 
                                     spacing=spacing,
-                                    train_click_generation=args.train_click_generation,
-                                    val_click_generation=args.val_click_generation,
                                     ),        # Overwrites the image entry
         # ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
     ]

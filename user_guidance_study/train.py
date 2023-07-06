@@ -52,7 +52,14 @@ from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
 from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device, get_git_information, gpu_usage
 
 from utils.interaction import Interaction
-from utils.utils import get_pre_transforms, get_click_transforms, get_post_transforms, get_loaders
+from utils.utils import (
+    get_pre_transforms,
+    get_click_transforms,
+    get_post_transforms,
+    get_loaders,
+    ClickGenerationStrategy,
+    StoppingCriterion
+)
 
 #from monai.config import print_config
 #print_config()
@@ -231,6 +238,7 @@ def create_trainer(args):
 
     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
     click_transforms = get_click_transforms(device, args)
+    # val_click_transforms = get_click_transforms(device, args, click_generation=args.val_click_generation)
     post_transform = get_post_transforms(args.labels)
 
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
@@ -284,8 +292,8 @@ def create_trainer(args):
     
 
     # ckpt_loader = None
-    if args.model_filepath != 'None' and not args.resume:
-        raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
+    # if args.model_filepath != 'None' and not args.resume:
+    #     raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
 
     if args.sw_roi_size[0] < 128:
         train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
@@ -336,6 +344,8 @@ def create_trainer(args):
             args=args,
             loss_function=loss_function,
             post_transform=post_transform,
+            click_generation_strategy=args.val_click_generation,
+            stopping_criterion=StoppingCriterion.MAX_ITER,
         ),
         inferer=eval_inferer,
         postprocessing=post_transform,
@@ -402,6 +412,9 @@ def create_trainer(args):
             args=args,
             loss_function=loss_function,
             post_transform=post_transform,
+            click_generation_strategy=args.val_click_generation,
+            stopping_criterion=args.train_click_generation_stopping_criterion,
+
         ),
         optimizer=optimizer,
         loss_function=loss_function,
@@ -431,10 +444,10 @@ def create_trainer(args):
     ).attach(evaluator)
 
     # handler = None
-    if args.resume:
+    if args.resume_from != "None":
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-        checkpoint = torch.load(args.model_filepath)
+        checkpoint = torch.load(args.resume_from)
         # print(*checkpoint['trainer'].items(), sep='\n')
         
         for key in save_dict:
@@ -452,7 +465,7 @@ def create_trainer(args):
         # lr_scheduler.load_state_dict(checkpoint['lr'])
         # logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
 
-        handler = CheckpointLoader(load_path=args.model_filepath, load_dict=save_dict, map_location=map_location)
+        handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
         # exit(0)
 
@@ -661,7 +674,7 @@ def main():
 
     # Model
     parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"])
-    parser.add_argument("-r", "--resume", default=False, action='store_true')
+    # parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
     parser.add_argument("--train_crop_size", default="(224,224,224)", action='store')
@@ -680,7 +693,7 @@ def main():
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
     parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
-    parser.add_argument("--model_weights", type=str, default='None')
+    parser.add_argument("--resume_from", type=str, default='None')
     # parser.add_argument("--best_val_weights", default=False, action='store_true')
 
     # Logging
@@ -697,34 +710,33 @@ def main():
     parser.add_argument("-dpv", "--deepgrow_probability_val", type=float, default=1.0)
 
     # Guidance Signal Click Generation
-    parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1,2,3,4])
+    parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1,2])
+    # Training only, so done on the patch of size train_crop_size
     args.train_click_generation_mapping = {
-        # Training only, so done on the patch of size train_crop_size
-        1: "non-corrective",
-        # Sample clicks iteratively for the patch
-        2: "corrective",
+        1: ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE, #"non-corrective",
+        2: ClickGenerationStrategy.GLOBAL_CORRECTIVE, #"corrective",
     }
 
-    parser.add_argument("-vcg", "--val_click_generation", type=int, default=2, choices=[1,2])
+    parser.add_argument("-vcg", "--val_click_generation", type=int, default=1, choices=[1,2])
 
+    # Validation, so everything is done on the full volume
     args.val_click_generation_mapping = {
-        # Validation, so everything is done on the full volume
         # Subdivide volume into patches of size train_crop_size, calculate the dice score for each, then sample click on the worst one
-        1: "patch-based",
+        1: ClickGenerationStrategy.GLOBAL_CORRECTIVE, #"patch-based corrective",
         # Sample directly from the global error
-        2: "global",
+        2: ClickGenerationStrategy.PATCH_BASED_CORRECTIVE, # "global corrective",
     }
-    parser.add_argument("-cgsw", "--click_generation_stop_when", type=int, default=2, choices=[1,2])
+    parser.add_argument("-tcgsc", "--train_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4])
     args.click_generation_stop_when = {
         # Sample max_train_interactions amount of clicks (can be done in the first iteration if non-corrective)
-        "max_train_interactions",
+        1: StoppingCriterion.MAX_ITER,
         # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
-        "dice threshold or max_train_interactions",
+        2: StoppingCriterion.MAX_ITER_AND_PROBABILITY,
         # Sample clicks iteratively. At each step sample p~(0,1). If p > 0.5 continue sampling TODO multiple p values allowed here
-        "probability based",
+        3: StoppingCriterion.MAX_ITER_AND_DICE,
         # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
         # If p > 0.5 continue sampling, then check if dice is good enough. If so no more clicks are required.
-        "probability and dice based threshold or max_train_interactions",
+        4: StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
     }
 
     # click-generation
@@ -760,9 +772,20 @@ def main():
                    'background': 0
                    }
 
-    args.model_filepath = args.model_weights
+    # args.model_filepath = args.model_weights
     args.current_epoch = -1
     
+    # Map click generation to the 3 modi in AddGuidanceSignalDeepEditd
+    if args.train_click_generation == 0:
+        args.train_click_generation = 
+    elif args.train_click_generation == 1:
+        args.train_click_generation = ClickGenerationStrategy.GLOBAL_CORRECTIVE
+    
+    if args.train_click_generation == 0:
+        args.train_click_generation = ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE
+    elif args.train_click_generation == 1:
+        args.train_click_generation = ClickGenerationStrategy.GLOBAL_CORRECTIVE
+
     if not args.dont_check_output_dir and os.path.isdir(args.output):
         raise UserWarning(f"output path {args.output} already exists. Please choose another path..")
     if not os.path.exists(args.output):

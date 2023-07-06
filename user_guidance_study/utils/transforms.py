@@ -210,6 +210,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
         return d
 
 
+
 class AddGuidanceSignalDeepEditd(MapTransform):
     """
     Add Guidance signal for input image. Multilabel DeepEdit
@@ -225,6 +226,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
+        train: bool,
         guidance_key: str = "guidance",
         sigma: int = 3,
         number_intensity_ch: int = 1,
@@ -237,7 +239,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         device = None,
         spacing = None,
         adaptive_sigma = False,
-        train_click_generation = 2,
+        click_generation = 2,
         val_click_generation = 2,
     ):
         super().__init__(keys, allow_missing_keys)
@@ -252,14 +254,19 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         self.device = device
         self.spacing = spacing
         self.adaptive_sigma = adaptive_sigma
-        self.train_click_generation = train_click_generation
-        self.val_click_generation = val_click_generation
+
+        if self.train:
+            self.click_generation = self.train_click_generation
+        else:
+            self.click_generation = self.val_click_generation
+        # self.train_click_generation = train_click_generation
+        # self.val_click_generation = val_click_generation
 
         self.gdt_th = 0 if self.exp_geos else self.gdt_th
         self.gdt = True if self.exp_geos else self.gdt
 
 
-    def _get_signal(self, image, guidance, key_label):
+    def _get_corrective_signal(self, image, guidance, key_label):
         dimensions = 3 if len(image.shape) > 3 else 2
         assert type(guidance) == torch.Tensor or type(guidance) == MetaTensor, f"guidance is {type(guidance)}, value {guidance}"
 
@@ -352,26 +359,29 @@ class AddGuidanceSignalDeepEditd(MapTransform):
                 assert image.is_cuda
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
 
-                guidance = d[self.guidance_key]
-                # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
-                # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
+                if self.train_click_generation in [2,3,4] :
+                    guidance = d[self.guidance_key]
+                    # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]', 
+                    # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
-                for key_label in guidance.keys():
-                    # Getting signal based on guidance
-                    assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
-                    # logger.info(f"guidance[key_label] {key_label}: {guidance[key_label]}")
-                    if guidance[key_label] is not None and guidance[key_label].numel():
-                        signal = self._get_signal(image, guidance[key_label].to(device=self.device), key_label=key_label)
-                    else:
-                        # TODO can speed this up here
-                        signal = self._get_signal(image, torch.Tensor([]).to(device=self.device), key_label=key_label)
-                    assert signal.is_cuda
-                    assert tmp_image.is_cuda
-                    tmp_image = torch.cat([tmp_image, signal], dim=0)
-                    if isinstance(d[key], MetaTensor):
-                        d[key].array = tmp_image
-                    else:
-                        d[key] = tmp_image
+                    for key_label in guidance.keys():
+                        # Getting signal based on guidance
+                        assert type(guidance[key_label]) == torch.Tensor or type(guidance[key_label]) == MetaTensor, f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
+                        # logger.info(f"guidance[key_label] {key_label}: {guidance[key_label]}")
+                        if guidance[key_label] is not None and guidance[key_label].numel():
+                            signal = self._get_corrective_signal(image, guidance[key_label].to(device=self.device), key_label=key_label)
+                        else:
+                            # TODO can speed this up here
+                            signal = self._get_corrective_signal(image, torch.Tensor([]).to(device=self.device), key_label=key_label)
+                        assert signal.is_cuda
+                        assert tmp_image.is_cuda
+                        tmp_image = torch.cat([tmp_image, signal], dim=0)
+                        if isinstance(d[key], MetaTensor):
+                            d[key].array = tmp_image
+                        else:
+                            d[key] = tmp_image
+                elif self.train_click_generation == 1:
+                    self._get_random_signal(image, key_label=key_label)
                 return d
             else:
                 raise UserWarning("This transform only applies to image key")
@@ -464,6 +474,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         guidance_key: key to guidance source, shape (2, N, # of dim)
         discrepancy_key: key to discrepancy map between label and prediction shape (2, C, H, W, D) or (2, C, H, W)
         probability_key: key to click/interaction probability, shape (1)
+        device: device the transforms shall be executed on
     """
 
     def __init__(
@@ -474,6 +485,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
         device=None,
+        click_generation_strategy_key: str = "click_generation_strategy",
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -485,6 +497,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.default_guidance = None
         # self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
+        self.click_generation_strategy_key = click_generation_strategy_key
 
     def randomize(self, data: Mapping[Hashable, torch.Tensor]):
         probability = data[self.probability_key]
@@ -533,25 +546,35 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         # d: Dict = dict(data)
         d = data
+        # Get the previously generated clicks aka guidance
         guidance = d.get(self.guidance_key, None)
         if guidance is None:
             # Initialize the guidance dict
             d[self.guidance_key] = {}
-        discrepancy = d[self.discrepancy_key]
-        self.randomize(data)
+        
+        click_generation_strategy = d[click_generation_strategy_key]
+        if click_generation_strategy == GLOBAL_NON_CORRECTIVE:
+            raise UserWarning("Not implemented")
+        elif click_generation_strategy == GLOBAL_CORRECTIVE:
+            discrepancy = d[self.discrepancy_key]
+            self.randomize(data)
+            if self._will_interact:
+                for key_label in d["label_names"].keys():
+                    tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
+                    
+                    assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
+                    # Filter out -1 values
+                    if tmp_gui.numel() > 0:
+                        tmp_gui = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
+                        assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
 
-        if self._will_interact:
-            for key_label in d["label_names"].keys():
-                tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
-                
-                assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
-                # Filter out -1 values
-                if tmp_gui.numel() > 0:
-                    tmp_gui = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
-                    assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
+                    # Add guidance based on discrepancy
+                    d[self.guidance_key][key_label] = self.add_guidance(tmp_gui, discrepancy[key_label], d["label_names"], d["label"])
 
-                # Add guidance based on discrepancy
-                d[self.guidance_key][key_label] = self.add_guidance(tmp_gui, discrepancy[key_label], d["label_names"], d["label"])
+        elif click_generation_strategy == PATCH_BASED_CORRECTIVE:
+            raise UserWarning("Not implemented")
+        else:
+            raise UserWarning("Unknown click strategy")
 
         return d
 

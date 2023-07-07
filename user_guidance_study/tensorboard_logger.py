@@ -8,9 +8,10 @@ from ignite.contrib.handlers.tensorboard_logger import (
 )
 from ignite.engine import Engine, Events
 
-def init_tensorboard_logger(trainer, evaluator, debug=False):
-    tb_logger = TensorboardLogger(log_dir=f"{args.output}/tensorboard")
+def init_tensorboard_logger(trainer, evaluator, optimizer, all_train_metrics, all_val_metrics, output_dir, debug=False):
+    tb_logger = TensorboardLogger(log_dir=f"{output_dir}/tensorboard")
 
+    print(list(evaluator.state.metrics.keys()))
     tb_logger.attach_output_handler(
         evaluator,
         event_name=Events.EPOCH_COMPLETED,

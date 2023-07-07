@@ -283,10 +283,10 @@ class AddGuidanceSignalDeepEditd(MapTransform):
             first_point_size = guidance[0].numel()
             if dimensions == 3:
                 # Assume channel is first and depth is last CHWD
-                assert first_point_size == 4, f" first_point_size is {first_point_size}))"
+                assert first_point_size == 4, f"first_point_size is {first_point_size}, first_point is {guidance[0]}"
                 signal = torch.zeros((1, image.shape[-3], image.shape[-2], image.shape[-1]), device=self.device)
             else:
-                assert first_point_size == 3, f" first_point_size is {first_point_size}))"
+                assert first_point_size == 3, f"first_point_size is {first_point_size}, first_point is {guidance[0]}"
                 signal = torch.zeros((1, image.shape[-2], image.shape[-1]), device=self.device)
 
             sshape = signal.shape
@@ -495,7 +495,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self.discrepancy_key = discrepancy_key
         self.probability_key = probability_key
         self._will_interact = None
-        self.is_pos = None
+        # self.is_pos = None
         self.is_other = None
         self.default_guidance = None
         # self.guidance: Dict[str, List[List[int]]] = {}
@@ -513,31 +513,42 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         t = get_choice_from_distance_transform_cp(distance, device=self.device)
         return t
 
-    def add_guidance_based_on_discrepancy(self, guidance, discrepancy, label_names, labels):
+    def add_guidance_based_on_discrepancy(self, data, guidance, discrepancy):
+        assert guidance.dtype == torch.int32
         # Positive clicks of the segment in the iteration
         pos_discr = discrepancy[0] # idx 0 is positive discrepancy and idx 1 is negative discrepancy
 
         # Add guidance to the current key label
         if torch.sum(pos_discr) > 0:
             tmp_gui = self.find_guidance(pos_discr)
+            check_guidance_length(data, tmp_gui)
             if tmp_gui is not None:
-                assert guidance.dtype == torch.int32
                 guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
-            self.is_pos = True
+            # self.is_pos = True
         return guidance
 
-    def add_guidance_based_on_label(self, guidance, label):
+    def add_guidance_based_on_label(self, data, guidance, label):
+        assert guidance.dtype == torch.int32
         print(label.squeeze().shape)
 
         # Add guidance to the current key label
         if torch.sum(label) > 0:
             # generate a random sample
             tmp_gui = get_choice_from_tensor(label, device=self.device)
+            check_guidance_length(data, tmp_gui)
             if tmp_gui is not None:
-                assert guidance.dtype == torch.int32
                 guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
-            self.is_pos = True
+            # self.is_pos = True
         return guidance
+
+    def check_guidance_length(data, new_guidance):
+        if new_guidance is None:
+            return
+        dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
+        if dimensions == 3:
+            assert len(new_guidance) == 4, f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
+        else:
+            assert len(new_guidance) == 3, f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
 
 
     @timeit
@@ -556,7 +567,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # uniform random sampling on label
             for idx, (key_label, _) in enumerate(d["label_names"].items()):
                 tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
-                d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(tmp_gui, d["label"][idx + 1, ...][None])
+                d[self.guidance_key][key_label] = self.add_guidance_based_on_label(data, tmp_gui, d["label"][idx + 1, ...][None])
         elif (click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE or
                 click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE):
             discrepancy = d[self.discrepancy_key]
@@ -578,7 +589,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                         assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
 
                     # Add guidance based on discrepancy
-                    d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(tmp_gui, discrepancy[key_label], d["label_names"], d[CommonKeys.LABEL])
+                    d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, discrepancy[key_label])
         elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             raise UserWarning("Not implemented")
         else:

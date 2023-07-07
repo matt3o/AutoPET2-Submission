@@ -127,7 +127,7 @@ def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, m
 
         g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
         g[0] = dst.item()
-
+    assert len(g) == len(t_cp.shape), f"g has wrong dimensions! {len(g)} != {len(t_cp.shape)}"
     return g
 
 

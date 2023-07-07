@@ -3,6 +3,8 @@ import sys
 import os
 import logging
 import pathlib
+import uuid
+import torch
 
 from utils.logger import setup_loggers, get_logger
 from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device, get_git_information, gpu_usage
@@ -13,7 +15,7 @@ from utils.transforms import (
 )
 
 
-def parse_args(trainer, evaluator, ):
+def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
@@ -97,6 +99,8 @@ def parse_args(trainer, evaluator, ):
     args.caller_args = sys.argv
     args.env = os.environ
     args.git = get_git_information()
+
+    device = torch.device(f"cuda:{args.gpu}")
 
     # For single label using one of the Medical Segmentation Decathlon
     args.labels = {'spleen': 1,

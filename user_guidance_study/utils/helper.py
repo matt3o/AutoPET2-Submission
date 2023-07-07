@@ -219,3 +219,89 @@ def get_git_information():
     stream = os.popen('git branch;git rev-parse HEAD')
     git_info = stream.read()
     return git_info
+
+
+def oom_observer(device, alloc, device_alloc, device_free):
+    if device is not None and logger is not None:
+        logger.critical(torch.cuda.memory_summary(device))
+    # snapshot right after an OOM happened
+    print('saving allocated state during OOM')
+    snapshot = torch.cuda.memory._snapshot()
+    dump(snapshot, open(f'{output_dir}/oom_snapshot.pickle', 'wb'))
+    # logger.critical(snapshot)
+    torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
+    torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)
+
+
+class TerminationHandler:
+    def __init__(self, args, tb_logger, wp, gpu_thread):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        self.args = args
+        self.tb_logger = tb_logger
+        self.wp = wp
+        self.gpu_thread = gpu_thread
+
+    def exit_gracefully(self, *args):
+        logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.max_rows", None)
+        logger.info(f"\n{self.wp.get_times_summary_pd()}")
+        self.cleanup()
+        self.join_threads()
+        sys.exit(99)
+
+    def join_threads(self):
+        self.tb_logger.close()
+        self.gpu_thread.stopFlag.set()
+        self.gpu_thread.join()
+
+    def cleanup(self):
+        logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
+        # Cleanup
+        if self.args.throw_away_cache:
+            logger.info(f"Cleaning up the cache dir {self.args.cache_dir}")
+            shutil.rmtree(self.args.cache_dir, ignore_errors=True)
+        else:
+            logger.info("Leaving cache dir as it is..")
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    logger.critical(torch.cuda.memory_summary())
+
+
+
+class GPU_Thread(threading.Thread):
+    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device):#, event: threading.Event):
+        super().__init__(daemon=True)
+        self.threadID = threadID
+        self.name = name
+        self.device = device
+        self.csv_file = open(f"{output_file}", "w")
+        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+        self.csv_file.write(header)
+        self.csv_file.write("\n")
+        self.csv_file.flush()
+        #self.stopped = event
+        self.stopFlag = threading.Event()
+
+    def __del__(self):
+        self.csv_file.flush()
+        self.csv_file.close()
+
+    def run(self):
+        while not self.stopFlag.wait(1):
+            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+            self.csv_file.write(usage)
+            self.csv_file.write("\n")
+            self.csv_file.flush()
+

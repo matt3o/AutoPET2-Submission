@@ -123,7 +123,7 @@ def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, m
         assert cp.all(cp.greater_equal(probabilities, 0))
 
         seed = cp.random.choice(a=idx, size=size, p=probabilities)
-        dst = transformed_distance[seed.item()]
+        dst = t_cp[seed.item()]
 
         g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
         g[0] = dst.item()

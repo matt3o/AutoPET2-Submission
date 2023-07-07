@@ -39,10 +39,12 @@ import cupy as cp
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 from cupyx.scipy.ndimage import label as label_cp
 
-from utils.distance_transform import get_distance_transform, get_choice_from_distance_transform_cp
+from utils.distance_transform import get_distance_transform, get_choice_from_distance_transform_cp, get_choice_from_tensor
 
 from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
 from utils.logger import setup_loggers, get_logger
+
+from monai.utils.enums import CommonKeys
 
 logger = None
 
@@ -50,6 +52,7 @@ class ClickGenerationStrategy(IntEnum):
     GLOBAL_NON_CORRECTIVE = 1
     GLOBAL_CORRECTIVE = 2
     PATCH_BASED_CORRECTIVE = 3
+    DEEPGROW_GLOBAL_CORRECTIVE = 4 
 
 class StoppingCriterion(IntEnum):
     MAX_ITER = 1
@@ -504,34 +507,15 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
     def find_guidance(self, discrepancy):
-        if not discrepancy.is_cuda:
-            discrepancy = discrepancy.to(device=self.device)
+        assert discrepancy.is_cuda
+        # discrepancy = discrepancy.to(device=self.device)
         distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
-        if torch.sum(distance) > 0:
-            t = get_choice_from_distance_transform_cp(distance, device=self.device)
-            return t
-        else:
-            return None
+        t = get_choice_from_distance_transform_cp(distance, device=self.device)
+        return t
 
-    def add_guidance(self, guidance, discrepancy, label_names, labels):
-
+    def add_guidance_based_on_discrepancy(self, guidance, discrepancy, label_names, labels):
         # Positive clicks of the segment in the iteration
         pos_discr = discrepancy[0] # idx 0 is positive discrepancy and idx 1 is negative discrepancy
-
-        # Check the areas that belong to other segments
-        # TODO commented since it does nothing..
-        # other_discrepancy_areas = {}
-        # for _, (key_label, val_label) in enumerate(label_names.items()):
-        #     if key_label != "background":
-        #         tmp_label = np.copy(labels)
-        #         tmp_label[tmp_label != val_label] = 0
-        #         tmp_label = (tmp_label > 0.5).astype(np.float32)
-        #         other_discrepancy_areas[key_label] = np.sum(discrepancy[1] * tmp_label) # calculate "area"
-        #     else:
-        #         tmp_label = np.copy(labels)
-        #         tmp_label[tmp_label != val_label] = 1
-        #         tmp_label = 1 - tmp_label
-        #         other_discrepancy_areas[key_label] = np.sum(discrepancy[1] * tmp_label) # calculate "area"
 
         # Add guidance to the current key label
         if torch.sum(pos_discr) > 0:
@@ -541,6 +525,20 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
             self.is_pos = True
         return guidance
+
+    def add_guidance_based_on_label(self, guidance, label):
+        print(label.squeeze().shape)
+
+        # Add guidance to the current key label
+        if torch.sum(label) > 0:
+            # generate a random sample
+            tmp_gui = get_choice_from_tensor(label, device=self.device)
+            if tmp_gui is not None:
+                assert guidance.dtype == torch.int32
+                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
+            self.is_pos = True
+        return guidance
+
 
     @timeit
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
@@ -553,11 +551,22 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             d[self.guidance_key] = {}
         
         click_generation_strategy = d[self.click_generation_strategy_key]
+            
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
-            raise UserWarning("Not implemented")
-        elif click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE:
+            # uniform random sampling on label
+            for idx, (key_label, _) in enumerate(d["label_names"].items()):
+                tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
+                d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(tmp_gui, d["label"][idx + 1, ...][None])
+        elif (click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE or
+                click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE):
             discrepancy = d[self.discrepancy_key]
-            self.randomize(data)
+            
+            if click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE:
+                # sets self._will_interact
+                self.randomize(data)
+            else:
+                self._will_interact = True
+            
             if self._will_interact:
                 for key_label in d["label_names"].keys():
                     tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
@@ -569,8 +578,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                         assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
 
                     # Add guidance based on discrepancy
-                    d[self.guidance_key][key_label] = self.add_guidance(tmp_gui, discrepancy[key_label], d["label_names"], d["label"])
-
+                    d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(tmp_gui, discrepancy[key_label], d["label_names"], d[CommonKeys.LABEL])
         elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             raise UserWarning("Not implemented")
         else:

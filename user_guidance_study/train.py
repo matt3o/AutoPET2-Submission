@@ -27,6 +27,7 @@ from pickle import dump
 import signal
 import math
 from functools import reduce
+from collections import OrderedDict
 
 tmpdir = '/local/work/mhadlich/tmp'
 if os.environ.get("SLURM_JOB_ID") is not None:
@@ -242,12 +243,12 @@ def create_trainer(args):
     metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
     ignite_metric = IgniteMetric(metric_fn=metric_fn, output_transform=from_engine(["pred", "label"]), save_details=True)
 
-    all_val_metrics = dict()
-    all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
-
+    all_val_metrics = OrderedDict()
     all_val_metrics["val_mean_dice"] = MeanDice(
         output_transform=from_engine(["pred", "label"]), include_background=False
     )
+
+    all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
     #     if key_label != "background":
@@ -283,22 +284,20 @@ def create_trainer(args):
     #     handler.attach(evaluator)
 
 
-    all_train_metrics = dict()
+    all_train_metrics = OrderedDict()
     all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
                                                include_background=False)
     all_train_metrics["train_dice_ce_loss"] = ignite_metric
 
-    if len(args.labels) > 2:
-        for key_label in args.labels:
-            if key_label != "background":
-                all_train_metrics[key_label + "_dice"] = MeanDice(
-                    output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-                )
-                all_train_metrics[key_label + "_dice_with_bg"] = MeanDice(
-                    output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
-                )
-
-    
+    # if len(args.labels) > 2:
+    #     for key_label in args.labels:
+    #         if key_label != "background":
+    #             all_train_metrics[key_label + "_dice"] = MeanDice(
+    #                 output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
+    #             )
+    #             all_train_metrics[key_label + "_dice_with_bg"] = MeanDice(
+    #                 output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
+    #             )
 
 
     train_handlers = [

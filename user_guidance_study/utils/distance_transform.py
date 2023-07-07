@@ -64,6 +64,7 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
             distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
 
     if verify_correctness and not special_case:
+        distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
     
     if dimension == 4:
@@ -71,8 +72,10 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
     assert distance.dim() == dimension
     return distance
 
-def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.device, max_threshold:int = None):
-    assert torch.sum(distance) > 0
+def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.device, max_threshold:int = None) -> List[int | List[int]] | None:
+    if torch.sum(distance) <= 0:
+        # dont raise, just return an empty result
+        return None
     
     with cp.cuda.Device(device.index):
         if max_threshold is None:
@@ -83,44 +86,72 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
         transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
         distance_cp = cp.asarray(transformed_distance)
 
-        probability = cp.exp(distance_cp) - 1.0
-        idx = cp.where(distance_cp > 0)[0]
-        probabilities = probability[idx] / cp.sum(probability[idx])
-        assert idx.shape == probabilities.shape
-        assert cp.all(cp.greater_equal(probabilities, 0))
+        g = get_choice_from_tensor(distance_cp, device, max_threshold, size=1)
 
-        seed = cp.random.choice(a=idx, size=1, p=probabilities)
-        dst = transformed_distance[seed.item()]
+        # probability = cp.exp(distance_cp) - 1.0
+        # idx = cp.where(distance_cp > 0)[0]
+        # probabilities = probability[idx] / cp.sum(probability[idx])
+        # assert idx.shape == probabilities.shape
+        # assert cp.all(cp.greater_equal(probabilities, 0))
 
-        g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-        g[0] = dst.item()
+        # seed = cp.random.choice(a=idx, size=1, p=probabilities)
+        # dst = transformed_distance[seed.item()]
+
+        # g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+        # g[0] = dst.item()
         # mempool = cp.get_default_memory_pool()
         # mempool.free_all_blocks()
 
     return g
 
 
-def get_choice_from_distance_transform(distance: torch.Tensor, device: torch.device = None, max_threshold:int = None, R = np.random):
-    raise UserWarning("No longer used")
-    assert torch.sum(distance) > 0
+def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, max_threshold:int = None, size=1) -> List[int | List[int]] | None:
+    with cp.cuda.Device(device.index):
+        if not isinstance(t, cp.ndarray):
+            t_cp = cp.asarray(t)
+        else:
+            t_cp = t
+        
+        if cp.sum(t_cp) <= 0:
+            # dont raise, just empty return
+            return None
 
-    if max_threshold is None:
-        # divide by the maximum number of elements in a volume
-        max_threshold = int(np.floor(np.log(np.finfo(np.float32).max))) / (800*800*800)
+        probability = cp.exp(t_cp) - 1.0
+        idx = cp.where(t_cp > 0)[0]
+        probabilities = probability[idx] / cp.sum(probability[idx])
+        assert idx.shape == probabilities.shape
+        assert cp.all(cp.greater_equal(probabilities, 0))
 
-    before = time.time()
-    # Clip the distance transform to avoid overflows and negative probabilities
-    transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-    distance_np = transformed_distance.cpu().numpy()
+        seed = cp.random.choice(a=idx, size=size, p=probabilities)
+        dst = transformed_distance[seed.item()]
 
-    probability = np.exp(distance_np) - 1.0
-    idx = np.where(distance_np > 0)[0]
+        g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+        g[0] = dst.item()
 
-    seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-    #torch.random(idx, size)
-    dst = transformed_distance[seed]
-    del transformed_distance
-
-    g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-    g[0] = dst[0].item()
     return g
+
+
+# def get_choice_from_distance_transform(distance: torch.Tensor, device: torch.device = None, max_threshold:int = None, R = np.random) -> List:
+#     raise UserWarning("No longer used")
+#     assert torch.sum(distance) > 0
+
+#     if max_threshold is None:
+#         # divide by the maximum number of elements in a volume
+#         max_threshold = int(np.floor(np.log(np.finfo(np.float32).max))) / (800*800*800)
+
+#     before = time.time()
+#     # Clip the distance transform to avoid overflows and negative probabilities
+#     transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
+#     distance_np = transformed_distance.cpu().numpy()
+
+#     probability = np.exp(distance_np) - 1.0
+#     idx = np.where(distance_np > 0)[0]
+
+#     seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
+#     #torch.random(idx, size)
+#     dst = transformed_distance[seed]
+#     del transformed_distance
+
+#     g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+#     g[0] = dst[0].item()
+#     return g

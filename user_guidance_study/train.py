@@ -263,8 +263,8 @@ def create_trainer(args):
             val_batch_size = max(1,min(reduce(lambda x, y: x*y,[round((300,300,400)[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.val_sw_batch_size))
             logger.info(f"{val_batch_size=}")
         # Reduce if there is an OOM
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=train_batch_size, mode="gaussian")
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=val_batch_size, mode="gaussian")
+        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=train_batch_size, mode="gaussian", cache_roi_weight_map=True)
+        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=val_batch_size, mode="gaussian", cache_roi_weight_map=True)
 
     # OPTIMIZER
     if args.optimizer == "Novograd":

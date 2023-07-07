@@ -107,10 +107,8 @@ import threading
 
 from monai.optimizers.novograd import Novograd
 
-from ignite.contrib.handlers.tensorboard_logger import *
-
-from parser import parseArgs
-
+from parser import parse_args
+from tensorboard_logger import init_tensorboard_logger
 
 # from monai.handlers import IgniteLossMetric
 
@@ -300,7 +298,7 @@ def create_trainer(args):
                     output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
                 )
 
-    tb_logger = TensorboardLogger(log_dir=f"{args.output}/tensorboard")
+    
 
 
     train_handlers = [
@@ -395,68 +393,9 @@ def create_trainer(args):
         handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
         # exit(0)
+        trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
-    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
-
-    tb_logger.attach_output_handler(
-        evaluator,
-        event_name=Events.EPOCH_COMPLETED,
-        tag="1_validation",
-        metric_names=list(all_val_metrics.keys()),
-        global_step_transform=global_step_from_engine(trainer),
-    )
-
-    tb_logger.attach_output_handler(
-        trainer,
-        event_name=Events.EPOCH_COMPLETED,
-        tag="2_training",
-        metric_names=list(all_train_metrics.keys()),
-        global_step_transform=global_step_from_engine(trainer),
-    )
-
-    tb_logger.attach_output_handler(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED,
-        tag="2_training",
-        output_transform=lambda x: x[0]["loss"],
-    )
-
-    tb_logger.attach_opt_params_handler(
-        trainer,
-        event_name=Events.ITERATION_STARTED,
-        optimizer=optimizer,
-        tag="3_params"
-    )
-
-    # for debugging 
-    
-    # # Attach the logger to the trainer to log model's weights norm after each iteration
-    # tb_logger.attach(
-    #     trainer,
-    #     event_name=Events.ITERATION_COMPLETED,
-    #     log_handler=WeightsScalarHandler(network)
-    # )
-
-    # # Attach the logger to the trainer to log model's weights as a histogram after each epoch
-    # tb_logger.attach(
-    #     trainer,
-    #     event_name=Events.EPOCH_COMPLETED,
-    #     log_handler=WeightsHistHandler(network)
-    # )
-
-    # # Attach the logger to the trainer to log model's gradients norm after each iteration
-    # tb_logger.attach(
-    #     trainer,
-    #     event_name=Events.ITERATION_COMPLETED,
-    #     log_handler=GradsScalarHandler(network)
-    # )
-
-    # # Attach the logger to the trainer to log model's gradients as a histogram after each epoch
-    # tb_logger.attach(
-    #     trainer,
-    #     event_name=Events.EPOCH_COMPLETED,
-    #     log_handler=GradsHistHandler(network)
-    # )
+        init_tensorboard_logger(trainer, evaluator)
 
     return trainer, evaluator, tb_logger
 
@@ -549,7 +488,7 @@ def main():
     
     torch.set_num_threads(int(os.cpu_count() / 3)) # Limit number of threads to 1/3 of resources
 
-    args, logger = parseArgs()
+    args, logger = parse_args()
     
     # for OOM debugging
     output_dir = args.output

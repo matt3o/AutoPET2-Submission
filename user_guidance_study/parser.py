@@ -13,7 +13,7 @@ from utils.transforms import (
 )
 
 
-def parseArgs(trainer, evaluator, ):
+def parse_args(trainer, evaluator, ):
     parser = argparse.ArgumentParser()
 
     # Data

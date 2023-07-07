@@ -34,6 +34,7 @@ from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.transforms import CenterSpatialCropd, Compose, CropForegroundd
 from monai.utils import min_version, optional_import
 from monai.data.meta_tensor import MetaTensor
+from monai.metrics import DiceHelper
 
 import cupy as cp
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
@@ -610,6 +611,12 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
             assert amount_of_patches > 0 and amount_of_patches < 1000
             
+            assert data[CommonKeys.LABEL].shape == data[CommonKeys.PRED].shape
+
+            # patch_list = []
+            max_score = -1
+            # max_score_patch_nr = -1
+            max_score_coordinates = [(-1, -1), (-1, -1), (-1, -1)]
             for i in range(H):
                 for j in range(W):
                     for k in range(D):
@@ -622,6 +629,14 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                         D_max = min((k+1) * self.patch_size[-1], data[CommonKeys.IMAGE].shape[-1])
                         logger.info(f"patch {patch_number} is at position: ({H_min}:{H_max}, {W_min}:{W_max}, {D_min}:{D_max})")
                         logger.info(f"shape of the patch: {data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max].shape}")
+                        # patch_list.append(data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max])
+                        score, not_nans = DiceHelper()(data[CommonKeys.PRED][:,H_min:H_max,W_min:W_max,D_min:D_max], 
+                                                        data[CommonKeys.LABEL][:,H_min:H_max,W_min:W_max,D_min:D_max])
+                        if score > max_score:
+                            max_score_coordinates = [(H_min, H_max), (W_min, W_max), (D_min, D_max)]
+                            logger.info(f"New best score {score} > {max_score} at patch {max_score_coordinates}")
+                            max_score = score
+            
             exit(0)
 
             # raise UserWarning("Not implemented")

@@ -247,8 +247,8 @@ def create_trainer(args):
     all_val_metrics["val_mean_dice"] = MeanDice(
         output_transform=from_engine(["pred", "label"]), include_background=False
     )
-
     all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
+
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
     #     if key_label != "background":
@@ -392,9 +392,9 @@ def create_trainer(args):
         handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
         # exit(0)
-        trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
+    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
-        init_tensorboard_logger(trainer, evaluator)
+    tb_logger = init_tensorboard_logger(trainer, evaluator, optimizer, all_train_metrics, all_val_metrics, output_dir=args.output)
 
     return trainer, evaluator, tb_logger
 

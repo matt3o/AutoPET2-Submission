@@ -22,13 +22,14 @@ import nibabel as nib
 from monai.data import decollate_batch, list_data_collate
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
-from monai.transforms import Compose, AsDiscrete
+from monai.transforms import Compose, AsDiscrete 
 from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
 from monai.data.meta_tensor import MetaTensor
 
 from utils.helper import print_gpu_usage, get_total_size_of_all_tensors, describe_batch_data, timeit
-from utils.utils import ClickGenerationStrategy, StoppingCriterion
+from utils.transforms import ClickGenerationStrategy, StoppingCriterion
+
 
 logger = logging.getLogger("interactive_segmentation")
 np.seterr(all='raise')
@@ -86,8 +87,9 @@ class Interaction:
         self.post_transform = post_transform
         self.click_generation_strategy = click_generation_strategy
         self.stopping_criterion = stopping_criterion
-        self.iteration_probability = iteration_probability,
+        self.iteration_probability = iteration_probability
         self.loss_stopping_threshold = loss_stopping_threshold
+        self.click_generation_strategy_key = click_generation_strategy_key
 
     @timeit
     def __call__(self, engine: Union[SupervisedTrainer, SupervisedEvaluator], batchdata: Dict[str, torch.Tensor]):
@@ -118,21 +120,21 @@ class Interaction:
 
         iteration = 0
         last_loss = 0
+        before_it = time.time()
         while True:
             assert iteration < 1000
 
-            before_it = time.time()
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER,
                 StoppingCriterion.MAX_ITER_AND_PROBABILITY,
                 StoppingCriterion.MAX_ITER_AND_DICE,
-                StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE
+                StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE, 
                 StoppingCriterion.DEEPGROW_PROBABILITY,
             ]:
                 # Abort if run for max_interactions
                 if iteration > self.max_interactions - 1:
                     break
-            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_PROBABILITY, MAX_ITER_PROBABILITY_AND_DICE]:
+            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_PROBABILITY, StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE]:
                 # Abort based on the per iteration probability
                 if not np.random.choice([True, False], p=[self.iteration_probability, 1 - self.iteration_probability]):
                     break
@@ -191,7 +193,7 @@ class Interaction:
             batchdata_list = decollate_batch(batchdata)
             for i in range(len(batchdata_list)):
                 batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
-                batchdata_list[i][self.click_generation_strategy_key] = self.click_generation_strategy
+                batchdata_list[i][self.click_generation_strategy_key] =  self.click_generation_strategy.value
                 # before = time.time()
                 batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform
 
@@ -199,9 +201,9 @@ class Interaction:
 
             engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
             
-            logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
             iteration += 1
         
+        logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
         # Might be needed for sw_roi_size smaller than 128
         #torch.cuda.empty_cache()
         engine.state.batch = batchdata

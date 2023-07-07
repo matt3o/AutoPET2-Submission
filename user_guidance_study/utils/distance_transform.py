@@ -83,8 +83,8 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
             max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800*800*800) 
         
         # Clip the distance transform to avoid overflows and negative probabilities
-        transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-        distance_cp = cp.asarray(transformed_distance)
+        clipped_distance = distance.clip(min=0, max=max_threshold)
+        distance_cp = cp.asarray(clipped_distance)
 
         g = get_choice_from_tensor(distance_cp, device, max_threshold, size=1)
 
@@ -116,16 +116,18 @@ def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, m
             # dont raise, just empty return
             return None
 
-        probability = cp.exp(t_cp) - 1.0
-        idx = cp.where(t_cp > 0)[0]
+        transformed_t_cp = t_cp.flatten()
+
+        probability = cp.exp(transformed_t_cp) - 1.0
+        idx = cp.where(transformed_t_cp > 0)[0]
         probabilities = probability[idx] / cp.sum(probability[idx])
         assert idx.shape == probabilities.shape
         assert cp.all(cp.greater_equal(probabilities, 0))
 
         seed = cp.random.choice(a=idx, size=size, p=probabilities)
-        dst = transformed_distance[seed.item()]
+        dst = transformed_t_cp[seed.item()]
 
-        g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
+        g = cp.asarray(cp.unravel_index(seed, t_cp.shape)).transpose().tolist()[0]
         g[0] = dst.item()
     assert len(g) == len(t_cp.shape), f"g has wrong dimensions! {len(g)} != {len(t_cp.shape)}"
     return g

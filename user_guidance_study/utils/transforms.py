@@ -535,13 +535,13 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if torch.sum(label) > 0:
             # generate a random sample
             tmp_gui = get_choice_from_tensor(label, device=self.device)
-            check_guidance_length(data, tmp_gui)
+            self.check_guidance_length(data, tmp_gui)
             if tmp_gui is not None:
                 guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
             # self.is_pos = True
         return guidance
 
-    def check_guidance_length(data, new_guidance):
+    def check_guidance_length(self, data, new_guidance):
         if new_guidance is None:
             return
         dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
@@ -567,7 +567,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # uniform random sampling on label
             for idx, (key_label, _) in enumerate(d["label_names"].items()):
                 tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
-                d[self.guidance_key][key_label] = self.add_guidance_based_on_label(data, tmp_gui, d["label"][idx + 1, ...][None])
+                d[self.guidance_key][key_label] = self.add_guidance_based_on_label(data, tmp_gui, d["label"].eq(idx).to(dtype=torch.int32))
         elif (click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE or
                 click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE):
             discrepancy = d[self.discrepancy_key]

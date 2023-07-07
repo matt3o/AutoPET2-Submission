@@ -598,7 +598,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
             H = W = D = None
             if dimensions == 3:
-                #Assuming BCHWD
+                # Assuming CHWD
                 H = math.ceil(data[CommonKeys.IMAGE].shape[-3] / self.patch_size[-3])
                 W = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
                 D = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
@@ -610,12 +610,18 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
             assert amount_of_patches > 0 and amount_of_patches < 1000
             
-            assert len(data[CommonKeys.IMAGE].shape) == 5, f"{data[CommonKeys.IMAGE].shape}"
-            for batch in data[CommonKeys.IMAGE][0]:
-                for i in range(H):
-                    for j in range(W):
-                        for k in range(D):
-                            logger.info(f"patch {(i+1)*(j+1)*(k+1)} is at position: ({i*patch_size[-3]}, {j*patch_size[-2]}, {k*patch_size[-1]})")
+            for i in range(H):
+                for j in range(W):
+                    for k in range(D):
+                        patch_number = (i+1)*(j+1)*(k+1)
+                        H_min = i * patch_size[-3]
+                        W_min = j * patch_size[-2]
+                        D_min = k * patch_size[-1]
+                        H_max = min(i * patch_size[-3], data[CommonKeys.IMAGE].shape[-3])
+                        W_max = min(j * patch_size[-2], data[CommonKeys.IMAGE].shape[-2])
+                        D_max = min(k * patch_size[-1], data[CommonKeys.IMAGE].shape[-1])
+                        logger.info(f"patch {patch_number} is at position: ({H_min}-{H_max}, {W_min}-{W_max}, {D_min}-{D_max})")
+                        logger.info(f"shape of the patch: {data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max].shape}")
             exit(0)
 
             # raise UserWarning("Not implemented")

@@ -116,16 +116,16 @@ def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, m
             # dont raise, just empty return
             return None
 
-        transformed_t_cp = t_cp.flatten()
+        flattened_t_cp = t_cp.flatten()
 
-        probability = cp.exp(transformed_t_cp) - 1.0
-        idx = cp.where(transformed_t_cp > 0)[0]
+        probability = cp.exp(flattened_t_cp) - 1.0
+        idx = cp.where(flattened_t_cp > 0)[0]
         probabilities = probability[idx] / cp.sum(probability[idx])
         assert idx.shape == probabilities.shape
         assert cp.all(cp.greater_equal(probabilities, 0))
 
         seed = cp.random.choice(a=idx, size=size, p=probabilities)
-        dst = transformed_t_cp[seed.item()]
+        dst = flattened_t_cp[seed.item()]
 
         g = cp.asarray(cp.unravel_index(seed, t_cp.shape)).transpose().tolist()[0]
         g[0] = dst.item()

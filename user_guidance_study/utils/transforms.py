@@ -596,18 +596,26 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             # Split the data into patches of size self.patch_size
             dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
+            H = W = D = None
             if dimensions == 3:
-                amount_of_patches = (
-                                    math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1]) *
-                                    math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2]) *
-                                    math.ceil(data[CommonKeys.IMAGE].shape[-3] / self.patch_size[-3])
-                )
+                #Assuming BCHWD
+                H = math.ceil(data[CommonKeys.IMAGE].shape[-3] / self.patch_size[-3])
+                W = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
+                D = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
+                amount_of_patches = H * W * D
             else:
-                amount_of_patches = (
-                                    math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1]) *
-                                    math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
-                )
+                H = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
+                W = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
+                amount_of_patches = H * W
             logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
+            assert amount_of_patches > 0 and amount_of_patches < 1000
+            
+            assert len(data[CommonKeys.IMAGE].shape) == 5, f"{data[CommonKeys.IMAGE].shape}"
+            for batch in data[CommonKeys.IMAGE][0]:
+                for i in range(H):
+                    for j in range(W):
+                        for k in range(D):
+                            logger.info(f"patch {(i+1)*(j+1)*(k+1)} is at position: ({i*patch_size[-3]}, {j*patch_size[-2]}, {k*patch_size[-1]})")
             exit(0)
 
             # raise UserWarning("Not implemented")

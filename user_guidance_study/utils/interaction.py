@@ -133,19 +133,23 @@ class Interaction:
             ]:
                 # Abort if run for max_interactions
                 if iteration > self.max_interactions - 1:
+                    logger.info("MAX_ITER stop")
                     break
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_PROBABILITY, StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE]:
                 # Abort based on the per iteration probability
                 if not np.random.choice([True, False], p=[self.iteration_probability, 1 - self.iteration_probability]):
+                    logger.info("PROBABILITY stop")
                     break
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE, StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE]:
                 # Abort if dice / loss is good enough
                 if last_loss > self.loss_stopping_threshold:
+                    logger.info("DICE stop")
                     break
 
             if iteration == 0 and self.stopping_criterion == StoppingCriterion.DEEPGROW_PROBABILITY:
                 # Abort before the first iteration if deepgrow_probability yields False
                 if not np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
+                    logger.info("DEEPGROW_PROBABILITY stop")
                     break
             
             # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256

@@ -489,6 +489,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         allow_missing_keys: bool = False,
         device=None,
         click_generation_strategy_key: str = "click_generation_strategy",
+        patch_size: List[int] = [128,128,128]
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -501,6 +502,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
         self.click_generation_strategy_key = click_generation_strategy_key
+        self.patch_size = patch_size
 
     def randomize(self, data: Mapping[Hashable, torch.Tensor]):
         probability = data[self.probability_key]
@@ -591,7 +593,23 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                     # Add guidance based on discrepancy
                     d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, discrepancy[key_label])
         elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
-            raise UserWarning("Not implemented")
+            # Split the data into patches of size self.patch_size
+            dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
+            if dimensions == 3:
+                amount_of_patches = (
+                                    math.ceil(data[CommonKeys.IMAGE][-1] / patch_size[-1]) *
+                                    math.ceil(data[CommonKeys.IMAGE][-2] / patch_size[-2]) *
+                                    math.ceil(data[CommonKeys.IMAGE][-3] / patch_size[-3])
+                )
+            else:
+                amount_of_patches = (
+                                    math.ceil(data[CommonKeys.IMAGE][-1] / patch_size[-1]) *
+                                    math.ceil(data[CommonKeys.IMAGE][-2] / patch_size[-2])
+                )
+            logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
+            exit(0)
+
+            # raise UserWarning("Not implemented")
         else:
             raise UserWarning("Unknown click strategy")
 

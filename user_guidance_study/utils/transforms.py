@@ -614,13 +614,13 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 for j in range(W):
                     for k in range(D):
                         patch_number = (i+1)*(j+1)*(k+1)
-                        H_min = i * patch_size[-3]
-                        W_min = j * patch_size[-2]
-                        D_min = k * patch_size[-1]
-                        H_max = min(i * patch_size[-3], data[CommonKeys.IMAGE].shape[-3])
-                        W_max = min(j * patch_size[-2], data[CommonKeys.IMAGE].shape[-2])
-                        D_max = min(k * patch_size[-1], data[CommonKeys.IMAGE].shape[-1])
-                        logger.info(f"patch {patch_number} is at position: ({H_min}-{H_max}, {W_min}-{W_max}, {D_min}-{D_max})")
+                        H_min = i * self.patch_size[-3]
+                        W_min = j * self.patch_size[-2]
+                        D_min = k * self.patch_size[-1]
+                        H_max = min((i+1) * self.patch_size[-3], data[CommonKeys.IMAGE].shape[-3])
+                        W_max = min((j+1) * self.patch_size[-2], data[CommonKeys.IMAGE].shape[-2])
+                        D_max = min((k+1) * self.patch_size[-1], data[CommonKeys.IMAGE].shape[-1])
+                        logger.info(f"patch {patch_number} is at position: ({H_min}:{H_max}, {W_min}:{W_max}, {D_min}:{D_max})")
                         logger.info(f"shape of the patch: {data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max].shape}")
             exit(0)
 

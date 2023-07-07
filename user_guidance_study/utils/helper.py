@@ -226,17 +226,6 @@ def get_git_information():
     return git_info
 
 
-def oom_observer(device, alloc, device_alloc, device_free):
-    if device is not None and logger is not None:
-        logger.critical(torch.cuda.memory_summary(device))
-    # snapshot right after an OOM happened
-    print('saving allocated state during OOM')
-    snapshot = torch.cuda.memory._snapshot()
-    dump(snapshot, open(f'{output_dir}/oom_snapshot.pickle', 'wb'))
-    # logger.critical(snapshot)
-    torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
-    torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)
-
 
 class TerminationHandler:
     def __init__(self, args, tb_logger, wp, gpu_thread):

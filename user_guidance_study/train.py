@@ -54,7 +54,6 @@ from utils.helper import (
     get_actual_cuda_index_of_device,
     get_git_information,
     gpu_usage,
-    oom_observer,
     TerminationHandler,
     count_parameters,
     handle_exception,
@@ -115,6 +114,17 @@ from tensorboard_logger import init_tensorboard_logger
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+
+def oom_observer(device, alloc, device_alloc, device_free):
+    if device is not None and logger is not None:
+        logger.critical(torch.cuda.memory_summary(device))
+    # snapshot right after an OOM happened
+    print('saving allocated state during OOM')
+    snapshot = torch.cuda.memory._snapshot()
+    dump(snapshot, open(f'{output_dir}/oom_snapshot.pickle', 'wb'))
+    # logger.critical(snapshot)
+    torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
+    torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)
 
 
 sys.excepthook = handle_exception

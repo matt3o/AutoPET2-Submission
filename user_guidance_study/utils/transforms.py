@@ -16,6 +16,7 @@ import warnings
 import time
 from typing import Dict, Hashable, List, Mapping, Optional, Union, Iterable
 import gc
+import math
 
 from enum import IntEnum
 from pynvml import *
@@ -523,7 +524,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # Add guidance to the current key label
         if torch.sum(pos_discr) > 0:
             tmp_gui = self.find_guidance(pos_discr)
-            check_guidance_length(data, tmp_gui)
+            self.check_guidance_length(data, tmp_gui)
             if tmp_gui is not None:
                 guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
             # self.is_pos = True
@@ -597,14 +598,14 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
             if dimensions == 3:
                 amount_of_patches = (
-                                    math.ceil(data[CommonKeys.IMAGE][-1] / patch_size[-1]) *
-                                    math.ceil(data[CommonKeys.IMAGE][-2] / patch_size[-2]) *
-                                    math.ceil(data[CommonKeys.IMAGE][-3] / patch_size[-3])
+                                    math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1]) *
+                                    math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2]) *
+                                    math.ceil(data[CommonKeys.IMAGE].shape[-3] / self.patch_size[-3])
                 )
             else:
                 amount_of_patches = (
-                                    math.ceil(data[CommonKeys.IMAGE][-1] / patch_size[-1]) *
-                                    math.ceil(data[CommonKeys.IMAGE][-2] / patch_size[-2])
+                                    math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1]) *
+                                    math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
                 )
             logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
             exit(0)

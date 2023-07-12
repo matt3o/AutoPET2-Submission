@@ -154,6 +154,8 @@ class Interaction:
             
             # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
             inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
+            batchdata[CommonKeys.IMAGE] = inputs
+            batchdata[CommonKeys.LABEL] = labels
             #BCHW[D] ?
 
             if iteration == 0:

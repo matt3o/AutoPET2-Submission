@@ -86,11 +86,11 @@ def get_pre_transforms(labels, device, args):
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             
             # Move to GPU
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
         t_val = [
-            # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
+            # Initial transforms on the inputsCPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
@@ -104,7 +104,7 @@ def get_pre_transforms(labels, device, args):
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
 
             # Move to GPU
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
     else: # MSD Spleen

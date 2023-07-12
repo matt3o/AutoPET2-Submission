@@ -11,6 +11,7 @@ import threading
 import pandas as pd
 import shutil
 from pickle import dump
+from typing import List
 
 import torch
 import cupy as cp
@@ -298,4 +299,30 @@ class GPU_Thread(threading.Thread):
             self.csv_file.write(usage)
             self.csv_file.write("\n")
             self.csv_file.flush()
+
+def get_tensor_at_coordinates(t:torch.Tensor, coordinates:torch.Tensor) -> torch.Tensor:
+    assert len(coordinates) == len(t.shape)
+    if len(coordinates) == 4:
+        assert coordinates.shape == (4,2)
+        return t[coordinates[0,0]:coordinates[0,1],coordinates[1,0]:coordinates[1,1], coordinates[2,0]:coordinates[2,1], coordinates[3,0]:coordinates[3,1]]
+    elif len(coordinates) == 3:
+        assert coordinates.shape == (3,2)
+        return t[coordinates[0,0]:coordinates[0,1],coordinates[1,0]:coordinates[1,1], coordinates[2,0]:coordinates[2,1]]
+    else:
+        raise UserWarning("Not implemented for this lenghts of coordinates")
+
+def get_global_coordinates_from_patch_coordinates(current_coordinates: List, patch_coordinates: torch.Tensor) -> torch.Tensor:
+    assert len(current_coordinates) == len(patch_coordinates)
+    # if len(current_coordinates) == 4:
+    assert patch_coordinates.shape == (len(current_coordinates),2)
+    # Start at the second entry since the first contains other information
+    for _ in range(1, len(current_coordinates)):
+        current_coordinates[_] += patch_coordinates[_,0]
+    return current_coordinates
+
+    # elif len(current_coordinates) == 3:
+    #     assert patch_coordinates.shape == (3,2)
+    #     return 
+    # else:
+    #     raise UserWarning("Not implemented for this lenghts of coordinates")
 

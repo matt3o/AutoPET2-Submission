@@ -34,7 +34,15 @@ from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.transforms import CenterSpatialCropd, Compose, CropForegroundd
 from monai.utils import min_version, optional_import
 from monai.data.meta_tensor import MetaTensor
-from monai.metrics import DiceHelper
+from monai.metrics import compute_dice
+from monai.data import PatchIterd
+from monai.losses import DiceLoss
+from monai.transforms import (
+    Activationsd,
+    AsDiscreted,
+)
+from monai.metrics.meandice import DiceMetric
+
 
 import cupy as cp
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
@@ -43,7 +51,7 @@ from cupyx.scipy.ndimage import label as label_cp
 
 from utils.distance_transform import get_distance_transform, get_choice_from_distance_transform_cp, get_choice_from_tensor
 
-from utils.helper import print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit
+from utils.helper import (print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit, get_tensor_at_coordinates, get_global_coordinates_from_patch_coordinates)
 from utils.logger import setup_loggers, get_logger
 
 from monai.utils.enums import CommonKeys
@@ -510,25 +518,41 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         probability = data[self.probability_key]
         self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
-    def find_guidance(self, discrepancy):
+    def find_guidance(self, discrepancy) -> List[int | List[int]] | None:
         assert discrepancy.is_cuda
         # discrepancy = discrepancy.to(device=self.device)
         distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
         t = get_choice_from_distance_transform_cp(distance, device=self.device)
         return t
 
-    def add_guidance_based_on_discrepancy(self, data, guidance, discrepancy):
+    def add_guidance_based_on_discrepancy(self, data: Dict, guidance: torch.Tensor, key_label: str, coordinates: torch.Tensor | None=None) -> torch.Tensor:
         assert guidance.dtype == torch.int32
         # Positive clicks of the segment in the iteration
+        discrepancy = data[self.discrepancy_key][key_label]
         pos_discr = discrepancy[0] # idx 0 is positive discrepancy and idx 1 is negative discrepancy
 
-        # Add guidance to the current key label
-        if torch.sum(pos_discr) > 0:
-            tmp_gui = self.find_guidance(pos_discr)
-            self.check_guidance_length(data, tmp_gui)
-            if tmp_gui is not None:
-                guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
-            # self.is_pos = True
+        if coordinates is None:
+            # Add guidance to the current key label
+            if torch.sum(pos_discr) > 0:
+                tmp_gui = self.find_guidance(pos_discr)
+                self.check_guidance_length(data, tmp_gui)
+                if tmp_gui is not None:
+                    guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
+                # self.is_pos = True
+        else:
+            pos_discr = get_tensor_at_coordinates(pos_discr, coordinates=coordinates)
+            print(pos_discr.shape)
+            if torch.sum(pos_discr) > 0:
+                # TODO Add suport for 2d
+                tmp_gui = self.find_guidance(pos_discr)
+                if tmp_gui is not None:
+                    # print(f"Old patch coordinates: {tmp_gui}")
+                    tmp_gui = get_global_coordinates_from_patch_coordinates(tmp_gui, coordinates)
+                    # print(f"New global coordinates: {tmp_gui}")
+                    self.check_guidance_length(data, tmp_gui)
+                    guidance = torch.cat((guidance, torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device)), 0)
+            # print(guidance)
+            # exit(0)
         return guidance
 
     def add_guidance_based_on_label(self, data, guidance, label):
@@ -585,63 +609,178 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             if self._will_interact:
                 for key_label in d["label_names"].keys():
                     tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
-                    
                     assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
-                    # Filter out -1 values
-                    if tmp_gui.numel() > 0:
-                        tmp_gui = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
-                        assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
+                    # Filter out -1 value
+                    # TODO commented this code - is it actually needed?!?!
+                    # if tmp_gui.numel() > 0:
+                    #     tmp_gui = tmp_gui[torch.all(tmp_gui >= 0, dim=1).nonzero()].squeeze(1)
+                    #     assert tmp_gui.dim() == 2, f"tmp_gui.shape()  {tmp_gui.shape}"
 
                     # Add guidance based on discrepancy
-                    d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, discrepancy[key_label])
+                    d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label)
         elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             # Split the data into patches of size self.patch_size
             dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
-            H = W = D = None
-            if dimensions == 3:
-                # Assuming CHWD
-                H = math.ceil(data[CommonKeys.IMAGE].shape[-3] / self.patch_size[-3])
-                W = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
-                D = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
-                amount_of_patches = H * W * D
-            else:
-                H = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
-                W = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
-                amount_of_patches = H * W
-            logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
-            assert amount_of_patches > 0 and amount_of_patches < 1000
+            # H = W = D = None
+            # if dimensions == 3:
+            #     # Assuming CHWD
+            #     H = math.ceil(data[CommonKeys.IMAGE].shape[-3] / self.patch_size[-3])
+            #     W = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
+            #     D = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
+            #     amount_of_patches = H * W * D
+            # else:
+            #     H = math.ceil(data[CommonKeys.IMAGE].shape[-2] / self.patch_size[-2])
+            #     W = math.ceil(data[CommonKeys.IMAGE].shape[-1] / self.patch_size[-1])
+            #     amount_of_patches = H * W
+            # logger.info(f"amount_of_patches for image of shape {data[CommonKeys.IMAGE].shape} is {amount_of_patches}")
+            # assert amount_of_patches > 0 and amount_of_patches < 1000
             
             assert data[CommonKeys.LABEL].shape == data[CommonKeys.PRED].shape
 
-            # patch_list = []
-            max_score = -1
-            # max_score_patch_nr = -1
-            max_score_coordinates = [(-1, -1), (-1, -1), (-1, -1)]
-            for i in range(H):
-                for j in range(W):
-                    for k in range(D):
-                        patch_number = (i+1)*(j+1)*(k+1)
-                        H_min = i * self.patch_size[-3]
-                        W_min = j * self.patch_size[-2]
-                        D_min = k * self.patch_size[-1]
-                        H_max = min((i+1) * self.patch_size[-3], data[CommonKeys.IMAGE].shape[-3])
-                        W_max = min((j+1) * self.patch_size[-2], data[CommonKeys.IMAGE].shape[-2])
-                        D_max = min((k+1) * self.patch_size[-1], data[CommonKeys.IMAGE].shape[-1])
-                        logger.info(f"patch {patch_number} is at position: ({H_min}:{H_max}, {W_min}:{W_max}, {D_min}:{D_max})")
-                        logger.info(f"shape of the patch: {data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max].shape}")
-                        # patch_list.append(data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max])
-                        score, not_nans = DiceHelper()(data[CommonKeys.PRED][:,H_min:H_max,W_min:W_max,D_min:D_max], 
-                                                        data[CommonKeys.LABEL][:,H_min:H_max,W_min:W_max,D_min:D_max])
-                        if score > max_score:
-                            max_score_coordinates = [(H_min, H_max), (W_min, W_max), (D_min, D_max)]
-                            logger.info(f"New best score {score} > {max_score} at patch {max_score_coordinates}")
-                            max_score = score
+            t = [
+                Activationsd(keys="pred", softmax=True),
+                AsDiscreted(
+                    keys=("pred", "label"),
+                    argmax=(True, False),
+                    to_onehot=(len(data["label_names"]), len(data["label_names"])),
+                ),
+                # This transform is to check dice score per segment/label
+                # SplitPredsLabeld(keys="pred"),
+            ]
+            post_transform = Compose(t)
+            t_data = post_transform(data)
+
+            # new_data = list(PatchIter(patch_size=self.patch_size)(data[CommonKeys.LABEL]))
+            # TODO not working for 2d data yet!
+            new_data = PatchIterd(keys=[CommonKeys.PRED, CommonKeys.LABEL], patch_size=self.patch_size)(t_data)
+            # max_loss = -1
+            # min_loss_coordinates = [(-1, -1), (-1, -1), (-1, -1)]
+            # max_loss_patch = None
+            # max_loss_coordinates = None
+
+            pred_list = []
+            label_list = []
+            coordinate_list = []
+
+            # now = time.time()
+            for patch in new_data:
+                actual_patch = patch[0]
+                pred_list.append(actual_patch[CommonKeys.PRED])
+                label_list.append(actual_patch[CommonKeys.LABEL])
+                coordinate_list.append(actual_patch['patch_coords'])
+
+                # print(actual_patch[CommonKeys.PRED].shape)
+                # print(f"sum of pred {torch.sum(actual_patch[CommonKeys.PRED][1])}")
+                # print(f"sum of label {torch.sum(actual_patch[CommonKeys.LABEL][1])}")
+                # dice_loss = DiceLoss()
+                # with torch.no_grad():
+                #     loss = dice_loss.forward(input=actual_patch[CommonKeys.PRED].unsqueeze(0), target=actual_patch[CommonKeys.LABEL].unsqueeze(0)).item()
+                #     # score = 1 - loss
+                # print(f"DiceLoss: {loss}")
+                # # print(f"DiceScore: {score}")
+                # # score = compute_dice(y_pred=actual_patch[CommonKeys.PRED][1:], y=actual_patch[CommonKeys.LABEL][1:], include_background=False)
+                # # print(f"compute_dice score: {score}")
+                # logger.info(actual_patch['patch_coords'])
+                # if loss > max_loss:
+                #     # max_score_coordinates = [(H_min, H_max), (W_min, W_max), (D_min, D_max)]
+                #     logger.info(f"New worst loss {loss} > {max_loss}")
+                #     max_loss = loss
+                #     max_loss_patch = actual_patch
+                #     # print(max_score_patch)
+                #     max_loss_coordinates = actual_patch['patch_coords']
+                #     logger.info(max_loss_coordinates)
+                # non_zeroes = torch.nonzero(actual_patch[CommonKeys.PRED][1], as_tuple=True)
+                # non_zero_values = actual_patch[CommonKeys.PRED][1][non_zeroes]
+
+                # print(f"Indices: {non_zeroes}")
+                # print(f"Values: {non_zero_values}")
+
+                # torch.set_printoptions(edgeitems=1, linewidth=200, profile="full")
+                # print(actual_patch[CommonKeys.PRED][1])
+                # print(actual_patch[CommonKeys.LABEL][1])
+
+                # torch.set_printoptions("default")
+            # print(f'loss calculation took {time.time()-now:.2f} seconds')
             
-            exit(0)
+            label_stack = torch.stack(label_list, 0) 
+            pred_stack = torch.stack(pred_list, 0)
+            # print(f"{label_stack.shape=}")
+            # now = time.time()
+
+            # dice_metric = DiceMetric(include_background=True, reduction="none", ignore_empty=False)
+            # scores = dice_metric(pred_stack, label_stack)
+            # print(f"{scores=}")
+            # print(f'DiceMetric calculation took {time.time()-now:.2f} seconds')
+            # now = time.time()
+
+            dice_loss = DiceLoss(include_background=True, reduction="none")
+            with torch.no_grad():
+                loss_per_label = dice_loss.forward(input=pred_stack, target=label_stack).squeeze()
+                assert len(loss_per_label.shape) == 2
+                # print(f"{loss_per_label.shape=}")
+                # print(f"{loss_per_label=}")
+                # 1. dim: patch number, 2. dim: number of labels, e.g. [27,2]
+                max_loss_position_per_label = torch.argmax(loss_per_label, dim=0)
+                assert len(max_loss_position_per_label) == len(data["label_names"])
+                # print(f"{max_loss_position=}")
+                # max_loss = loss[max_loss_position]
+                # max_loss_coordinates = coordinate_list[max_loss_position]
+                
+                # print(f"max loss = {max_loss} at position {max_loss_coordinates}")
+            # print(f'DiceLoss calculation took {time.time()-now:.2f} seconds')
+            # discrepancy = d[self.discrepancy_key]
+            # We now have the worst patches for each label, now sample clicks on them
+            for idx, (key_label, _) in enumerate(d["label_names"].items()):
+                patch_number = max_loss_position_per_label[idx]
+                label_loss = loss_per_label[patch_number,idx]
+                coordinates = coordinate_list[patch_number]
+                print(f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}")
+                
+                tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
+                assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
+                # # Add guidance based on discrepancy
+                # # print(discrepancy[key_label][0].shape)
+                d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label, coordinates)
+                
+            gc.collect()
+            # del tmp_gui, pred_list, label_list, coordinate_list, loss_per_label, max_loss_position_per_label, new_data
+            # exit(0)
+            # next_item = next(new_data)
+            # print(f"{type(next_item)}")
+            # print(next_item)
+            
+
+            # patch_list = []
+            # max_score = -1
+            # # max_score_patch_nr = -1
+            # max_score_coordinates = [(-1, -1), (-1, -1), (-1, -1)]
+            # for i in range(H):
+            #     for j in range(W):
+            #         for k in range(D):
+            #             patch_number = (i+1)*(j+1)*(k+1)
+            #             H_min = min(i * self.patch_size[-3], data[CommonKeys.IMAGE].shape[-3] - self.patch_size[-3])
+            #             W_min = min(j * self.patch_size[-2], data[CommonKeys.IMAGE].shape[-3] - self.patch_size[-2])
+            #             D_min = min(k * self.patch_size[-1], data[CommonKeys.IMAGE].shape[-3] - self.patch_size[-1])
+            #             H_max = min((i+1) * self.patch_size[-3], data[CommonKeys.IMAGE].shape[-3])
+            #             W_max = min((j+1) * self.patch_size[-2], data[CommonKeys.IMAGE].shape[-2])
+            #             D_max = min((k+1) * self.patch_size[-1], data[CommonKeys.IMAGE].shape[-1])
+            #             logger.info(f"patch {patch_number} is at position: ({H_min}:{H_max}, {W_min}:{W_max}, {D_min}:{D_max})")
+            #             logger.info(f"shape of the patch: {data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max].shape}")
+            #             patch_list.append(data[CommonKeys.IMAGE][:,H_min:H_max,W_min:W_max,D_min:D_max])
+                        
+            # patch_tensor = torch.stack(patch_list)
+            # score, not_nans = DiceHelper()(patch_tensor)
+            # if score > max_score:
+            #     max_score_coordinates = [(H_min, H_max), (W_min, W_max), (D_min, D_max)]
+            #     logger.info(f"New best score {score} > {max_score} at patch {max_score_coordinates}")
+            #     max_score = score
+            
+            # exit(0)
 
             # raise UserWarning("Not implemented")
         else:
             raise UserWarning("Unknown click strategy")
+        
 
         return d
 

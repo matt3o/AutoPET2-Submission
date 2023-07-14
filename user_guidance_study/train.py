@@ -24,6 +24,7 @@ import pprint
 import uuid
 import shutil
 from pickle import dump
+#import gc
 
 import signal
 import math
@@ -35,6 +36,10 @@ if os.environ.get("SLURM_JOB_ID") is not None:
     os.environ['TMPDIR'] = tmpdir
     if not os.path.exists(tmpdir):
         pathlib.Path(tmpdir).mkdir(parents=True)
+
+#gc.set_threshold(5, 10, 10)
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
+
 
 # Things needed to debug the Interaction class
 import resource
@@ -115,6 +120,14 @@ from tensorboard_logger import init_tensorboard_logger
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+
+
+
+#def gb_callback_empty_cuda_cache(phase, info):
+#    if phase == "stop":
+#        torch.cuda.empty_cache()
+#
+#gc.callbacks.append(gb_callback_empty_cuda_cache)
 
 def oom_observer(device, alloc, device_alloc, device_free):
     if device is not None and logger is not None:
@@ -233,11 +246,11 @@ def create_trainer(args):
     #     raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
 
     if args.sw_roi_size[0] < 128:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
-        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+        train_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=20) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=2)
     else:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
-        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+        train_trigger_event = Events.ITERATION_COMPLETED(every=100) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=10)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=40) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),

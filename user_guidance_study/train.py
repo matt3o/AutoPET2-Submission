@@ -295,6 +295,10 @@ def create_trainer(args):
     #     handler.attach(evaluator)
 
 
+    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
+    metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
+    ignite_metric = IgniteMetric(metric_fn=metric_fn, output_transform=from_engine(["pred", "label"]), save_details=True)
+
     all_train_metrics = OrderedDict()
     all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
                                                include_background=False)

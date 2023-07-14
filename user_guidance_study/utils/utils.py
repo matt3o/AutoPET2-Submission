@@ -86,11 +86,11 @@ def get_pre_transforms(labels, device, args):
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             
             # Move to GPU
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            #ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
         t_val = [
-            # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
+            # Initial transforms on the inputsCPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=("image", "label"), reader="ITKReader"),
             EnsureChannelFirstd(keys=("image", "label")),
@@ -104,7 +104,11 @@ def get_pre_transforms(labels, device, args):
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
 
             # Move to GPU
-            ToTensord(keys=("image", "label"), device=device, track_meta=False),
+            # WARNING: Activating the line below leads to minimal gains in performance
+            # However you are buying these gains with a lot of weird errors and problems
+            # So my recommendation after months of fiddling is to leave this off
+            # Until MONAI has fixed the underlying issues
+            #ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
     else: # MSD Spleen
@@ -257,7 +261,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
     # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
     train_loader = DataLoader(
-        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
+        train_ds, shuffle=True, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn'#, persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -268,7 +272,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
 
     val_loader = DataLoader(
-        val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', persistent_workers=True,
+        val_ds, num_workers=args.num_workers, batch_size=1, multiprocessing_context='spawn', #persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

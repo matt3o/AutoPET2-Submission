@@ -135,15 +135,20 @@ class Interaction:
                 if iteration > self.max_interactions - 1:
                     logger.info("MAX_ITER stop")
                     break
-            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_PROBABILITY, StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE]:
+            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_PROBABILITY]:
                 # Abort based on the per iteration probability
                 if not np.random.choice([True, False], p=[self.iteration_probability, 1 - self.iteration_probability]):
                     logger.info("PROBABILITY stop")
                     break
-            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE, StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE]:
+            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE]:
                 # Abort if dice / loss is good enough
                 if last_loss > self.loss_stopping_threshold:
                     logger.info("DICE stop")
+                    break
+
+            if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE, StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE]:
+                if np.random.choice([True, False], p=[1 - last_loss, last_loss]):
+                    logger.info("DICE_PROBABILITY stop")
                     break
 
             if iteration == 0 and self.stopping_criterion == StoppingCriterion.DEEPGROW_PROBABILITY:

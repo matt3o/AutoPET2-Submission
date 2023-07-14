@@ -541,7 +541,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 # self.is_pos = True
         else:
             pos_discr = get_tensor_at_coordinates(pos_discr, coordinates=coordinates)
-            print(pos_discr.shape)
+            #print(pos_discr.shape)
             if torch.sum(pos_discr) > 0:
                 # TODO Add suport for 2d
                 tmp_gui = self.find_guidance(pos_discr)
@@ -557,7 +557,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
     def add_guidance_based_on_label(self, data, guidance, label):
         assert guidance.dtype == torch.int32
-        print(label.squeeze().shape)
+        #print(label.squeeze().shape)
 
         # Add guidance to the current key label
         if torch.sum(label) > 0:
@@ -590,6 +590,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             d[self.guidance_key] = {}
         
         click_generation_strategy = d[self.click_generation_strategy_key]
+        logger.info(f"click generation strategy is {click_generation_strategy}")
             
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
@@ -734,7 +735,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 patch_number = max_loss_position_per_label[idx]
                 label_loss = loss_per_label[patch_number,idx]
                 coordinates = coordinate_list[patch_number]
-                print(f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}")
+                logger.info(f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}")
                 
                 tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
                 assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
@@ -742,13 +743,12 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 # # print(discrepancy[key_label][0].shape)
                 d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label, coordinates)
                 
-            gc.collect()
             # del tmp_gui, pred_list, label_list, coordinate_list, loss_per_label, max_loss_position_per_label, new_data
             # exit(0)
             # next_item = next(new_data)
             # print(f"{type(next_item)}")
             # print(next_item)
-            
+            gc.collect() 
 
             # patch_list = []
             # max_score = -1

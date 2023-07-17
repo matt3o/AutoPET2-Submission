@@ -72,7 +72,8 @@ def parse_args():
     # Guidance Signal Click Generation - for details see the mappings below
     parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1,2])
     parser.add_argument("-vcg", "--val_click_generation", type=int, default=1, choices=[1,2])
-    parser.add_argument("-tcgsc", "--train_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4])
+    parser.add_argument("-tcgsc", "--train_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4,5])
+    parser.add_argument("-vcgsc", "--val_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4,5])
 
 
     # Guidance Signal Hyperparameters
@@ -146,29 +147,37 @@ def parse_args():
     args.train_click_generation = train_click_generation_mapping[args.train_click_generation]
     # Validation, so everything is done on the full volume
     val_click_generation_mapping = {
-        # Subdivide volume into patches of size train_crop_size, calculate the dice score for each, then sample click on the worst one
+        
         1: ClickGenerationStrategy.GLOBAL_CORRECTIVE, #"patch-based corrective",
         # Sample directly from the global error
         2: ClickGenerationStrategy.PATCH_BASED_CORRECTIVE, # "global corrective",
     }
     args.val_click_generation = val_click_generation_mapping[args.val_click_generation]
     
-    click_generation_stopping_criterion_mapping = {
-        # Sample max_train_interactions amount of clicks (can be done in the first iteration if non-corrective)
-        1: StoppingCriterion.MAX_ITER,
-        # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
-        2: StoppingCriterion.MAX_ITER_AND_PROBABILITY,
-        # Sample clicks iteratively. At each step sample p~(0,1). If p > 0.5 continue sampling TODO multiple p values allowed here
-        3: StoppingCriterion.MAX_ITER_AND_DICE,
-        # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
-        # If p > 0.5 continue sampling, then check if dice is good enough. If so no more clicks are required.
-        4: StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
-        # rule based instead of sampling. Sample from the dice score itself
-    }
-    args.train_click_generation_stopping_criterion = click_generation_stopping_criterion_mapping[args.train_click_generation_stopping_criterion]
-    logger.warning("train_click_generation and val_click_generation: This has not been implemented!")
+    args.train_click_generation_stopping_criterion = StoppingCriterion(args.train_click_generation_stopping_criterion)
+    args.val_click_generation_stopping_criterion = StoppingCriterion(args.val_click_generation_stopping_criterion)
+    # logger.warning("train_click_generation and val_click_generation: This has not been implemented!")
     # if args.gpu_size == "24":
     #     args.sw_batch_limit = 1
+
+    # NOTE Added for backwards compatibility with DeepGrow. Manual override of some settings, thus need to accept it
+    if args.deepgrow_probability_val != 1 or args.deepgrow_probability_val != 1:
+        # raise UserWarning("For DeepGrow to work you have to set args.val_click_generation_stopping_criterion to 5!")
+        logger.warning("DeepGrow mode activated,")
+        logger.warning("args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion and args.val_click_generation_stopping_criterion will be overwritten by this option")
+        # logger.info("To reproduce ")
+        accept = input("please type y to agree: ")
+        if not accept.startswith("y"):
+            logger.warning("Not accepted. Now leaving the program")
+            exit(0)
+        else:
+            args.train_click_generation_stopping_criterion = StoppingCriterion.DEEPGROW_PROBABILITY
+            args.val_click_generation_stopping_criterion = StoppingCriterion.DEEPGROW_PROBABILITY
+            args.train_click_generation = ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
+            args.val_click_generation = ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
+
+
+
 
     args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 

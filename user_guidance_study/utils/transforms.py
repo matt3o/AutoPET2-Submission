@@ -59,16 +59,29 @@ from monai.utils.enums import CommonKeys
 logger = None
 
 class ClickGenerationStrategy(IntEnum):
+    # Sample a click randomly based on the label, so no correction based on the prediction
     GLOBAL_NON_CORRECTIVE = 1
+    # Sample a click based on the discrepancy between label and predition
+    # Thus generate corrective clicks where the networks predicts incorrectly so far
     GLOBAL_CORRECTIVE = 2
+    # Subdivide volume into patches of size train_crop_size, calculate the dice score for each, then sample click on the worst one
     PATCH_BASED_CORRECTIVE = 3
-    DEEPGROW_GLOBAL_CORRECTIVE = 4 
+    # At each iteration sample from the probability and don't add a click if it yields False
+    DEEPGROW_GLOBAL_CORRECTIVE = 4
+
+
 
 class StoppingCriterion(IntEnum):
+    # Sample max_train_interactions amount of clicks (can be done in the first iteration if non-corrective)
     MAX_ITER = 1
+    # Sample clicks iteratively. At each step sample p~(0,1). If p > x continue sampling
     MAX_ITER_AND_PROBABILITY = 2
+    # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
     MAX_ITER_AND_DICE = 3
+    # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
+    # If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
     MAX_ITER_PROBABILITY_AND_DICE = 4
+     # Stopping as previously implemented with Deepgrow
     DEEPGROW_PROBABILITY = 5
 
 def threshold_foreground(x):
@@ -590,7 +603,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             d[self.guidance_key] = {}
         
         click_generation_strategy = d[self.click_generation_strategy_key]
-        logger.info(f"click generation strategy is {click_generation_strategy}")
+        # logger.info(f"click generation strategy is {ClickGenerationStrategy(click_generation_strategy)}")
             
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
@@ -599,7 +612,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 d[self.guidance_key][key_label] = self.add_guidance_based_on_label(data, tmp_gui, d["label"].eq(idx).to(dtype=torch.int32))
         elif (click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE or
                 click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE):
-            discrepancy = d[self.discrepancy_key]
+            # discrepancy = d[self.discrepancy_key]
             
             if click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE:
                 # sets self._will_interact
@@ -608,6 +621,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 self._will_interact = True
             
             if self._will_interact:
+                # logger.info("######## CREATE NEW GUIDANCE")
                 for key_label in d["label_names"].keys():
                     tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
                     assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
@@ -621,7 +635,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                     d[self.guidance_key][key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label)
         elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             # Split the data into patches of size self.patch_size
-            dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
+            # dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
             # H = W = D = None
             # if dimensions == 3:
             #     # Assuming CHWD
@@ -735,7 +749,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 patch_number = max_loss_position_per_label[idx]
                 label_loss = loss_per_label[patch_number,idx]
                 coordinates = coordinate_list[patch_number]
-                logger.info(f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}")
+                # logger.info(f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}")
                 
                 tmp_gui = d[self.guidance_key].get(key_label, torch.tensor([], dtype=torch.int32, device=self.device))
                 assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor

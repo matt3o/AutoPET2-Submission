@@ -123,6 +123,7 @@ class Interaction:
         before_it = time.time()
         while True:
             assert iteration < 1000
+            # logger.info(f"{self.stopping_criterion=}")
 
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER,
@@ -152,9 +153,10 @@ class Interaction:
                     break
 
             if iteration == 0 and self.stopping_criterion == StoppingCriterion.DEEPGROW_PROBABILITY:
+                # logger.info("DEEPGROW_PROBABILITY check")
                 # Abort before the first iteration if deepgrow_probability yields False
                 if not np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
-                    logger.info("DEEPGROW_PROBABILITY stop")
+                    # logger.info("DEEPGROW_PROBABILITY stop")
                     break
             
             # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256

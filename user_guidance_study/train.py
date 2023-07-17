@@ -24,7 +24,6 @@ import pprint
 import uuid
 import shutil
 from pickle import dump
-#import gc
 
 import signal
 import math
@@ -36,10 +35,6 @@ if os.environ.get("SLURM_JOB_ID") is not None:
     os.environ['TMPDIR'] = tmpdir
     if not os.path.exists(tmpdir):
         pathlib.Path(tmpdir).mkdir(parents=True)
-
-#gc.set_threshold(5, 10, 10)
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
-
 
 # Things needed to debug the Interaction class
 import resource
@@ -120,14 +115,6 @@ from tensorboard_logger import init_tensorboard_logger
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
-
-
-#def gb_callback_empty_cuda_cache(phase, info):
-#    if phase == "stop":
-#        torch.cuda.empty_cache()
-#
-#gc.callbacks.append(gb_callback_empty_cuda_cache)
 
 def oom_observer(device, alloc, device_alloc, device_free):
     if device is not None and logger is not None:
@@ -295,7 +282,7 @@ def create_trainer(args):
             loss_function=loss_function,
             post_transform=post_transform,
             click_generation_strategy=args.val_click_generation,
-            stopping_criterion=StoppingCriterion.MAX_ITER,
+            stopping_criterion=args.val_click_generation_stopping_criterion,
         ),
         inferer=eval_inferer,
         postprocessing=post_transform,

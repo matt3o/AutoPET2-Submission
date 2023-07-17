@@ -79,7 +79,7 @@ class StoppingCriterion(IntEnum):
     # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
     MAX_ITER_AND_DICE = 3
     # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
-    # If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
+# If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
     MAX_ITER_PROBABILITY_AND_DICE = 4
      # Stopping as previously implemented with Deepgrow
     DEEPGROW_PROBABILITY = 5
@@ -228,17 +228,21 @@ class NormalizeLabelsInDatasetd(MapTransform):
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         # d: Dict = dict(data)
         d = data
+
+        # if len(self.label_names.items()) <= 2:
+        #     d["label_names"] = self.label_names
+        # else:
         for key in self.key_iterator(d):
             # Dictionary containing new label numbers
             new_label_names = {}
             label = torch.zeros(d[key].shape, device=self.device)
             # Making sure the range values and number of labels are the same
             for idx, (key_label, val_label) in enumerate(self.label_names.items(), start=1):
-                if key_label != "background":
-                    new_label_names[key_label] = idx
-                    label[d[key] == val_label] = idx
                 if key_label == "background":
                     new_label_names["background"] = 0
+                else:
+                    new_label_names[key_label] = idx
+                    label[d[key] == val_label] = idx
 
             d["label_names"] = new_label_names
             if isinstance(d[key], MetaTensor):

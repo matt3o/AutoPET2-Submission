@@ -143,8 +143,6 @@ def get_network(network, labels, args):
             norm_name="instance",
             deep_supervision=False,
             res_block=True,
-            # conv1d=args.conv1d,
-            # conv1s=args.conv1s,
         )
     elif network == "smalldynunet":
         network = DynUNet(
@@ -158,8 +156,6 @@ def get_network(network, labels, args):
             norm_name="instance",
             deep_supervision=False,
             res_block=True,
-            # conv1d=args.conv1d,
-            # conv1s=args.conv1s,
         )
     set_track_meta(False)
     return network
@@ -177,12 +173,8 @@ def create_trainer(args):
 
     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
     click_transforms = get_click_transforms(device, args)
-    # val_click_transforms = get_click_transforms(device, args, click_generation=args.val_click_generation)
     post_transform = get_post_transforms(args.labels)
-
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
-    numel_train = len(train_loader.dataset)
-    numel_val = len(val_loader.dataset)
 
     # NETWORK - define training components
     network = get_network(args.network, args.labels, args).to(device)
@@ -200,7 +192,7 @@ def create_trainer(args):
         if args.val_crop_size != "None":
             val_batch_size = max(1,min(reduce(lambda x, y: x*y,[round((300,300,400)[i] / args.sw_roi_size[i]) for i in range(len(args.sw_roi_size))]), args.val_sw_batch_size))
             logger.info(f"{val_batch_size=}")
-        # Reduce if there is an OOM
+        # Reduce sw_batch_size if there is an OOM (maybe even roi_size)
         train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=train_batch_size, mode="gaussian", cache_roi_weight_map=True)
         eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=val_batch_size, mode="gaussian", cache_roi_weight_map=True)
 
@@ -211,7 +203,6 @@ def create_trainer(args):
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
     MAX_EPOCHS = args.epochs
-#    CURRENT_EPOCH = args.current_epoch
 
     # SCHEDULER
     if args.scheduler == "MultiStepLR":
@@ -228,21 +219,16 @@ def create_trainer(args):
     elif args.scheduler == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6)
 
-    # ckpt_loader = None
-    # if args.model_filepath != 'None' and not args.resume:
-    #     raise UserWarning("To correctly load a network you need to add --resume otherwise no model will be loaded...")
-
     if args.sw_roi_size[0] < 128:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=50) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
-        val_trigger_event = Events.ITERATION_COMPLETED(every=20) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=2)
+        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
     else:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=100) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=10)
-        val_trigger_event = Events.ITERATION_COMPLETED(every=40) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
+        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
+        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+    
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
-        # TensorBoardStatsHandler(log_dir=args.output, iteration_log=False, output_transform=lambda x: None, global_epoch_transform=lambda x: trainer.state.epoch),
-        # CustomLoader(),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event=val_trigger_event),
     ]
@@ -290,10 +276,6 @@ def create_trainer(args):
         key_val_metric=all_val_metrics,
         val_handlers=val_handlers,
     )
-    # if handler is not None: 
-    #     handler(evaluator)
-    #     handler.attach(evaluator)
-
 
     loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
     metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
@@ -303,17 +285,6 @@ def create_trainer(args):
     all_train_metrics["train_dice"] = MeanDice(output_transform=from_engine(["pred", "label"]),
                                                include_background=False)
     all_train_metrics["train_dice_ce_loss"] = ignite_metric
-
-    # if len(args.labels) > 2:
-    #     for key_label in args.labels:
-    #         if key_label != "background":
-    #             all_train_metrics[key_label + "_dice"] = MeanDice(
-    #                 output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-    #             )
-    #             all_train_metrics[key_label + "_dice_with_bg"] = MeanDice(
-    #                 output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=True
-    #             )
-
 
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, 
@@ -325,12 +296,6 @@ def create_trainer(args):
         StatsHandler(
             tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
         ),
-        # TensorBoardStatsHandler(
-        #     log_dir=args.output,
-        #     tag_name="train_loss",
-        #     output_transform=from_engine(["loss"], first=True),
-        # ),
-        # CustomLoader(all_train_metrics),
         # https://github.com/Project-MONAI/MONAI/issues/3423
         GarbageCollector(log_level=20, trigger_event=train_trigger_event),
     ]
@@ -387,26 +352,13 @@ def create_trainer(args):
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
         checkpoint = torch.load(args.resume_from)
-        # print(*checkpoint['trainer'].items(), sep='\n')
         
         for key in save_dict:
             assert key in checkpoint, f"key {key} has not been found in the save_dict! The file may be broken or incompatible (e.g. evaluator has not been run).\n file keys: {checkpoint.keys}"
-        # network.load_state_dict(checkpoint['net'])
-        # optimizer.load_state_dict(checkpoint['opt'])
-        # args.current_epoch = int(checkpoint['lr']["last_epoch"])
-        # print(f"#### CURRENT EPOCH: {args.current_epoch} ######")
-        # CURRENT_EPOCH = args.current_epoch
-        # MAX_EPOCHS = args.epochs - CURRENT_EPOCH
-        # assert MAX_EPOCHS > 0
-        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        # logger.critical(f"This code assumes that the previous run shall be continuted, so now it running from epoch {CURRENT_EPOCH} to {CURRENT_EPOCH + MAX_EPOCHS}")
-        
-        # lr_scheduler.load_state_dict(checkpoint['lr'])
-        # logger.info(f"Resuming lr_scheduler from epoch: {lr_scheduler.last_epoch} last_lr: {lr_scheduler.get_last_lr()}")
 
+        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
         handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
-        # exit(0)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
     tb_logger = init_tensorboard_logger(trainer, evaluator, optimizer, all_train_metrics, all_val_metrics, output_dir=args.output)
@@ -419,21 +371,6 @@ def run(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
     device = torch.device(f"cuda:{args.gpu}")
-
-    # if args.export:
-    #     logger.info(
-    #         "{}:: Loading PT Model from: {}".format(args.gpu, args.input)
-    #     )
-        
-    #     network = get_network(args.network, args.labels).to(device)
-
-    #     map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-    #     network.load_state_dict(torch.load(args.input, map_location=map_location))
-
-    #     logger.info("{}:: Saving TorchScript Model".format(args.gpu))
-    #     model_ts = torch.jit.script(network)
-    #     torch.jit.save(model_ts, os.path.join(args.output))
-    #     return
     
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device)
     logger.info(f"Logging GPU usage to {args.output}/usage.csv")

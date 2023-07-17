@@ -41,6 +41,7 @@ from monai.transforms import (
     RandCuCIMd,
     ToCupyd,
     CropForegroundd,
+    EnsureTyped,
 )
 from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
@@ -60,17 +61,19 @@ AUTPET_SPACING = [2.03642011, 2.03642011, 3.        ]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.        ]
 
 
-# crop_size multiples of sliding window with overlap 0.25 (default): 128, 224, 320, 416, 512
-
 def get_pre_transforms(labels, device, args):
     spacing = AUTPET_SPACING if args.dataset == 'AutoPET' else MSD_SPLEEN_SPACING
+    cpu_device = torch.device("cpu")
     if args.dataset == 'AutoPET':
         t_train = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
-            LoadImaged(keys=("image", "label"), reader="ITKReader"),
+            LoadImaged(keys=("image", "label"), reader="ITKReader", image_only=False, simple_keys=True),
+            ToTensord(keys=("image", "label"), device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
+            
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=cpu_device),
+            # PrintDatad(),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(keys=["image", "label"], pixdim=spacing),
             CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
@@ -84,25 +87,11 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            
-            # Move to GPU
-            #ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
-        ]
-        t_val = [
-            # Initial transforms on the inputsCPU which does not hurt since they are executed asynchronously and only once
-            InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
-            LoadImaged(keys=("image", "label"), reader="ITKReader"),
-            EnsureChannelFirstd(keys=("image", "label")),
-            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
-            Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),
-            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
-            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
-            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
 
+            # PrintDatad(),
+            EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
+            
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -110,6 +99,21 @@ def get_pre_transforms(labels, device, args):
             # Until MONAI has fixed the underlying issues
             #ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
+        ]
+        t_val = [
+            # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
+            InitLoggerd(args), # necessary if the dataloader runs in an extra thread / process
+            LoadImaged(keys=("image", "label"), reader="ITKReader", image_only=False),
+            EnsureChannelFirstd(keys=("image", "label")),
+            NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=cpu_device),
+            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            Spacingd(keys=["image", "label"], pixdim=spacing), # 2-factor because of the spatial size
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, label_names=labels),
+            CropForegroundd(keys=("image", "label"), source_key="image", select_fn=threshold_foreground),
+            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size) if args.val_crop_size is not None else NoOpd(),
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
+            DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+            EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
         ]
     else: # MSD Spleen
         t_train = [

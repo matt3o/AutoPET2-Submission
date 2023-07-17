@@ -55,6 +55,7 @@ class Interaction:
         click_probability_key: key to click/interaction probability
         label_names: Dict of label names
         max_interactions: maximum number of interactions per iteration
+        TODO: Add more args here!
     """
 
     def __init__(
@@ -153,10 +154,8 @@ class Interaction:
                     break
 
             if iteration == 0 and self.stopping_criterion == StoppingCriterion.DEEPGROW_PROBABILITY:
-                # logger.info("DEEPGROW_PROBABILITY check")
                 # Abort before the first iteration if deepgrow_probability yields False
                 if not np.random.choice([True, False], p=[self.deepgrow_probability, 1 - self.deepgrow_probability]):
-                    # logger.info("DEEPGROW_PROBABILITY stop")
                     break
             
             # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
@@ -189,7 +188,6 @@ class Interaction:
             
             batchdata[CommonKeys.PRED] = predictions
             
-            # if not self.train or self.args.save_nifti or self.args.debug:
             loss = self.loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL])
             logger.info(f'It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}')
 
@@ -207,7 +205,6 @@ class Interaction:
             for i in range(len(batchdata_list)):
                 batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                 batchdata_list[i][self.click_generation_strategy_key] =  self.click_generation_strategy.value
-                # before = time.time()
                 batchdata_list[i] = self.transforms(batchdata_list[i]) # Apply click transform
 
             batchdata = list_data_collate(batchdata_list)

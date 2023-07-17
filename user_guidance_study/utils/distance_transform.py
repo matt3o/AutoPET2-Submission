@@ -55,7 +55,6 @@ def get_distance_transform(tensor:torch.Tensor, device:torch.device=None, verify
         # special case of the distance, this code shall behave like distance_transform_cdt from scipy
         # which means it will return a vector full of -1s in this case
         # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
-        # TODO match text to code
         distance = torch.ones_like(tensor, device=device)# * -1
         special_case = True
     else:
@@ -88,20 +87,6 @@ def get_choice_from_distance_transform_cp(distance: torch.Tensor, device: torch.
 
         g = get_choice_from_tensor(distance_cp, device, max_threshold, size=1)
 
-        # probability = cp.exp(distance_cp) - 1.0
-        # idx = cp.where(distance_cp > 0)[0]
-        # probabilities = probability[idx] / cp.sum(probability[idx])
-        # assert idx.shape == probabilities.shape
-        # assert cp.all(cp.greater_equal(probabilities, 0))
-
-        # seed = cp.random.choice(a=idx, size=1, p=probabilities)
-        # dst = transformed_distance[seed.item()]
-
-        # g = cp.asarray(cp.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-        # g[0] = dst.item()
-        # mempool = cp.get_default_memory_pool()
-        # mempool.free_all_blocks()
-
     return g
 
 
@@ -113,7 +98,7 @@ def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, m
             t_cp = t
         
         if cp.sum(t_cp) <= 0:
-            # dont raise, just empty return
+            # No valid distance has been found. Dont raise, just empty return
             return None
 
         flattened_t_cp = t_cp.flatten()
@@ -131,29 +116,3 @@ def get_choice_from_tensor(t: torch.Tensor | cp.ndarray, device: torch.device, m
         g[0] = dst.item()
     assert len(g) == len(t_cp.shape), f"g has wrong dimensions! {len(g)} != {len(t_cp.shape)}"
     return g
-
-
-# def get_choice_from_distance_transform(distance: torch.Tensor, device: torch.device = None, max_threshold:int = None, R = np.random) -> List:
-#     raise UserWarning("No longer used")
-#     assert torch.sum(distance) > 0
-
-#     if max_threshold is None:
-#         # divide by the maximum number of elements in a volume
-#         max_threshold = int(np.floor(np.log(np.finfo(np.float32).max))) / (800*800*800)
-
-#     before = time.time()
-#     # Clip the distance transform to avoid overflows and negative probabilities
-#     transformed_distance = distance.clip(min=0, max=max_threshold).flatten()
-#     distance_np = transformed_distance.cpu().numpy()
-
-#     probability = np.exp(distance_np) - 1.0
-#     idx = np.where(distance_np > 0)[0]
-
-#     seed = R.choice(idx, size=1, p=probability[idx] / np.sum(probability[idx]))
-#     #torch.random(idx, size)
-#     dst = transformed_distance[seed]
-#     del transformed_distance
-
-#     g = np.asarray(np.unravel_index(seed, distance.shape)).transpose().tolist()[0]
-#     g[0] = dst[0].item()
-#     return g

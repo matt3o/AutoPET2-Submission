@@ -27,34 +27,37 @@ def parse_args():
     parser.add_argument("-ta", "--throw_away_cache", default=False, action='store_true')
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("-t", "--limit", type=int, default=0, help='Limit the amount of training/validation samples')
+    parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
 
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--no_log", default=False, action='store_true')
+    parser.add_argument("--dont_check_output_dir", default=False, action='store_true')
+    parser.add_argument("--debug", default=False, action='store_true')
+
 
     # Model
     parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"])
-    # parser.add_argument("-r", "--resume", default=False, action='store_true')
     parser.add_argument("-in", "--inferer", default="SimpleInferer", choices=["SimpleInferer", "SlidingWindowInferer"])
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action='store')
+    # crop_size multiples of sliding window size (128,128,128) with overlap 0.25 (default): 128, 224, 320, 416, 512
     parser.add_argument("--train_crop_size", default="(224,224,224)", action='store')
     parser.add_argument("--val_crop_size", default="None", action='store')
     # 1 on 24 Gb, 8 on 50 Gb,
     parser.add_argument("--train_sw_batch_size", type=int, default=8)
     parser.add_argument("--val_sw_batch_size", type=int, default=1)
-    # parser.add_argument("--sw_batch_limit", type=int, default=-1)
     
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action='store_true')
     parser.add_argument("--num_workers", type=int, default=1)
     parser.add_argument("-e", "--epochs", type=int, default=100)
-    # If learning rate is set to 0.001, the DiceCE will produce Nans?!?
+    # If learning rate is set to 0.001, the DiceCELoss will produce Nans very quickly
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
     parser.add_argument("--scheduler", default="MultiStepLR", choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"])
     parser.add_argument("--resume_from", type=str, default='None')
-    # parser.add_argument("--best_val_weights", default=False, action='store_true')
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1) # Epoch Level
@@ -69,12 +72,6 @@ def parse_args():
     parser.add_argument("-dpt", "--deepgrow_probability_train", type=float, default=1.0)
     parser.add_argument("-dpv", "--deepgrow_probability_val", type=float, default=1.0)
 
-    # Guidance Signal Click Generation - for details see the mappings below
-    parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1,2])
-    parser.add_argument("-vcg", "--val_click_generation", type=int, default=1, choices=[1,2])
-    parser.add_argument("-tcgsc", "--train_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4,5])
-    parser.add_argument("-vcgsc", "--val_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4,5])
-
 
     # Guidance Signal Hyperparameters
     parser.add_argument("--sigma", type=int, default=1)
@@ -87,13 +84,12 @@ def parse_args():
     parser.add_argument("--conv1s", default=False, action='store_true')
     parser.add_argument("--adaptive_sigma", default=False, action='store_true')
 
-    parser.add_argument("--no_log", default=False, action='store_true')
-    parser.add_argument("--dont_check_output_dir", default=False, action='store_true')
-    parser.add_argument("--debug", default=False, action='store_true')
-    # small: 24, medium: 50 Gb, large 80 Gb
-    # parser.add_argument("--gpu_size", default="small", choices=["small", "medium", "large"])
-
-    parser.add_argument("--dataset", default="AutoPET") #MSD_Spleen
+    # Guidance Signal Click Generation - for details see the mappings below
+    parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1,2])
+    parser.add_argument("-vcg", "--val_click_generation", type=int, default=1, choices=[1,2])
+    parser.add_argument("-tcgsc", "--train_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4,5])
+    # Usually this setting should be at 1, so max_iter
+    parser.add_argument("-vcgsc", "--val_click_generation_stopping_criterion", type=int, default=1, choices=[1,2,3,4,5])
 
     # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()
@@ -156,9 +152,6 @@ def parse_args():
     
     args.train_click_generation_stopping_criterion = StoppingCriterion(args.train_click_generation_stopping_criterion)
     args.val_click_generation_stopping_criterion = StoppingCriterion(args.val_click_generation_stopping_criterion)
-    # logger.warning("train_click_generation and val_click_generation: This has not been implemented!")
-    # if args.gpu_size == "24":
-    #     args.sw_batch_limit = 1
 
     # NOTE Added for backwards compatibility with DeepGrow. Manual override of some settings, thus need to accept it
     if args.deepgrow_probability_val != 1 or args.deepgrow_probability_val != 1:
@@ -177,8 +170,6 @@ def parse_args():
             args.val_click_generation = ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
 
 
-
-
     args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 
     logger.info(f"CPU Count: {os.cpu_count()}")
@@ -186,7 +177,7 @@ def parse_args():
 
     args.cwd = os.getcwd()
 
-    cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_usage = gpu_usage(device, used_memory_only=False)
+    nv_total = gpu_usage(device, used_memory_only=False)[3]
     if nv_total < 25000:
         args.gpu_size = "small"
     elif nv_total < 55000:
@@ -217,7 +208,5 @@ def parse_args():
             assert (size % 64) == 0
         for size in args.val_crop_size:
             assert (size % 64) == 0
-
-
 
     return args, logger

@@ -180,8 +180,6 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                     batch_data_string += f"    - {item}\n"
             else:
                 batch_data_string += f"- {key}({type(batchdata[key])})\n"
-                # logger.error(f"Unknown datatype: {type(batchdata[key])}")
-                # raise UserWarning()
     return batch_data_string
 
 def timeit(func):
@@ -225,7 +223,6 @@ def get_git_information():
     stream = os.popen('git branch;git rev-parse HEAD')
     git_info = stream.read()
     return git_info
-
 
 
 class TerminationHandler:
@@ -313,16 +310,8 @@ def get_tensor_at_coordinates(t:torch.Tensor, coordinates:torch.Tensor) -> torch
 
 def get_global_coordinates_from_patch_coordinates(current_coordinates: List, patch_coordinates: torch.Tensor) -> torch.Tensor:
     assert len(current_coordinates) == len(patch_coordinates)
-    # if len(current_coordinates) == 4:
     assert patch_coordinates.shape == (len(current_coordinates),2)
     # Start at the second entry since the first contains other information
     for _ in range(1, len(current_coordinates)):
         current_coordinates[_] += patch_coordinates[_,0]
     return current_coordinates
-
-    # elif len(current_coordinates) == 3:
-    #     assert patch_coordinates.shape == (3,2)
-    #     return 
-    # else:
-    #     raise UserWarning("Not implemented for this lenghts of coordinates")
-

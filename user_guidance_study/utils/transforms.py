@@ -149,16 +149,17 @@ class PrintDatad(MapTransform):
         return d
 
 class PrintGPUUsaged(MapTransform):
-    def __init__(self, device, keys: KeysCollection = None):
+    def __init__(self, device, keys: KeysCollection = None, name=""):
         """
         Prints the GPU usage
         """
         super().__init__(keys)
         self.device = device
+        self.name = name
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         d = data
-        logger.info(f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB")
+        logger.info(f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB")
         return d
 
 class ClearGPUMemoryd(MapTransform):

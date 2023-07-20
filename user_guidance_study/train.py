@@ -175,7 +175,7 @@ def create_trainer(args):
 
     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
     click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels)
+    post_transform = get_post_transforms(args.labels, device)
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
 
     # NETWORK - define training components

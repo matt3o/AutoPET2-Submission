@@ -215,7 +215,7 @@ class Interaction:
         
         logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
         # Might be needed for sw_roi_size smaller than 128
-        #torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata) # train network with the final iteration cycle
 

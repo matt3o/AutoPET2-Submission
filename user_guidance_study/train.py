@@ -41,6 +41,8 @@ import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (8*8192, rlimit[1]))
 
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
+
 import pandas as pd
 import torch
 import cupy as cp

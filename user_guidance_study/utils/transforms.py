@@ -627,9 +627,8 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         assert guidance.dtype == torch.int32
         # Positive clicks of the segment in the iteration
         discrepancy = data[self.discrepancy_key][key_label]
-        pos_discr = discrepancy[
-            0
-        ]  # idx 0 is positive discrepancy and idx 1 is negative discrepancy
+        # idx 0 is positive discrepancy and idx 1 is negative discrepancy
+        pos_discr = discrepancy[0]  
 
         if coordinates is None:
             # Add guidance to the current key label

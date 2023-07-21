@@ -90,7 +90,7 @@ class Interaction:
         self.iteration_probability = iteration_probability
         self.loss_stopping_threshold = loss_stopping_threshold
         self.click_generation_strategy_key = click_generation_strategy_key
-        self.dice_loss_function = DiceLoss(include_background=False)
+        self.dice_loss_function = DiceLoss(include_background=False, to_onehot_y=True, softmax=True)
 
     @timeit
     def __call__(
@@ -218,24 +218,6 @@ class Interaction:
 
             batchdata[CommonKeys.PRED] = predictions
             
-
-
-
-            # decollate/collate batchdata to execute click transforms
-            batchdata_list = decollate_batch(batchdata)
-            for i in range(len(bathdata_list)):
-                batchdata_list[i] = self.post_transform(batchdata_list[i])
-                batchdata_list[i][
-                    self.click_probability_key
-                ] = self.deepgrow_probability
-                batchdata_list[i][
-                    self.click_generation_strategy_key
-                ] = self.click_generation_strategy.value
-                batchdata_list[i] = self.transforms(
-                    batchdata_list[i]
-                )  # Apply click transform
-            batchdata = list_data_collate(batchdata_list)
-
             assert batchdata[CommonKeys.PRED].shape == batchdata[CommonKeys.LABEL].shape, f"{batchdata[CommonKeys.PRED].shape} != {batchdata[CommonKeys.LABEL].shape}"
             # loss = self.loss_function(
             #     batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
@@ -255,15 +237,29 @@ class Interaction:
                 #     CommonKeys.LABEL: batchdata[CommonKeys.LABEL],
                 #     "label_names": batchdata["label_names"],
                 # }
-                # tmp_batchdata_list = decollate_batch(tmp_batchdata)
-                # for i in range(len(tmp_batchdata_list)):
-                #     tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
-                # tmp_batchdata = list_data_collate(tmp_batchdata_list)
+                tmp_batchdata_list = decollate_batch(tmp_batchdata)
+                for i in range(len(tmp_batchdata_list)):
+                    tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
+                tmp_batchdata = list_data_collate(tmp_batchdata_list)
 
                 self.debug_viz(
                     inputs, labels, tmp_batchdata[CommonKeys.PRED], iteration
                 )
 
+            # decollate/collate batchdata to execute click transforms
+            batchdata_list = decollate_batch(batchdata)
+            for i in range(len(batchdata_list)):
+                batchdata_list[i][
+                    self.click_probability_key
+                ] = self.deepgrow_probability
+                batchdata_list[i][
+                    self.click_generation_strategy_key
+                ] = self.click_generation_strategy.value
+                batchdata_list[i] = self.transforms(
+                    batchdata_list[i]
+                )  # Apply click transform
+
+            batchdata = list_data_collate(batchdata_list)
 
             engine.fire_event(IterationEvents.INNER_ITERATION_COMPLETED)
 

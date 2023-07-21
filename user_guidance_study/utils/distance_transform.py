@@ -1,28 +1,20 @@
+from __future__ import annotations
+
 import logging
-from typing import Dict, Hashable, List, Mapping, Optional, Union
-
-import numpy as np
-import torch
-
-np.seterr(all="raise")
+from typing import List
 
 import cupy as cp
+import numpy as np
+import torch
 
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
 from cucim.core.operations.morphology import (
     distance_transform_edt as distance_transform_edt_cupy,
 )
-from monai.config import KeysCollection
-from monai.transforms.transform import MapTransform
 from numpy.typing import ArrayLike
+from scipy.ndimage.morphology import distance_transform_edt
 
-from utils.helper import (
-    describe,
-    describe_batch_data,
-    print_gpu_usage,
-    print_tensor_gpu_usage,
-    timeit,
-)
+np.seterr(all="raise")
 
 logger = logging.getLogger("interactive_segmentation")
 

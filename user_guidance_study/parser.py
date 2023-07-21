@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import os
@@ -7,11 +9,7 @@ import uuid
 
 import torch
 
-from utils.helper import (
-    get_actual_cuda_index_of_device,
-    get_git_information,
-    gpu_usage,
-)
+from utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
 from utils.logger import get_logger, setup_loggers
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 

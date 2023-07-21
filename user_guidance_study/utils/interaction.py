@@ -9,29 +9,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import logging
-import os
-import pprint
 import time
 from typing import Callable, Dict, Sequence, Union
 
 import nibabel as nib
 import numpy as np
 import torch
+
 from monai.data import decollate_batch, list_data_collate
-from monai.data.meta_tensor import MetaTensor
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
-from monai.metrics import compute_dice
-from monai.transforms import AsDiscrete, Compose
+from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
-
-from utils.helper import (
-    describe_batch_data,
-    get_total_size_of_all_tensors,
-    print_gpu_usage,
-    timeit,
-)
+from utils.helper import print_gpu_usage, timeit
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
 logger = logging.getLogger("interactive_segmentation")
@@ -107,9 +100,11 @@ class Interaction:
 
         if not self.train:
             # Evaluation does not print epoch / iteration information
-            # logger.info(f"### Interaction, Epoch {engine.state.epoch}/{engine.state.max_epochs}, Iter {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}")
             logger.info(
-                f"### Interaction iteration {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}/{engine.state.epoch_length}"
+                (
+                    f"### Interaction iteration {((engine.state.iteration - 1) % engine.state.epoch_length) + 1}"
+                    f"/{engine.state.epoch_length}"
+                )
             )
         print_gpu_usage(
             device=engine.state.device,

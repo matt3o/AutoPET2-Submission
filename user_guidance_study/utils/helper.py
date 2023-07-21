@@ -1,22 +1,28 @@
-import functools
+from __future__ import annotations
+
 import gc
 import logging
 import os
-import pprint
 import shutil
 import signal
+import sys
 import threading
 import time
 from datetime import datetime
 from functools import wraps
-from pickle import dump
 from typing import List
 
 import cupy as cp
 import pandas as pd
 import torch
+from pynvml import (
+    nvmlDeviceGetHandleByIndex,
+    nvmlDeviceGetMemoryInfo,
+    nvmlDeviceGetUtilizationRates,
+    nvmlInit,
+)
+
 from monai.data.meta_tensor import MetaTensor
-from pynvml import *
 
 logger = logging.getLogger("interactive_segmentation")
 
@@ -31,7 +37,6 @@ def get_actual_cuda_index_of_device(device: torch.device):
 
 def gpu_usage(device: torch.device, used_memory_only=False):
     # empty the cache first
-    # torch.cuda.empty_cache()
     nvmlInit()
     cuda_index = get_actual_cuda_index_of_device(device)
     h = nvmlDeviceGetHandleByIndex(cuda_index)
@@ -43,12 +48,10 @@ def gpu_usage(device: torch.device, used_memory_only=False):
         info.used / (1024**2),
     )
     # utilization = torch.cuda.utilization(device)
-    # t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
     util_gpu = util.gpu / 100
     util_memory = util.memory / 100
 
     torch_reserved = torch.cuda.memory_reserved(device) / (1024**2)
-    # used_not_by_torch = nv_used - t_used
 
     with cp.cuda.Device(device.index):
         mempool = cp.get_default_memory_pool()
@@ -85,10 +88,13 @@ def get_gpu_usage(
     usage = ""
 
     if csv_format and used_memory_only:
-        raise NotImplemented
+        raise NotImplementedError
 
     if csv_format:
-        header = "device,context,time,gpu util (%),memory util (%),total memory (MB),free memory (MB),used memory (MB),memory reserved by torch (MB),cupy memory (MB)"
+        header = (
+            "device,context,time,gpu util (%),memory util (%),total memory (MB),"
+            "free memory (MB),used memory (MB),memory reserved by torch (MB),cupy memory (MB)"
+        )
         usage += "{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}".format(
             cuda_index,
             context,
@@ -111,9 +117,10 @@ def get_gpu_usage(
             usage += "\ndevice: {} context: {}\ngpu util (%):{:.2f} memory util (%): {:.2f}\n".format(
                 cuda_index, context, util_gpu, util_memory
             )
-            usage += "total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f} memory reserved by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n".format(
-                nv_total, nv_free, nv_used, torch_reserved, cupy_usage
-            )
+            usage += (
+                "total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f}"
+                "memory reserved by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n"
+            ).format(nv_total, nv_free, nv_used, torch_reserved, cupy_usage)
     return usage
 
 
@@ -134,7 +141,7 @@ def print_all_tensor_gpu_memory_usage():
                 hasattr(obj, "data") and torch.is_tensor(obj.data)
             ):
                 logger.info(type(obj), obj.size())
-        except:
+        except Exception:
             pass
 
 
@@ -150,7 +157,7 @@ def print_amount_of_tensors():
             #     counter += 1
             # elif (hasattr(obj, 'data') and torch.is_tensor(obj.data)) and torch.is_cuda(obj.data):
             #     counter += 1
-        except:
+        except Exception:
             pass
     print(f"#################################### Amount of tensors: {counter}")
     return counter
@@ -279,7 +286,7 @@ class TerminationHandler:
         self.gpu_thread = gpu_thread
 
     def exit_gracefully(self, *args):
-        logger.critical(f"#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
+        logger.critical("#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
         pd.set_option("display.max_columns", None)
         pd.set_option("display.max_rows", None)
         logger.info(f"\n{self.wp.get_times_summary_pd()}")
@@ -317,10 +324,10 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 class GPU_Thread(threading.Thread):
     def __init__(
-        self, threadID: int, name: str, output_file: str, device: torch.device
-    ):  # , event: threading.Event):
+        self, thread_id: int, name: str, output_file: str, device: torch.device
+    ):
         super().__init__(daemon=True)
-        self.threadID = threadID
+        self.thread_id = thread_id
         self.name = name
         self.device = device
         self.csv_file = open(f"{output_file}", "w")
@@ -330,7 +337,6 @@ class GPU_Thread(threading.Thread):
         self.csv_file.write(header)
         self.csv_file.write("\n")
         self.csv_file.flush()
-        # self.stopped = event
         self.stopFlag = threading.Event()
 
     def __del__(self):

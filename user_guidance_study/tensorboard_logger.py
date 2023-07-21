@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ignite.contrib.handlers.tensorboard_logger import (
     GradsHistHandler,
     GradsScalarHandler,
@@ -6,7 +8,7 @@ from ignite.contrib.handlers.tensorboard_logger import (
     WeightsScalarHandler,
     global_step_from_engine,
 )
-from ignite.engine import Engine, Events
+from ignite.engine import Events
 
 
 def init_tensorboard_logger(
@@ -17,6 +19,7 @@ def init_tensorboard_logger(
     all_val_metrics,
     output_dir,
     debug=False,
+    network=None,
 ):
     tb_logger = TensorboardLogger(log_dir=f"{output_dir}/tensorboard")
 
@@ -52,7 +55,7 @@ def init_tensorboard_logger(
     )
 
     # for debugging
-    if debug:
+    if debug and network is not None:
         # Attach the logger to the trainer to log model's weights norm after each iteration
         tb_logger.attach(
             trainer,

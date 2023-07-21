@@ -423,6 +423,7 @@ def create_trainer(args):
         optimizer,
         all_train_metrics,
         all_val_metrics,
+        network=network,
         output_dir=args.output,
     )
 

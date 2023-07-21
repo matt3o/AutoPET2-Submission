@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import argparse
 import glob
 import os
 import time
 
-import monai.transforms as mt
 import torch
+
+import monai.transforms as mt
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import Dataset
 from monai.inferers import SimpleInferer, SlidingWindowInferer

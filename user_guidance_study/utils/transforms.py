@@ -9,35 +9,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import gc
-import json
 import logging
-import math
-import random
-import time
-import warnings
 from enum import IntEnum
-from typing import Dict, Hashable, Iterable, List, Mapping, Optional, Union
+from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
 
 import numpy as np
-from pynvml import *
-
-np.seterr(all="raise")
-import cupy as cp
-import pandas as pd
 import torch
 
-# Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
-from cucim.core.operations.morphology import (
-    distance_transform_edt as distance_transform_edt_cupy,
-)
-from cupyx.scipy.ndimage import label as label_cp
 from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
-from monai.data.meta_tensor import MetaTensor
 from monai.losses import DiceLoss
-from monai.metrics import compute_dice
-from monai.metrics.meandice import DiceMetric
 from monai.networks.layers import GaussianFilter
 from monai.transforms import (
     Activationsd,
@@ -46,27 +30,22 @@ from monai.transforms import (
     Compose,
     CropForegroundd,
 )
-from monai.transforms.transform import MapTransform, Randomizable, Transform
-from monai.utils import min_version, optional_import
+from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
-from numpy.typing import ArrayLike
-
 from utils.distance_transform import (
     get_choice_from_distance_transform_cp,
     get_choice_from_tensor,
     get_distance_transform,
 )
 from utils.helper import (
-    describe,
     describe_batch_data,
     get_global_coordinates_from_patch_coordinates,
     get_tensor_at_coordinates,
-    print_gpu_usage,
-    print_tensor_gpu_usage,
     timeit,
 )
 from utils.logger import get_logger, setup_loggers
 
+np.seterr(all="raise")
 logger = None
 
 
@@ -144,9 +123,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                 cropped_label = Compose(t)(new_data)["label"]
 
                 # label_num_el = torch.numel(label)
-                for idx, (key_label, val_label) in enumerate(
-                    self.label_names.items(), start=1
-                ):
+                for idx, (key_label, _) in enumerate(self.label_names.items(), start=1):
                     # Only count non-background lost labels
                     if key_label != "background":
                         sum_label = torch.sum(label == idx).item()
@@ -159,7 +136,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                         )
             else:
                 raise UserWarning("This transform only applies to key 'label'")
-        return d
+        return data
 
 
 class PrintDatad(MapTransform):
@@ -290,7 +267,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
                     new_label_names["background"] = 0
                 else:
                     new_label_names[key_label] = idx
-                    label[d[key] == val_label] = idx
+                    label[data[key] == val_label] = idx
 
             data["label_names"] = new_label_names
             if isinstance(data[key], MetaTensor):
@@ -610,7 +587,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         allow_missing_keys: bool = False,
         device=None,
         click_generation_strategy_key: str = "click_generation_strategy",
-        patch_size: List[int] = [128, 128, 128],
+        patch_size: Tuple[int] = (128, 128, 128),
     ):
         super().__init__(keys, allow_missing_keys)
         self.guidance_key = guidance_key
@@ -749,8 +726,6 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             or click_generation_strategy
             == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
         ):
-            discrepancy = data[self.discrepancy_key]
-
             if (
                 click_generation_strategy
                 == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
@@ -819,7 +794,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             # We now have the worst patches for each label, now sample clicks on them
             for idx, (key_label, _) in enumerate(data["label_names"].items()):
                 patch_number = max_loss_position_per_label[idx]
-                label_loss = loss_per_label[patch_number, idx]
+                # label_loss = loss_per_label[patch_number, idx]
                 coordinates = coordinate_list[patch_number]
                 # logger.info(
                 #     f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"

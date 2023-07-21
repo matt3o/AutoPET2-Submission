@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 logger = None
@@ -11,24 +13,24 @@ def setup_loggers(loglevel=logging.INFO, log_file_folder=None):
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     # Add the stream handler
-    streamHandler = logging.StreamHandler()
+    stream_handler = logging.StreamHandler()
     # (%(name)s)
     formatter = logging.Formatter(
         fmt="[%(asctime)s.%(msecs)03d][%(levelname)s] %(funcName)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    streamHandler.setFormatter(formatter)
-    streamHandler.setLevel(loglevel)
-    logger.addHandler(streamHandler)
-    fileHandler = None
+    stream_handler.setFormatter(formatter)
+    stream_handler.setLevel(loglevel)
+    logger.addHandler(stream_handler)
+    file_handler = None
 
     if log_file_folder is not None:
         # Add the file handler
         log_file_path = f"{log_file_folder}/log.txt"
-        fileHandler = logging.FileHandler(log_file_path)
-        fileHandler.setFormatter(formatter)
-        fileHandler.setLevel(loglevel)
-        logger.addHandler(fileHandler)
+        file_handler = logging.FileHandler(log_file_path)
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(loglevel)
+        logger.addHandler(file_handler)
         logger.info(f"Logging all the data to '{log_file_path}'")
     else:
         logger.info("Logging only to the console")
@@ -43,14 +45,14 @@ def setup_loggers(loglevel=logging.INFO, log_file_folder=None):
             l.handlers.clear()
         l.propagate = False
         l.setLevel(loglevel)
-        l.addHandler(streamHandler)
-        if fileHandler is not None:
-            l.addHandler(fileHandler)
+        l.addHandler(stream_handler)
+        if file_handler is not None:
+            l.addHandler(file_handler)
 
 
 def get_logger():
     global logger
-    if logger == None:
+    if logger is None:
         raise UserWarning("Logger not initialized")
     else:
         return logger

@@ -1,24 +1,22 @@
-import os
-import logging
+import functools
 import gc
+import logging
+import os
 import pprint
-import functools  
+import shutil
+import signal
+import threading
 import time
 from datetime import datetime
 from functools import wraps
-import signal
-import threading
-import pandas as pd
-import shutil
 from pickle import dump
 from typing import List
 
-import torch
 import cupy as cp
-
-
-from pynvml import *
+import pandas as pd
+import torch
 from monai.data.meta_tensor import MetaTensor
+from pynvml import *
 
 logger = logging.getLogger("interactive_segmentation")
 

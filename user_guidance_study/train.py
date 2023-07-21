@@ -15,21 +15,22 @@
 
 
 import logging
+import math
 import os
+import pathlib
+import pprint
+import shutil
+import signal
 import sys
 import time
-import pathlib
-from typing import Optional
-import pprint
 import uuid
-import shutil
+from collections import OrderedDict
+from functools import reduce
 from pickle import dump
+from typing import Optional
+
 #import gc
 
-import signal
-import math
-from functools import reduce
-from collections import OrderedDict
 
 tmpdir = '/local/work/mhadlich/tmp'
 if os.environ.get("SLURM_JOB_ID") is not None:
@@ -43,78 +44,57 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
 
 # Things needed to debug the Interaction class
 import resource
+
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (8*8192, rlimit[1]))
 
+import cupy as cp
 import pandas as pd
 import torch
-import cupy as cp
 
 logger = None
 output_dir = None
 
-from ignite.handlers import Timer, BasicTimeProfiler, HandlersTimeProfiler
-from utils.helper import (
-    print_gpu_usage,
-    get_gpu_usage,
-    get_actual_cuda_index_of_device,
-    get_git_information,
-    gpu_usage,
-    TerminationHandler,
-    count_parameters,
-    handle_exception,
-    GPU_Thread,
-)
+import threading
+from parser import parse_args
 
+from ignite.engine import Engine, Events
+from ignite.handlers import (BasicTimeProfiler, HandlersTimeProfiler,
+                             TerminateOnNan, Timer)
+from monai.data import set_track_meta
+from monai.engines import SupervisedEvaluator, SupervisedTrainer
+from monai.engines.utils import IterationEvents
+from monai.handlers import (CheckpointLoader, CheckpointSaver,
+                            GarbageCollector, IgniteMetric, LrScheduleHandler,
+                            MeanDice, StatsHandler, TensorBoardStatsHandler,
+                            ValidationHandler, from_engine)
+from monai.inferers import SimpleInferer, SlidingWindowInferer
+from monai.losses import DiceCELoss
+from monai.metrics import LossMetric
+# from utils.dynunet import DynUNet
+from monai.networks.nets.dynunet import DynUNet
+from monai.optimizers.novograd import Novograd
+from monai.utils import set_determinism
+from monai.utils.profiling import ProfileHandler, WorkflowProfiler
+
+from tensorboard_logger import init_tensorboard_logger
+from utils.helper import (GPU_Thread, TerminationHandler, count_parameters,
+                          get_actual_cuda_index_of_device, get_git_information,
+                          get_gpu_usage, gpu_usage, handle_exception,
+                          print_gpu_usage)
 from utils.interaction import Interaction
-from utils.utils import (
-    get_pre_transforms,
-    get_click_transforms,
-    get_post_transforms,
-    get_loaders
-)
-from utils.transforms import (
-    ClickGenerationStrategy,
-    StoppingCriterion,
-)
+from utils.transforms import ClickGenerationStrategy, StoppingCriterion
+from utils.utils import (get_click_transforms, get_loaders,
+                         get_post_transforms, get_pre_transforms)
 
 #from monai.config import print_config
 #print_config()
 
-from monai.engines import SupervisedEvaluator, SupervisedTrainer
-from monai.handlers import (
-    CheckpointSaver,
-    LrScheduleHandler,
-    MeanDice,
-    StatsHandler,
-    TensorBoardStatsHandler,
-    ValidationHandler,
-    from_engine,
-    GarbageCollector,
-    CheckpointLoader,
-    IgniteMetric,
-)
-from monai.metrics import LossMetric
-from monai.inferers import SimpleInferer, SlidingWindowInferer
-from monai.losses import DiceCELoss
-# from utils.dynunet import DynUNet
-from monai.networks.nets.dynunet import DynUNet
 
-from monai.utils.profiling import ProfileHandler, WorkflowProfiler
-from monai.engines.utils import IterationEvents
 
-from ignite.engine import Engine, Events
-import threading
-from monai.data import set_track_meta
-from monai.utils import set_determinism
-from ignite.handlers import TerminateOnNan
 
-import threading
 
-from monai.optimizers.novograd import Novograd
 
-from parser import parse_args
-from tensorboard_logger import init_tensorboard_logger
 
 # from monai.handlers import IgniteLossMetric
 

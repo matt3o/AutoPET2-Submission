@@ -9,52 +9,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import json
 import logging
-import random
-import warnings
-import time
-from typing import Dict, Hashable, List, Mapping, Optional, Union, Iterable
-import gc
 import math
-
+import random
+import time
+import warnings
 from enum import IntEnum
-from pynvml import *
+from typing import Dict, Hashable, Iterable, List, Mapping, Optional, Union
 
 import numpy as np
+from pynvml import *
+
 np.seterr(all='raise')
-import torch
+import cupy as cp
 import pandas as pd
+import torch
+# Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
+from cucim.core.operations.morphology import \
+    distance_transform_edt as distance_transform_edt_cupy
+from cupyx.scipy.ndimage import label as label_cp
+from monai.config import KeysCollection
+from monai.data import MetaTensor, PatchIterd
+from monai.data.meta_tensor import MetaTensor
+from monai.losses import DiceLoss
+from monai.metrics import compute_dice
+from monai.metrics.meandice import DiceMetric
+from monai.networks.layers import GaussianFilter
+from monai.transforms import (Activationsd, AsDiscreted, CenterSpatialCropd,
+                              Compose, CropForegroundd)
+from monai.transforms.transform import MapTransform, Randomizable, Transform
+from monai.utils import min_version, optional_import
+from monai.utils.enums import CommonKeys
 from numpy.typing import ArrayLike
 
-from monai.config import KeysCollection
-from monai.data import MetaTensor
-from monai.networks.layers import GaussianFilter
-from monai.transforms.transform import MapTransform, Randomizable, Transform
-from monai.transforms import CenterSpatialCropd, Compose, CropForegroundd
-from monai.utils import min_version, optional_import
-from monai.data.meta_tensor import MetaTensor
-from monai.metrics import compute_dice
-from monai.data import PatchIterd
-from monai.losses import DiceLoss
-from monai.transforms import (
-    Activationsd,
-    AsDiscreted,
-)
-from monai.metrics.meandice import DiceMetric
-
-
-import cupy as cp
-# Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
-from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
-from cupyx.scipy.ndimage import label as label_cp
-
-from utils.distance_transform import get_distance_transform, get_choice_from_distance_transform_cp, get_choice_from_tensor
-
-from utils.helper import (print_gpu_usage, print_tensor_gpu_usage, describe, describe_batch_data, timeit, get_tensor_at_coordinates, get_global_coordinates_from_patch_coordinates)
-from utils.logger import setup_loggers, get_logger
-
-from monai.utils.enums import CommonKeys
+from utils.distance_transform import (get_choice_from_distance_transform_cp,
+                                      get_choice_from_tensor,
+                                      get_distance_transform)
+from utils.helper import (describe, describe_batch_data,
+                          get_global_coordinates_from_patch_coordinates,
+                          get_tensor_at_coordinates, print_gpu_usage,
+                          print_tensor_gpu_usage, timeit)
+from utils.logger import get_logger, setup_loggers
 
 logger = None
 

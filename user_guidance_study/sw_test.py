@@ -1,19 +1,16 @@
 
-import time
-import os
-import glob
-
 import argparse
+import glob
+import os
+import time
 
-import torch
-from monai.networks.nets.dynunet import DynUNet
-from monai.networks.nets import UNet
 import monai.transforms as mt
-
+import torch
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import Dataset
-
 from monai.inferers import SimpleInferer, SlidingWindowInferer
+from monai.networks.nets import UNet
+from monai.networks.nets.dynunet import DynUNet
 
 location = "/projects/mhadlich_segmentation/AutoPET/AutoPET"
 all_images = sorted(glob.glob(os.path.join(location, "imagesTr", "*.nii.gz")))

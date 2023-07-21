@@ -1,18 +1,16 @@
 import argparse
-import sys
-import os
 import logging
+import os
 import pathlib
+import sys
 import uuid
+
 import torch
 
-from utils.logger import setup_loggers, get_logger
-from utils.helper import print_gpu_usage, get_gpu_usage, get_actual_cuda_index_of_device, get_git_information, gpu_usage
-
-from utils.transforms import (
-    ClickGenerationStrategy,
-    StoppingCriterion,
-)
+from utils.helper import (get_actual_cuda_index_of_device, get_git_information,
+                          get_gpu_usage, gpu_usage, print_gpu_usage)
+from utils.logger import get_logger, setup_loggers
+from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
 
 def parse_args():

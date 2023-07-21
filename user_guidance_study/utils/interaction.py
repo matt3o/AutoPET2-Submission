@@ -9,27 +9,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Dict, Sequence, Union
 import logging
-import time
-import pprint
 import os
+import pprint
+import time
+from typing import Callable, Dict, Sequence, Union
 
+import nibabel as nib
 import numpy as np
 import torch
-import nibabel as nib
-
 from monai.data import decollate_batch, list_data_collate
+from monai.data.meta_tensor import MetaTensor
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
-from monai.transforms import Compose, AsDiscrete 
-from monai.utils.enums import CommonKeys
 from monai.metrics import compute_dice
-from monai.data.meta_tensor import MetaTensor
+from monai.transforms import AsDiscrete, Compose
+from monai.utils.enums import CommonKeys
 
-from utils.helper import print_gpu_usage, get_total_size_of_all_tensors, describe_batch_data, timeit
+from utils.helper import (describe_batch_data, get_total_size_of_all_tensors,
+                          print_gpu_usage, timeit)
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
-
 
 logger = logging.getLogger("interactive_segmentation")
 np.seterr(all='raise')

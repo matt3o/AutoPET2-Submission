@@ -1,18 +1,21 @@
-import torch 
-import numpy as np
-
-#from FastGeodis import generalised_geodesic3d
-from scipy.ndimage.morphology import distance_transform_edt as distance_transform_edt_scipy
-from scipy.ndimage.morphology import distance_transform_cdt as distance_transform_cdt_scipy
+import logging
 
 import cupy as cp
-from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
+import numpy as np
+import torch
+from cucim.core.operations.morphology import \
+    distance_transform_edt as distance_transform_edt_cupy
+#from FastGeodis import generalised_geodesic3d
+from scipy.ndimage.morphology import \
+    distance_transform_cdt as distance_transform_cdt_scipy
+from scipy.ndimage.morphology import \
+    distance_transform_edt as distance_transform_edt_scipy
 
-import logging
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO)
 
 import time
+
 
 def main():
 

@@ -157,7 +157,7 @@ class Interaction:
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE]:
                 # Abort if dice / loss is good enough
                 if last_loss > self.loss_stopping_threshold:
-                    logger.info("DICE stop")
+                    logger.info(f"DICE stop, since {last_loss} > {self.loss_stopping_threshold}")
                     break
 
             if self.stopping_criterion in [

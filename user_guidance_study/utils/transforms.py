@@ -82,7 +82,6 @@ class ClickGenerationStrategy(IntEnum):
     DEEPGROW_GLOBAL_CORRECTIVE = 4
 
 
-
 class StoppingCriterion(IntEnum):
     # Sample max_train_interactions amount of clicks (can be done in the first iteration if non-corrective)
     MAX_ITER = 1
@@ -91,9 +90,9 @@ class StoppingCriterion(IntEnum):
     # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
     MAX_ITER_AND_DICE = 3
     # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
-# If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
+    # If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
     MAX_ITER_PROBABILITY_AND_DICE = 4
-     # Stopping as previously implemented with Deepgrow
+    # Stopping as previously implemented with Deepgrow
     DEEPGROW_PROBABILITY = 5
 
 
@@ -192,8 +191,8 @@ class PrintGPUUsaged(MapTransform):
     ) -> Mapping[Hashable, torch.Tensor]:
         if logger is not None:
             logger.info(
-            f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
-        )
+                f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
+            )
         return data
 
 

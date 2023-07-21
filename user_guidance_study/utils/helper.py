@@ -2,7 +2,7 @@ import os
 import logging
 import gc
 import pprint
-import functools  
+import functools
 import time
 from datetime import datetime
 from functools import wraps
@@ -22,14 +22,16 @@ from monai.data.meta_tensor import MetaTensor
 
 logger = logging.getLogger("interactive_segmentation")
 
-def get_actual_cuda_index_of_device(device:torch.device):
+
+def get_actual_cuda_index_of_device(device: torch.device):
     try:
-        cuda_indexes = os.environ["CUDA_VISIBLE_DEVICES"].split(',')
+        cuda_indexes = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
     except KeyError:
         return int(device.index)
     return int(cuda_indexes[device.index])
 
-def gpu_usage(device:torch.device, used_memory_only=False):
+
+def gpu_usage(device: torch.device, used_memory_only=False):
     # empty the cache first
     # torch.cuda.empty_cache()
     nvmlInit()
@@ -37,7 +39,11 @@ def gpu_usage(device:torch.device, used_memory_only=False):
     h = nvmlDeviceGetHandleByIndex(cuda_index)
     info = nvmlDeviceGetMemoryInfo(h)
     util = nvmlDeviceGetUtilizationRates(h)
-    nv_total, nv_free, nv_used = info.total / (1024**2), info.free / (1024**2), info.used / (1024**2)
+    nv_total, nv_free, nv_used = (
+        info.total / (1024**2),
+        info.free / (1024**2),
+        info.used / (1024**2),
+    )
     # utilization = torch.cuda.utilization(device)
     # t_free, t_total = [i / (1024**2) for i in torch.cuda.mem_get_info(device=device)]
     util_gpu = util.gpu / 100
@@ -50,15 +56,34 @@ def gpu_usage(device:torch.device, used_memory_only=False):
         mempool = cp.get_default_memory_pool()
         cupy_usage = mempool.used_bytes() / 1024**2
 
-
     if not used_memory_only:
-        return cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_usage
+        return (
+            cuda_index,
+            util_gpu,
+            util_memory,
+            nv_total,
+            nv_free,
+            nv_used,
+            torch_reserved,
+            cupy_usage,
+        )
     else:
         return nv_used
 
 
-def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_format=False):
-    cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_usage = gpu_usage(device=device)
+def get_gpu_usage(
+    device: torch.device, used_memory_only=False, context="", csv_format=False
+):
+    (
+        cuda_index,
+        util_gpu,
+        util_memory,
+        nv_total,
+        nv_free,
+        nv_used,
+        torch_reserved,
+        cupy_usage,
+    ) = gpu_usage(device=device)
     usage = ""
 
     if csv_format and used_memory_only:
@@ -66,28 +91,30 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
 
     if csv_format:
         header = "device,context,time,gpu util (%),memory util (%),total memory (MB),free memory (MB),used memory (MB),memory reserved by torch (MB),cupy memory (MB)"
-        usage += '{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}'.format(
+        usage += "{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}".format(
             cuda_index,
             context,
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             util_gpu,
             util_memory,
             nv_total,
             nv_free,
             nv_used,
             torch_reserved,
-            cupy_usage
+            cupy_usage,
         )
         return (header, usage)
     else:
         if used_memory_only:
-            usage += '{} Device: {} --- used:  {:.0f} MB'.format(context, cuda_index, nv_used)
-        else:
-            usage += '\ndevice: {} context: {}\ngpu util (%):{:.2f} memory util (%): {:.2f}\n'.format(
-                cuda_index, context, util_gpu, util_memory,
+            usage += "{} Device: {} --- used:  {:.0f} MB".format(
+                context, cuda_index, nv_used
             )
-            usage += 'total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f} memory reserved by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n'.format(
-                nv_total, nv_free, nv_used, torch_reserved, cupy_usage,
+        else:
+            usage += "\ndevice: {} context: {}\ngpu util (%):{:.2f} memory util (%): {:.2f}\n".format(
+                cuda_index, context, util_gpu, util_memory
+            )
+            usage += "total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f} memory reserved by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n".format(
+                nv_total, nv_free, nv_used, torch_reserved, cupy_usage
             )
     return usage
 
@@ -95,23 +122,31 @@ def get_gpu_usage(device:torch.device, used_memory_only=False, context="", csv_f
 def print_gpu_usage(*args, **kwargs):
     logger.info(get_gpu_usage(*args, **kwargs))
 
-def print_tensor_gpu_usage(a:torch.Tensor):
-    logger.info("Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2)))
+
+def print_tensor_gpu_usage(a: torch.Tensor):
+    logger.info(
+        "Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2))
+    )
 
 
 def print_all_tensor_gpu_memory_usage():
     for obj in gc.get_objects():
         try:
-            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            if torch.is_tensor(obj) or (
+                hasattr(obj, "data") and torch.is_tensor(obj.data)
+            ):
                 logger.info(type(obj), obj.size())
         except:
             pass
+
 
 def print_amount_of_tensors():
     counter = 0
     for obj in gc.get_objects():
         try:
-            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            if torch.is_tensor(obj) or (
+                hasattr(obj, "data") and torch.is_tensor(obj.data)
+            ):
                 counter += 1
             # if torch.is_tensor(obj) and torch.is_cuda(obj):
             #     counter += 1
@@ -136,8 +171,12 @@ def get_total_size_of_all_tensors(data):
 
     return size
 
-def describe(t:torch.Tensor):
-    return "mean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device)
+
+def describe(t: torch.Tensor):
+    return "mean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(
+        torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device
+    )
+
 
 def describe_batch_data(batchdata: dict, total_size_only=False):
     batch_data_string = ""
@@ -160,11 +199,14 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                     f"device: {batchdata[key].device} "
                     f"dtype: {batchdata[key].dtype} \n"
                 )
-                batch_data_string += f"  Meta: {batchdata[key].meta}\n"""
+                batch_data_string += f"  Meta: {batchdata[key].meta}\n" ""
             elif type(batchdata[key]) == dict:
                 batch_data_string += f"- {key}(dict)\n"
                 for key2 in batchdata[key]:
-                    if type(batchdata[key][key2]) == torch.Tensor or type(batchdata[key][key2]) == MetaTensor:
+                    if (
+                        type(batchdata[key][key2]) == torch.Tensor
+                        or type(batchdata[key][key2]) == MetaTensor
+                    ):
                         batch_data_string += (
                             f"    - {key}/{key2}(Tensor/MetaTensor) "
                             f"size: {batchdata[key][key2].size()} "
@@ -173,7 +215,9 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                             f"dtype: {batchdata[key][key2].dtype}\n"
                         )
                     else:
-                        batch_data_string += f"    - {key}/{key2}: {batchdata[key][key2]} \n"
+                        batch_data_string += (
+                            f"    - {key}/{key2}: {batchdata[key][key2]} \n"
+                        )
             elif type(batchdata[key]) == list:
                 batch_data_string += f"- {key}(list)\n"
                 for item in batchdata[key]:
@@ -182,6 +226,7 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                 batch_data_string += f"- {key}({type(batchdata[key])})\n"
     return batch_data_string
 
+
 def timeit(func):
     @wraps(func)
     def timeit_wrapper(*args, **kwargs):
@@ -189,7 +234,7 @@ def timeit(func):
         #     device = args[0].device
         # except AttributeError:
         #     device = None
-        
+
         # if device is not None:
         #     gpu1 = gpu_usage(device=device, used_memory_only=True)
         start_time = time.perf_counter()
@@ -203,24 +248,25 @@ def timeit(func):
             name = func.__qualname__
         except AttributeError:
             # Excepting it to be an object now
-            try: 
+            try:
                 name = func.__class__.__qualname__
             except AttributeError:
-                logger.error("Timeit Wrapper got unexpected element (not func, class or object). Please fix!")
+                logger.error(
+                    "Timeit Wrapper got unexpected element (not func, class or object). Please fix!"
+                )
             pass
         # if device is not None:
         #     logger.info(f'Function {name}() took {total_time:.3f} seconds and reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')
         # else:
-        logger.debug(f'{name}() took {total_time:.3f} seconds')
-            
-
+        logger.debug(f"{name}() took {total_time:.3f} seconds")
 
         return result
+
     return timeit_wrapper
 
 
 def get_git_information():
-    stream = os.popen('git branch;git rev-parse HEAD')
+    stream = os.popen("git branch;git rev-parse HEAD")
     git_info = stream.read()
     return git_info
 
@@ -271,19 +317,22 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     logger.critical(torch.cuda.memory_summary())
 
 
-
 class GPU_Thread(threading.Thread):
-    def __init__(self, threadID: int, name: str, output_file: str, device: torch.device):#, event: threading.Event):
+    def __init__(
+        self, threadID: int, name: str, output_file: str, device: torch.device
+    ):  # , event: threading.Event):
         super().__init__(daemon=True)
         self.threadID = threadID
         self.name = name
         self.device = device
         self.csv_file = open(f"{output_file}", "w")
-        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+        header, usage = get_gpu_usage(
+            self.device, used_memory_only=False, context="", csv_format=True
+        )
         self.csv_file.write(header)
         self.csv_file.write("\n")
         self.csv_file.flush()
-        #self.stopped = event
+        # self.stopped = event
         self.stopFlag = threading.Event()
 
     def __del__(self):
@@ -292,26 +341,43 @@ class GPU_Thread(threading.Thread):
 
     def run(self):
         while not self.stopFlag.wait(1):
-            header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
+            header, usage = get_gpu_usage(
+                self.device, used_memory_only=False, context="", csv_format=True
+            )
             self.csv_file.write(usage)
             self.csv_file.write("\n")
             self.csv_file.flush()
 
-def get_tensor_at_coordinates(t:torch.Tensor, coordinates:torch.Tensor) -> torch.Tensor:
+
+def get_tensor_at_coordinates(
+    t: torch.Tensor, coordinates: torch.Tensor
+) -> torch.Tensor:
     assert len(coordinates) == len(t.shape)
     if len(coordinates) == 4:
-        assert coordinates.shape == (4,2)
-        return t[coordinates[0,0]:coordinates[0,1],coordinates[1,0]:coordinates[1,1], coordinates[2,0]:coordinates[2,1], coordinates[3,0]:coordinates[3,1]]
+        assert coordinates.shape == (4, 2)
+        return t[
+            coordinates[0, 0] : coordinates[0, 1],
+            coordinates[1, 0] : coordinates[1, 1],
+            coordinates[2, 0] : coordinates[2, 1],
+            coordinates[3, 0] : coordinates[3, 1],
+        ]
     elif len(coordinates) == 3:
-        assert coordinates.shape == (3,2)
-        return t[coordinates[0,0]:coordinates[0,1],coordinates[1,0]:coordinates[1,1], coordinates[2,0]:coordinates[2,1]]
+        assert coordinates.shape == (3, 2)
+        return t[
+            coordinates[0, 0] : coordinates[0, 1],
+            coordinates[1, 0] : coordinates[1, 1],
+            coordinates[2, 0] : coordinates[2, 1],
+        ]
     else:
         raise UserWarning("Not implemented for this lenghts of coordinates")
 
-def get_global_coordinates_from_patch_coordinates(current_coordinates: List, patch_coordinates: torch.Tensor) -> torch.Tensor:
+
+def get_global_coordinates_from_patch_coordinates(
+    current_coordinates: List, patch_coordinates: torch.Tensor
+) -> torch.Tensor:
     assert len(current_coordinates) == len(patch_coordinates)
-    assert patch_coordinates.shape == (len(current_coordinates),2)
+    assert patch_coordinates.shape == (len(current_coordinates), 2)
     # Start at the second entry since the first contains other information
     for _ in range(1, len(current_coordinates)):
-        current_coordinates[_] += patch_coordinates[_,0]
+        current_coordinates[_] += patch_coordinates[_, 0]
     return current_coordinates

@@ -43,9 +43,9 @@ if os.environ.get("SLURM_JOB_ID") is not None:
 import resource
 
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (8*8192, rlimit[1]))
+resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
 
-#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
 
 import cupy as cp
 import pandas as pd
@@ -119,6 +119,7 @@ from utils.utils import (
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
+
 def oom_observer(device, alloc, device_alloc, device_free):
     if device is not None and logger is not None:
         logger.critical(torch.cuda.memory_summary(device))
@@ -183,7 +184,9 @@ def create_trainer(args):
     )
     click_transforms = get_click_transforms(device, args)
     post_transform = get_post_transforms(args.labels, device)
-    train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
+    train_loader, val_loader = get_loaders(
+        args, pre_transforms_train, pre_transforms_val
+    )
 
     # NETWORK - define training components
     network = get_network(args.network, args.labels, args).to(device)
@@ -226,8 +229,18 @@ def create_trainer(args):
             )
             logger.info(f"{val_batch_size=}")
         # Reduce sw_batch_size if there is an OOM (maybe even roi_size)
-        train_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=train_batch_size, mode="gaussian", cache_roi_weight_map=True)
-        eval_inferer = SlidingWindowInferer(roi_size=args.sw_roi_size, sw_batch_size=val_batch_size, mode="gaussian", cache_roi_weight_map=True)
+        train_inferer = SlidingWindowInferer(
+            roi_size=args.sw_roi_size,
+            sw_batch_size=train_batch_size,
+            mode="gaussian",
+            cache_roi_weight_map=True,
+        )
+        eval_inferer = SlidingWindowInferer(
+            roi_size=args.sw_roi_size,
+            sw_batch_size=val_batch_size,
+            mode="gaussian",
+            cache_roi_weight_map=True,
+        )
 
     # OPTIMIZER
     if args.optimizer == "Novograd":
@@ -256,15 +269,33 @@ def create_trainer(args):
             optimizer, total_iters=MAX_EPOCHS, power=2
         )
     elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_EPOCHS, eta_min = 1e-6)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=MAX_EPOCHS, eta_min=1e-6
+        )
 
     if args.sw_roi_size[0] < 128:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
-        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+        train_trigger_event = (
+            Events.ITERATION_COMPLETED(every=10)
+            if args.gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=1)
+        )
+        val_trigger_event = (
+            Events.ITERATION_COMPLETED(every=2)
+            if args.gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=1)
+        )
     else:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=10) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
-        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if args.gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
-    
+        train_trigger_event = (
+            Events.ITERATION_COMPLETED(every=10)
+            if args.gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=5)
+        )
+        val_trigger_event = (
+            Events.ITERATION_COMPLETED(every=2)
+            if args.gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=1)
+        )
+
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -323,8 +354,14 @@ def create_trainer(args):
     )
 
     loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
-    metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
-    ignite_metric = IgniteMetric(metric_fn=metric_fn, output_transform=from_engine(["pred", "label"]), save_details=True)
+    metric_fn = LossMetric(
+        loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
+    )
+    ignite_metric = IgniteMetric(
+        metric_fn=metric_fn,
+        output_transform=from_engine(["pred", "label"]),
+        save_details=True,
+    )
 
     all_train_metrics = OrderedDict()
     all_train_metrics["train_dice"] = MeanDice(
@@ -402,12 +439,16 @@ def create_trainer(args):
         logger.info("{}:: Loading Network...".format(args.gpu))
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
         checkpoint = torch.load(args.resume_from)
-        
+
         for key in save_dict:
-            assert key in checkpoint, f"key {key} has not been found in the save_dict! The file may be broken or incompatible (e.g. evaluator has not been run).\n file keys: {checkpoint.keys}"
+            assert (
+                key in checkpoint
+            ), f"key {key} has not been found in the save_dict! The file may be broken or incompatible (e.g. evaluator has not been run).\n file keys: {checkpoint.keys}"
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
+        handler = CheckpointLoader(
+            load_path=args.resume_from, load_dict=save_dict, map_location=map_location
+        )
         handler(trainer)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
@@ -428,7 +469,7 @@ def run(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
     device = torch.device(f"cuda:{args.gpu}")
-    
+
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device)
     logger.info(f"Logging GPU usage to {args.output}/usage.csv")
 

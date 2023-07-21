@@ -71,7 +71,7 @@ class Interaction:
         click_generation_strategy_key: str = "click_generation_strategy",
         stopping_criterion: StoppingCriterion = StoppingCriterion.MAX_ITER,
         iteration_probability: float = 0.5,
-        loss_stopping_threshold: float = 0.9,
+        loss_stopping_threshold: float = 0.1,
     ) -> None:
         self.deepgrow_probability = deepgrow_probability
         self.transforms = (
@@ -133,7 +133,7 @@ class Interaction:
 
         iteration = 0
         last_loss = 1
-        last_dice = 1
+        last_dice_loss = 1
         before_it = time.time()
         while True:
             assert iteration < 1000
@@ -160,15 +160,15 @@ class Interaction:
                     break
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE]:
                 # Abort if dice / loss is good enough
-                if last_dice > self.loss_stopping_threshold:
-                    logger.info(f"DICE stop, since {last_dice} > {self.loss_stopping_threshold}")
+                if last_dice_loss < self.loss_stopping_threshold:
+                    logger.info(f"DICE stop, since {last_dice_loss} < {self.loss_stopping_threshold}")
                     break
 
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
             ]:
-                if np.random.choice([True, False], p=[1 - last_dice, last_dice]):
-                    logger.info(f"DICE_PROBABILITY stop, since dice is already {last_dice}")
+                if np.random.choice([True, False], p=[1 - last_dice_loss, last_dice_loss]):
+                    logger.info(f"DICE_PROBABILITY stop, since dice is already {last_dice_loss}")
                     break
 
             if (
@@ -226,9 +226,9 @@ class Interaction:
             # logger.info(
             #     f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
             # )
-            last_dice = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]).item()
+            last_dice_loss = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]).item()
             logger.info(
-                f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice:.4f} Epoch: {engine.state.epoch}"
+                f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice_loss:.4f} Epoch: {engine.state.epoch}"
             )
 
             if self.args.save_nifti:

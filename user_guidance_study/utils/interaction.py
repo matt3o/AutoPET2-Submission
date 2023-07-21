@@ -161,11 +161,10 @@ class Interaction:
                     break
 
             if self.stopping_criterion in [
-                StoppingCriterion.MAX_ITER_AND_DICE,
                 StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
             ]:
                 if np.random.choice([True, False], p=[1 - last_loss, last_loss]):
-                    logger.info("DICE_PROBABILITY stop")
+                    logger.info(f"DICE_PROBABILITY stop, since dice is already {last_loss}")
                     break
 
             if (

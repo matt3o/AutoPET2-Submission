@@ -129,7 +129,7 @@ class Interaction:
         batchdata = list_data_collate(batchdata_list)
 
         iteration = 0
-        last_loss = 0
+        last_loss = 1
         before_it = time.time()
         while True:
             assert iteration < 1000

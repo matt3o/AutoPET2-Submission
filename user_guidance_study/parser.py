@@ -7,8 +7,13 @@ import uuid
 
 import torch
 
-from utils.helper import (get_actual_cuda_index_of_device, get_git_information,
-                          get_gpu_usage, gpu_usage, print_gpu_usage)
+from utils.helper import (
+    get_actual_cuda_index_of_device,
+    get_git_information,
+    get_gpu_usage,
+    gpu_usage,
+    print_gpu_usage,
+)
 from utils.logger import get_logger, setup_loggers
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 

@@ -7,15 +7,22 @@ import torch
 np.seterr(all="raise")
 
 import cupy as cp
+
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
-from cucim.core.operations.morphology import \
-    distance_transform_edt as distance_transform_edt_cupy
+from cucim.core.operations.morphology import (
+    distance_transform_edt as distance_transform_edt_cupy,
+)
 from monai.config import KeysCollection
 from monai.transforms.transform import MapTransform
 from numpy.typing import ArrayLike
 
-from utils.helper import (describe, describe_batch_data, print_gpu_usage,
-                          print_tensor_gpu_usage, timeit)
+from utils.helper import (
+    describe,
+    describe_batch_data,
+    print_gpu_usage,
+    print_tensor_gpu_usage,
+    timeit,
+)
 
 logger = logging.getLogger("interactive_segmentation")
 

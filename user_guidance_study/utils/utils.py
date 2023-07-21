@@ -6,23 +6,48 @@ import torch
 from monai.data import ThreadDataLoader, partition_dataset
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
-from monai.transforms import (Activationsd, AsDiscreted, CenterSpatialCropd,
-                              Compose, CropForegroundd, CuCIMd, DeleteItemsd,
-                              DivisiblePadd, EnsureChannelFirstd, EnsureTyped,
-                              LoadImaged, Orientationd, RandCropByPosNegLabeld,
-                              RandCuCIMd, RandFlipd, RandRotate90d,
-                              RandShiftIntensityd, Resized,
-                              ScaleIntensityRanged, Spacingd, ToCupyd,
-                              ToNumpyd, ToTensord)
+from monai.transforms import (
+    Activationsd,
+    AsDiscreted,
+    CenterSpatialCropd,
+    Compose,
+    CropForegroundd,
+    CuCIMd,
+    DeleteItemsd,
+    DivisiblePadd,
+    EnsureChannelFirstd,
+    EnsureTyped,
+    LoadImaged,
+    Orientationd,
+    RandCropByPosNegLabeld,
+    RandCuCIMd,
+    RandFlipd,
+    RandRotate90d,
+    RandShiftIntensityd,
+    Resized,
+    ScaleIntensityRanged,
+    Spacingd,
+    ToCupyd,
+    ToNumpyd,
+    ToTensord,
+)
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 
 from utils.helper import describe_batch_data
 from utils.transforms import (  # DetachTensorsd,; GarbageCollectord,
-    AddGuidanceSignalDeepEditd, AddRandomGuidanceDeepEditd,
-    CheckTheAmountOfInformationLossByCropd, ClearGPUMemoryd,
-    FindDiscrepancyRegionsDeepEditd, InitLoggerd, NoOpd,
-    NormalizeLabelsInDatasetd, PrintDatad, PrintGPUUsaged, SplitPredsLabeld,
-    threshold_foreground)
+    AddGuidanceSignalDeepEditd,
+    AddRandomGuidanceDeepEditd,
+    CheckTheAmountOfInformationLossByCropd,
+    ClearGPUMemoryd,
+    FindDiscrepancyRegionsDeepEditd,
+    InitLoggerd,
+    NoOpd,
+    NormalizeLabelsInDatasetd,
+    PrintDatad,
+    PrintGPUUsaged,
+    SplitPredsLabeld,
+    threshold_foreground,
+)
 
 logger = logging.getLogger("interactive_segmentation")
 

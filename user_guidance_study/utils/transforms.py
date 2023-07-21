@@ -26,9 +26,11 @@ np.seterr(all="raise")
 import cupy as cp
 import pandas as pd
 import torch
+
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
-from cucim.core.operations.morphology import \
-    distance_transform_edt as distance_transform_edt_cupy
+from cucim.core.operations.morphology import (
+    distance_transform_edt as distance_transform_edt_cupy,
+)
 from cupyx.scipy.ndimage import label as label_cp
 from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
@@ -37,20 +39,32 @@ from monai.losses import DiceLoss
 from monai.metrics import compute_dice
 from monai.metrics.meandice import DiceMetric
 from monai.networks.layers import GaussianFilter
-from monai.transforms import (Activationsd, AsDiscreted, CenterSpatialCropd,
-                              Compose, CropForegroundd)
+from monai.transforms import (
+    Activationsd,
+    AsDiscreted,
+    CenterSpatialCropd,
+    Compose,
+    CropForegroundd,
+)
 from monai.transforms.transform import MapTransform, Randomizable, Transform
 from monai.utils import min_version, optional_import
 from monai.utils.enums import CommonKeys
 from numpy.typing import ArrayLike
 
-from utils.distance_transform import (get_choice_from_distance_transform_cp,
-                                      get_choice_from_tensor,
-                                      get_distance_transform)
-from utils.helper import (describe, describe_batch_data,
-                          get_global_coordinates_from_patch_coordinates,
-                          get_tensor_at_coordinates, print_gpu_usage,
-                          print_tensor_gpu_usage, timeit)
+from utils.distance_transform import (
+    get_choice_from_distance_transform_cp,
+    get_choice_from_tensor,
+    get_distance_transform,
+)
+from utils.helper import (
+    describe,
+    describe_batch_data,
+    get_global_coordinates_from_patch_coordinates,
+    get_tensor_at_coordinates,
+    print_gpu_usage,
+    print_tensor_gpu_usage,
+    timeit,
+)
 from utils.logger import get_logger, setup_loggers
 
 logger = None

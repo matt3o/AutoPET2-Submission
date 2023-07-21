@@ -26,8 +26,12 @@ from monai.metrics import compute_dice
 from monai.transforms import AsDiscrete, Compose
 from monai.utils.enums import CommonKeys
 
-from utils.helper import (describe_batch_data, get_total_size_of_all_tensors,
-                          print_gpu_usage, timeit)
+from utils.helper import (
+    describe_batch_data,
+    get_total_size_of_all_tensors,
+    print_gpu_usage,
+    timeit,
+)
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
 logger = logging.getLogger("interactive_segmentation")

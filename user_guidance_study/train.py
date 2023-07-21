@@ -19,8 +19,6 @@ import os
 import pathlib
 import pprint
 import shutil
-from pickle import dump
-
 import signal
 import sys
 import time
@@ -58,31 +56,18 @@ import threading
 from parser import parse_args
 
 from ignite.engine import Engine, Events
-from ignite.handlers import (
-    BasicTimeProfiler,
-    HandlersTimeProfiler,
-    TerminateOnNan,
-    Timer,
-)
+from ignite.handlers import (BasicTimeProfiler, HandlersTimeProfiler,
+                             TerminateOnNan, Timer)
 from monai.data import set_track_meta
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
-from monai.handlers import (
-    CheckpointLoader,
-    CheckpointSaver,
-    GarbageCollector,
-    IgniteMetric,
-    LrScheduleHandler,
-    MeanDice,
-    StatsHandler,
-    TensorBoardStatsHandler,
-    ValidationHandler,
-    from_engine,
-)
+from monai.handlers import (CheckpointLoader, CheckpointSaver,
+                            GarbageCollector, IgniteMetric, LrScheduleHandler,
+                            MeanDice, StatsHandler, TensorBoardStatsHandler,
+                            ValidationHandler, from_engine)
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.metrics import LossMetric
-
 # from utils.dynunet import DynUNet
 from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
@@ -90,25 +75,14 @@ from monai.utils import set_determinism
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
 from tensorboard_logger import init_tensorboard_logger
-from utils.helper import (
-    GPU_Thread,
-    TerminationHandler,
-    count_parameters,
-    get_actual_cuda_index_of_device,
-    get_git_information,
-    get_gpu_usage,
-    gpu_usage,
-    handle_exception,
-    print_gpu_usage,
-)
+from utils.helper import (GPU_Thread, TerminationHandler, count_parameters,
+                          get_actual_cuda_index_of_device, get_git_information,
+                          get_gpu_usage, gpu_usage, handle_exception,
+                          print_gpu_usage)
 from utils.interaction import Interaction
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
-from utils.utils import (
-    get_click_transforms,
-    get_loaders,
-    get_post_transforms,
-    get_pre_transforms,
-)
+from utils.utils import (get_click_transforms, get_loaders,
+                         get_post_transforms, get_pre_transforms)
 
 # from monai.config import print_config
 # print_config()

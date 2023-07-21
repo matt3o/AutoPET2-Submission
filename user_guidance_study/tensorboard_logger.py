@@ -1,11 +1,6 @@
 from ignite.contrib.handlers.tensorboard_logger import (
-    GradsHistHandler,
-    GradsScalarHandler,
-    TensorboardLogger,
-    WeightsHistHandler,
-    WeightsScalarHandler,
-    global_step_from_engine,
-)
+    GradsHistHandler, GradsScalarHandler, TensorboardLogger,
+    WeightsHistHandler, WeightsScalarHandler, global_step_from_engine)
 from ignite.engine import Engine, Events
 
 

@@ -9,27 +9,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-### Code extension and modification by M.Sc. Zdravko Marinov, Karlsuhe Institute of Techonology ###
-### zdravko.marinov@kit.edu ###
+# Code extension and modification by M.Sc. Zdravko Marinov, Karlsuhe Institute of Techonology #
+# zdravko.marinov@kit.edu #
 
+from __future__ import annotations
 
-import logging
-import math
 import os
 import pathlib
-import pprint
-import shutil
-import signal
+import resource
 import sys
 import time
-import uuid
 from collections import OrderedDict
 from functools import reduce
+from parser import parse_args
 from pickle import dump
-from typing import Optional
 
-# import gc
+import cupy as cp
+import pandas as pd
+import torch
+from ignite.engine import Events
+from ignite.handlers import TerminateOnNan
 
+from monai.data import set_track_meta
+from monai.engines import SupervisedEvaluator, SupervisedTrainer
+from monai.engines.utils import IterationEvents
+from monai.handlers import (
+    CheckpointLoader,
+    CheckpointSaver,
+    GarbageCollector,
+    IgniteMetric,
+    LrScheduleHandler,
+    MeanDice,
+    StatsHandler,
+    ValidationHandler,
+    from_engine,
+)
+from monai.inferers import SimpleInferer, SlidingWindowInferer
+from monai.losses import DiceCELoss
+from monai.metrics import LossMetric
+from monai.networks.nets.dynunet import DynUNet
+from monai.optimizers.novograd import Novograd
+from monai.utils import set_determinism
+from monai.utils.profiling import ProfileHandler, WorkflowProfiler
+from tensorboard_logger import init_tensorboard_logger
+from utils.helper import (
+    GPU_Thread,
+    TerminationHandler,
+    count_parameters,
+    get_gpu_usage,
+    handle_exception,
+)
+from utils.interaction import Interaction
+from utils.utils import (
+    get_click_transforms,
+    get_loaders,
+    get_post_transforms,
+    get_pre_transforms,
+)
+
+# Various settings
+
+logger = None
+output_dir = None
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 tmpdir = "/local/work/mhadlich/tmp"
 if os.environ.get("SLURM_JOB_ID") is not None:
@@ -37,61 +81,8 @@ if os.environ.get("SLURM_JOB_ID") is not None:
     if not os.path.exists(tmpdir):
         pathlib.Path(tmpdir).mkdir(parents=True)
 
-# Things needed to debug the Interaction class
-import resource
-
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
-
-# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
-
-import cupy as cp
-import pandas as pd
-import torch
-
-logger = None
-output_dir = None
-
-import threading
-from parser import parse_args
-
-from ignite.engine import Engine, Events
-from ignite.handlers import (BasicTimeProfiler, HandlersTimeProfiler,
-                             TerminateOnNan, Timer)
-from monai.data import set_track_meta
-from monai.engines import SupervisedEvaluator, SupervisedTrainer
-from monai.engines.utils import IterationEvents
-from monai.handlers import (CheckpointLoader, CheckpointSaver,
-                            GarbageCollector, IgniteMetric, LrScheduleHandler,
-                            MeanDice, StatsHandler, TensorBoardStatsHandler,
-                            ValidationHandler, from_engine)
-from monai.inferers import SimpleInferer, SlidingWindowInferer
-from monai.losses import DiceCELoss
-from monai.metrics import LossMetric
-# from utils.dynunet import DynUNet
-from monai.networks.nets.dynunet import DynUNet
-from monai.optimizers.novograd import Novograd
-from monai.utils import set_determinism
-from monai.utils.profiling import ProfileHandler, WorkflowProfiler
-
-from tensorboard_logger import init_tensorboard_logger
-from utils.helper import (GPU_Thread, TerminationHandler, count_parameters,
-                          get_actual_cuda_index_of_device, get_git_information,
-                          get_gpu_usage, gpu_usage, handle_exception,
-                          print_gpu_usage)
-from utils.interaction import Interaction
-from utils.transforms import ClickGenerationStrategy, StoppingCriterion
-from utils.utils import (get_click_transforms, get_loaders,
-                         get_post_transforms, get_pre_transforms)
-
-# from monai.config import print_config
-# print_config()
-
-
-# from monai.handlers import IgniteLossMetric
-
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
 
 
 def oom_observer(device, alloc, device_alloc, device_free):
@@ -222,29 +213,29 @@ def create_trainer(args):
     elif args.optimizer == "Adam":  # default
         optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
 
-    MAX_EPOCHS = args.epochs
-
     # SCHEDULER
     if args.scheduler == "MultiStepLR":
         steps = 4
-        steps_per_epoch = round(MAX_EPOCHS / steps)
+        steps_per_epoch = round(args.epochs / steps)
         if steps_per_epoch < 1:
-            logger.error("Chosen number of epochs {MAX_EPOCHS}/{steps} < 0")
-            milestones = range(0, MAX_EPOCHS)
+            logger.error("Chosen number of epochs {args.epochs}/{steps} < 0")
+            milestones = range(0, args.epochs)
         else:
             milestones = [
-                num for num in range(0, MAX_EPOCHS) if num % round(steps_per_epoch) == 0
+                num
+                for num in range(0, args.epochs)
+                if num % round(steps_per_epoch) == 0
             ][1:]
         lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer, milestones=milestones, gamma=0.333
         )
     elif args.scheduler == "PolynomialLR":
         lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(
-            optimizer, total_iters=MAX_EPOCHS, power=2
+            optimizer, total_iters=args.epochs, power=2
         )
     elif args.scheduler == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=MAX_EPOCHS, eta_min=1e-6
+            optimizer, T_max=args.epochs, eta_min=1e-6
         )
 
     if args.sw_roi_size[0] < 128:
@@ -357,10 +348,9 @@ def create_trainer(args):
         GarbageCollector(log_level=20, trigger_event=train_trigger_event),
     ]
 
-    # logger.info(f"{MAX_EPOCHS=}")
     trainer = SupervisedTrainer(
         device=device,
-        max_epochs=MAX_EPOCHS,
+        max_epochs=args.epochs,
         train_data_loader=train_loader,
         network=network,
         iteration_update=Interaction(
@@ -415,9 +405,10 @@ def create_trainer(args):
         checkpoint = torch.load(args.resume_from)
 
         for key in save_dict:
+            # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
             assert (
                 key in checkpoint
-            ), f"key {key} has not been found in the save_dict! The file may be broken or incompatible (e.g. evaluator has not been run).\n file keys: {checkpoint.keys}"
+            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys}"
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
         handler = CheckpointLoader(

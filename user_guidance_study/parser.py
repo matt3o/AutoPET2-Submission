@@ -10,9 +10,7 @@ import torch
 from utils.helper import (
     get_actual_cuda_index_of_device,
     get_git_information,
-    get_gpu_usage,
     gpu_usage,
-    print_gpu_usage,
 )
 from utils.logger import get_logger, setup_loggers
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
@@ -198,7 +196,8 @@ def parse_args():
         # raise UserWarning("For DeepGrow to work you have to set args.val_click_generation_stopping_criterion to 5!")
         logger.warning("############## DeepGrow mode activated ###################")
         logger.warning(
-            "args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion and args.val_click_generation_stopping_criterion will be overwritten by this option"
+            """args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion 
+            and args.val_click_generation_stopping_criterion will be overwritten by this option"""
         )
         logger.warning("##########################################################")
         # logger.info("To reproduce ")

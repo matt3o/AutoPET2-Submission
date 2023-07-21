@@ -709,7 +709,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
             data[self.guidance_key] = {}
 
         click_generation_strategy = data[self.click_generation_strategy_key]
-        logger.info(f"click generation strategy is {click_generation_strategy}")
+        # logger.info(f"click generation strategy is {click_generation_strategy}")
 
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label

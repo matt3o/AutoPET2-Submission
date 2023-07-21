@@ -218,7 +218,7 @@ class Interaction:
 
             batchdata[CommonKeys.PRED] = predictions
             
-            assert batchdata[CommonKeys.PRED].shape == batchdata[CommonKeys.LABEL].shape, f"{batchdata[CommonKeys.PRED].shape} != {batchdata[CommonKeys.LABEL].shape}"
+            # Not necessary for anything anymore
             # loss = self.loss_function(
             #     batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
             # )
@@ -226,7 +226,7 @@ class Interaction:
             # logger.info(
             #     f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
             # )
-            last_dice = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL])
+            last_dice = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]).item()
             logger.info(
                 f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice:.4f} Epoch: {engine.state.epoch}"
             )

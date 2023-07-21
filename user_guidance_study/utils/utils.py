@@ -98,7 +98,7 @@ def get_pre_transforms(labels, device, args):
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             # PrintDatad(),
             EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            PrintGPUUsaged(device=device, name="pre"),
+            # PrintGPUUsaged(device=device, name="pre"),
             # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
@@ -140,7 +140,7 @@ def get_pre_transforms(labels, device, args):
             if args.inferer == "SimpleInferer"
             else NoOpd(),
             EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            PrintGPUUsaged(device=device, name="pre"),
+            # PrintGPUUsaged(device=device, name="pre"),
         ]
     # TODO fix and reenable the part below
     # else:  # MSD Spleen

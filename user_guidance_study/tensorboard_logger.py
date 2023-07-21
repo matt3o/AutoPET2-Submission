@@ -1,12 +1,8 @@
 from ignite.contrib.handlers.tensorboard_logger import (
-    TensorboardLogger,
-    global_step_from_engine,
-    WeightsScalarHandler,
-    WeightsHistHandler,
-    GradsScalarHandler,
-    GradsHistHandler,
-)
+    GradsHistHandler, GradsScalarHandler, TensorboardLogger,
+    WeightsHistHandler, WeightsScalarHandler, global_step_from_engine)
 from ignite.engine import Engine, Events
+
 
 def init_tensorboard_logger(trainer, evaluator, optimizer, all_train_metrics, all_val_metrics, output_dir, debug=False):
     tb_logger = TensorboardLogger(log_dir=f"{output_dir}/tensorboard")

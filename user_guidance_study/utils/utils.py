@@ -90,7 +90,7 @@ def get_pre_transforms(labels, device, args):
 
             # PrintDatad(),
             EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
+            PrintGPUUsaged(device=device, name="pre"),
             # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
             
             # Move to GPU
@@ -115,7 +115,7 @@ def get_pre_transforms(labels, device, args):
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True), # 0.05 and 99.95 percentiles of the spleen HUs
             DivisiblePadd(keys=["image", "label"], k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
             EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
+            PrintGPUUsaged(device=device, name="pre"),
         ]
     else: # MSD Spleen
         t_train = [

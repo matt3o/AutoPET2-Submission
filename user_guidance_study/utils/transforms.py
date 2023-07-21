@@ -71,17 +71,29 @@ logger = None
 
 
 class ClickGenerationStrategy(IntEnum):
+    # Sample a click randomly based on the label, so no correction based on the prediction
     GLOBAL_NON_CORRECTIVE = 1
+    # Sample a click based on the discrepancy between label and predition
+    # Thus generate corrective clicks where the networks predicts incorrectly so far
     GLOBAL_CORRECTIVE = 2
+    # Subdivide volume into patches of size train_crop_size, calculate the dice score for each, then sample click on the worst one
     PATCH_BASED_CORRECTIVE = 3
+    # At each iteration sample from the probability and don't add a click if it yields False
     DEEPGROW_GLOBAL_CORRECTIVE = 4
 
 
+
 class StoppingCriterion(IntEnum):
+    # Sample max_train_interactions amount of clicks (can be done in the first iteration if non-corrective)
     MAX_ITER = 1
+    # Sample clicks iteratively. At each step sample p~(0,1). If p > x continue sampling
     MAX_ITER_AND_PROBABILITY = 2
+    # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
     MAX_ITER_AND_DICE = 3
+    # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
+# If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
     MAX_ITER_PROBABILITY_AND_DICE = 4
+     # Stopping as previously implemented with Deepgrow
     DEEPGROW_PROBABILITY = 5
 
 
@@ -167,18 +179,20 @@ class PrintDatad(MapTransform):
 
 
 class PrintGPUUsaged(MapTransform):
-    def __init__(self, device, keys: KeysCollection = None):
+    def __init__(self, device, keys: KeysCollection = None, name=""):
         """
         Prints the GPU usage
         """
         super().__init__(keys)
         self.device = device
+        self.name = name
 
     def __call__(
         self, data: Mapping[Hashable, torch.Tensor]
     ) -> Mapping[Hashable, torch.Tensor]:
-        logger.info(
-            f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
+        if logger is not None:
+            logger.info(
+            f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
         )
         return data
 
@@ -275,6 +289,9 @@ class NormalizeLabelsInDatasetd(MapTransform):
                     label[data[key] == val_label] = idx
                 if key_label == "background":
                     new_label_names["background"] = 0
+                else:
+                    new_label_names[key_label] = idx
+                    label[d[key] == val_label] = idx
 
             data["label_names"] = new_label_names
             if isinstance(data[key], MetaTensor):
@@ -805,9 +822,9 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 patch_number = max_loss_position_per_label[idx]
                 label_loss = loss_per_label[patch_number, idx]
                 coordinates = coordinate_list[patch_number]
-                logger.info(
-                    f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"
-                )
+                # logger.info(
+                #     f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"
+                # )
 
                 tmp_gui = data[self.guidance_key].get(
                     key_label, torch.tensor([], dtype=torch.int32, device=self.device)

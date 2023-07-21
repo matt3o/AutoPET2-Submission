@@ -14,8 +14,12 @@ from typing import List, Optional, Sequence, Tuple, Type, Union
 import torch
 import torch.nn as nn
 from monai.networks.blocks import Convolution
-from monai.networks.blocks.dynunet_block import (UnetBasicBlock, UnetOutBlock,
-                                                 UnetResBlock, UnetUpBlock)
+from monai.networks.blocks.dynunet_block import (
+    UnetBasicBlock,
+    UnetOutBlock,
+    UnetResBlock,
+    UnetUpBlock,
+)
 from torch.nn.functional import interpolate
 
 __all__ = ["DynUNet", "DynUnet", "Dynunet"]
@@ -33,7 +37,9 @@ class DynUNetSkipLayer(nn.Module):
 
     heads: Optional[List[torch.Tensor]]
 
-    def __init__(self, index, downsample, upsample, next_layer, heads=None, super_head=None):
+    def __init__(
+        self, index, downsample, upsample, next_layer, heads=None, super_head=None
+    ):
         super().__init__()
         self.downsample = downsample
         self.next_layer = next_layer
@@ -43,7 +49,6 @@ class DynUNetSkipLayer(nn.Module):
         self.index = index
 
     def forward(self, x):
-
         downout = self.downsample(x)
         nextout = self.next_layer(downout)
         upout = self.upsample(nextout, downout)
@@ -137,7 +142,10 @@ class DynUNet(nn.Module):
         filters: Optional[Sequence[int]] = None,
         dropout: Optional[Union[Tuple, str, float]] = None,
         norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
-        act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+        act_name: Union[Tuple, str] = (
+            "leakyrelu",
+            {"inplace": True, "negative_slope": 0.01},
+        ),
         deep_supervision: bool = False,
         deep_supr_num: int = 1,
         res_block: bool = False,
@@ -161,7 +169,10 @@ class DynUNet(nn.Module):
             self.filters = filters
             self.check_filters()
         else:
-            self.filters = [min(2 ** (5 + i), 320 if spatial_dims == 3 else 512) for i in range(len(strides))]
+            self.filters = [
+                min(2 ** (5 + i), 320 if spatial_dims == 3 else 512)
+                for i in range(len(strides))
+            ]
         self.input_block = self.get_input_block()
         self.downsamples = self.get_downsamples()
         self.bottleneck = self.get_bottleneck()
@@ -180,7 +191,6 @@ class DynUNet(nn.Module):
         self.apply(self.initialize_weights)
         self.check_kernel_stride()
 
-
         def create_skips(index, downsamples, upsamples, bottleneck, superheads=None):
             """
             Construct the UNet topology as a sequence of skip layers terminating with the bottleneck layer. This is
@@ -193,12 +203,21 @@ class DynUNet(nn.Module):
             if len(downsamples) != len(upsamples):
                 raise ValueError(f"{len(downsamples)} != {len(upsamples)}")
 
-            if len(downsamples) == 0:  # bottom of the network, pass the bottleneck block
+            if (
+                len(downsamples) == 0
+            ):  # bottom of the network, pass the bottleneck block
                 return bottleneck
 
             if superheads is None:
-                next_layer = create_skips(1 + index, downsamples[1:], upsamples[1:], bottleneck)
-                return DynUNetSkipLayer(index, downsample=downsamples[0], upsample=upsamples[0], next_layer=next_layer)
+                next_layer = create_skips(
+                    1 + index, downsamples[1:], upsamples[1:], bottleneck
+                )
+                return DynUNetSkipLayer(
+                    index,
+                    downsample=downsamples[0],
+                    upsample=upsamples[0],
+                    next_layer=next_layer,
+                )
 
             super_head_flag = False
             if index == 0:  # don't associate a supervision head with self.input_block
@@ -211,7 +230,13 @@ class DynUNet(nn.Module):
                     rest_heads = nn.ModuleList()
 
             # create the next layer down, this will stop at the bottleneck layer
-            next_layer = create_skips(1 + index, downsamples[1:], upsamples[1:], bottleneck, superheads=rest_heads)
+            next_layer = create_skips(
+                1 + index,
+                downsamples[1:],
+                upsamples[1:],
+                bottleneck,
+                superheads=rest_heads,
+            )
             if super_head_flag:
                 return DynUNetSkipLayer(
                     index,
@@ -222,11 +247,19 @@ class DynUNet(nn.Module):
                     super_head=superheads[0],
                 )
 
-            return DynUNetSkipLayer(index, downsample=downsamples[0], upsample=upsamples[0], next_layer=next_layer)
+            return DynUNetSkipLayer(
+                index,
+                downsample=downsamples[0],
+                upsample=upsamples[0],
+                next_layer=next_layer,
+            )
 
         if not self.deep_supervision:
             self.skip_layers = create_skips(
-                0, [self.input_block] + list(self.downsamples), self.upsamples[::-1], self.bottleneck
+                0,
+                [self.input_block] + list(self.downsamples),
+                self.upsamples[::-1],
+                self.bottleneck,
             )
         else:
             self.skip_layers = create_skips(
@@ -237,39 +270,44 @@ class DynUNet(nn.Module):
                 superheads=self.deep_supervision_heads,
             )
 
-        self.conv1d_layer_1 = Convolution(spatial_dims=3,
-                                        in_channels=3,
-                                        out_channels=5,
-                                        adn_ordering="ADN",
-                                        act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-                                        dropout=0.1,
-                                        )
-        self.conv1d_layer_2 = Convolution(spatial_dims=3,
-                                        in_channels=5,
-                                        out_channels=1,
-                                        adn_ordering="ADN",
-                                        act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-                                        dropout=0.1,
-                                        )
-        self.conv1s_layer_im = Convolution(spatial_dims=3,
-                                        in_channels=1,
-                                        out_channels=1,
-                                        adn_ordering="ADN",
-                                        act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-                                        dropout=0.1,
-                                        )
-        self.conv1s_layer_guidance= Convolution(spatial_dims=3,
-                                        in_channels=2,
-                                        out_channels=1,
-                                        adn_ordering="ADN",
-                                        act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-                                        dropout=0.1,
-                                        )
-
+        self.conv1d_layer_1 = Convolution(
+            spatial_dims=3,
+            in_channels=3,
+            out_channels=5,
+            adn_ordering="ADN",
+            act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+            dropout=0.1,
+        )
+        self.conv1d_layer_2 = Convolution(
+            spatial_dims=3,
+            in_channels=5,
+            out_channels=1,
+            adn_ordering="ADN",
+            act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+            dropout=0.1,
+        )
+        self.conv1s_layer_im = Convolution(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=1,
+            adn_ordering="ADN",
+            act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+            dropout=0.1,
+        )
+        self.conv1s_layer_guidance = Convolution(
+            spatial_dims=3,
+            in_channels=2,
+            out_channels=1,
+            adn_ordering="ADN",
+            act=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+            dropout=0.1,
+        )
 
     def check_kernel_stride(self):
         kernels, strides = self.kernel_size, self.strides
-        error_msg = "length of kernel_size and strides should be the same, and no less than 3."
+        error_msg = (
+            "length of kernel_size and strides should be the same, and no less than 3."
+        )
         if len(kernels) != len(strides) or len(kernels) < 3:
             raise ValueError(error_msg)
 
@@ -288,14 +326,18 @@ class DynUNet(nn.Module):
         deep_supr_num, strides = self.deep_supr_num, self.strides
         num_up_layers = len(strides) - 1
         if deep_supr_num >= num_up_layers:
-            raise ValueError("deep_supr_num should be less than the number of up sample layers.")
+            raise ValueError(
+                "deep_supr_num should be less than the number of up sample layers."
+            )
         if deep_supr_num < 1:
             raise ValueError("deep_supr_num should be larger than 0.")
 
     def check_filters(self):
         filters = self.filters
         if len(filters) < len(self.strides):
-            raise ValueError("length of filters should be no less than the length of strides.")
+            raise ValueError(
+                "length of filters should be no less than the length of strides."
+            )
         else:
             self.filters = filters[: len(self.strides)]
 
@@ -304,8 +346,8 @@ class DynUNet(nn.Module):
             out = self.conv1d_layer_1(x)
             out = self.conv1d_layer_2(out)
         elif self.conv1s:
-            im = x[:,:1]
-            guidance = x[:,1:]
+            im = x[:, :1]
+            guidance = x[:, 1:]
             out_1 = self.conv1s_layer_im(im)
             out_2 = self.conv1s_layer_guidance(guidance)
             out = out_1 + out_2
@@ -345,7 +387,12 @@ class DynUNet(nn.Module):
         )
 
     def get_output_block(self, idx: int):
-        return UnetOutBlock(self.spatial_dims, self.filters[idx], self.out_channels, dropout=self.dropout)
+        return UnetOutBlock(
+            self.spatial_dims,
+            self.filters[idx],
+            self.out_channels,
+            dropout=self.dropout,
+        )
 
     def get_downsamples(self):
         inp, out = self.filters[:-2], self.filters[1:-1]
@@ -359,7 +406,13 @@ class DynUNet(nn.Module):
         upsample_kernel_size = self.upsample_kernel_size[::-1]
 
         return self.get_module_list(
-            inp, out, kernel_size, strides, UnetUpBlock, upsample_kernel_size, trans_bias=self.trans_bias
+            inp,
+            out,
+            kernel_size,
+            strides,
+            UnetUpBlock,
+            upsample_kernel_size,
+            trans_bias=self.trans_bias,
         )
 
     def get_module_list(
@@ -392,7 +445,9 @@ class DynUNet(nn.Module):
                 layer = conv_block(**params)
                 layers.append(layer)
         else:
-            for in_c, out_c, kernel, stride in zip(in_channels, out_channels, kernel_size, strides):
+            for in_c, out_c, kernel, stride in zip(
+                in_channels, out_channels, kernel_size, strides
+            ):
                 params = {
                     "spatial_dims": self.spatial_dims,
                     "in_channels": in_c,
@@ -408,11 +463,15 @@ class DynUNet(nn.Module):
         return nn.ModuleList(layers)
 
     def get_deep_supervision_heads(self):
-        return nn.ModuleList([self.get_output_block(i + 1) for i in range(self.deep_supr_num)])
+        return nn.ModuleList(
+            [self.get_output_block(i + 1) for i in range(self.deep_supr_num)]
+        )
 
     @staticmethod
     def initialize_weights(module):
-        if isinstance(module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)):
+        if isinstance(
+            module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)
+        ):
             module.weight = nn.init.kaiming_normal_(module.weight, a=0.01)
             if module.bias is not None:
                 module.bias = nn.init.constant_(module.bias, 0)

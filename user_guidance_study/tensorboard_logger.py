@@ -1,10 +1,23 @@
 from ignite.contrib.handlers.tensorboard_logger import (
-    GradsHistHandler, GradsScalarHandler, TensorboardLogger,
-    WeightsHistHandler, WeightsScalarHandler, global_step_from_engine)
+    GradsHistHandler,
+    GradsScalarHandler,
+    TensorboardLogger,
+    WeightsHistHandler,
+    WeightsScalarHandler,
+    global_step_from_engine,
+)
 from ignite.engine import Engine, Events
 
 
-def init_tensorboard_logger(trainer, evaluator, optimizer, all_train_metrics, all_val_metrics, output_dir, debug=False):
+def init_tensorboard_logger(
+    trainer,
+    evaluator,
+    optimizer,
+    all_train_metrics,
+    all_val_metrics,
+    output_dir,
+    debug=False,
+):
     tb_logger = TensorboardLogger(log_dir=f"{output_dir}/tensorboard")
 
     print(list(evaluator.state.metrics.keys()))
@@ -35,36 +48,36 @@ def init_tensorboard_logger(trainer, evaluator, optimizer, all_train_metrics, al
         trainer,
         event_name=Events.ITERATION_STARTED,
         optimizer=optimizer,
-        tag="3_params"
+        tag="3_params",
     )
 
-    # for debugging 
+    # for debugging
     if debug:
         # Attach the logger to the trainer to log model's weights norm after each iteration
         tb_logger.attach(
             trainer,
             event_name=Events.ITERATION_COMPLETED,
-            log_handler=WeightsScalarHandler(network)
+            log_handler=WeightsScalarHandler(network),
         )
 
         # Attach the logger to the trainer to log model's weights as a histogram after each epoch
         tb_logger.attach(
             trainer,
             event_name=Events.EPOCH_COMPLETED,
-            log_handler=WeightsHistHandler(network)
+            log_handler=WeightsHistHandler(network),
         )
 
         # Attach the logger to the trainer to log model's gradients norm after each iteration
         tb_logger.attach(
             trainer,
             event_name=Events.ITERATION_COMPLETED,
-            log_handler=GradsScalarHandler(network)
+            log_handler=GradsScalarHandler(network),
         )
 
         # Attach the logger to the trainer to log model's gradients as a histogram after each epoch
         tb_logger.attach(
             trainer,
             event_name=Events.EPOCH_COMPLETED,
-            log_handler=GradsHistHandler(network)
+            log_handler=GradsHistHandler(network),
         )
     return tb_logger

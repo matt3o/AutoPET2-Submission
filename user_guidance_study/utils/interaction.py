@@ -24,6 +24,7 @@ from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
 from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
+from monai.losses import DiceLoss
 from utils.helper import print_gpu_usage, timeit
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
@@ -88,6 +89,7 @@ class Interaction:
         self.iteration_probability = iteration_probability
         self.loss_stopping_threshold = loss_stopping_threshold
         self.click_generation_strategy_key = click_generation_strategy_key
+        self.dice_loss_function = DiceLoss(include_background=False)
 
     @timeit
     def __call__(
@@ -130,6 +132,7 @@ class Interaction:
 
         iteration = 0
         last_loss = 1
+        last_dice = 1
         before_it = time.time()
         while True:
             assert iteration < 1000
@@ -156,15 +159,15 @@ class Interaction:
                     break
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE]:
                 # Abort if dice / loss is good enough
-                if last_loss > self.loss_stopping_threshold:
-                    logger.info(f"DICE stop, since {last_loss} > {self.loss_stopping_threshold}")
+                if last_dice > self.loss_stopping_threshold:
+                    logger.info(f"DICE stop, since {last_dice} > {self.loss_stopping_threshold}")
                     break
 
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
             ]:
-                if np.random.choice([True, False], p=[1 - last_loss, last_loss]):
-                    logger.info(f"DICE_PROBABILITY stop, since dice is already {last_loss}")
+                if np.random.choice([True, False], p=[1 - last_dice, last_dice]):
+                    logger.info(f"DICE_PROBABILITY stop, since dice is already {last_dice}")
                     break
 
             if (
@@ -217,9 +220,11 @@ class Interaction:
             loss = self.loss_function(
                 batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
             )
+            last_loss = loss
             logger.info(
                 f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
             )
+            last_dice = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL])
 
             if self.args.save_nifti:
                 tmp_batchdata = {

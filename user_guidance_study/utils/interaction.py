@@ -216,15 +216,19 @@ class Interaction:
                     predictions = engine.inferer(inputs, engine.network)
 
             batchdata[CommonKeys.PRED] = predictions
-
-            loss = self.loss_function(
-                batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
-            )
-            last_loss = loss
-            logger.info(
-                f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
-            )
+            
+            assert batchdata[CommonKeys.PRED].shape == batchdata[CommonKeys.LABEL].shape
+            # loss = self.loss_function(
+            #     batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
+            # )
+            # last_loss = loss
+            # logger.info(
+            #     f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
+            # )
             last_dice = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL])
+            logger.info(
+                f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice:.4f} Epoch: {engine.state.epoch}"
+            )
 
             if self.args.save_nifti:
                 tmp_batchdata = {

@@ -177,6 +177,7 @@ def create_trainer(args):
                 args.train_sw_batch_size,
             ),
         )
+        train_batch_size = args.train_sw_batch_size
         logger.info(f"{train_batch_size=}")
         if args.val_crop_size != "None":
             val_batch_size = max(

@@ -335,7 +335,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",  # , persistent_workers=True,
+        multiprocessing_context="spawn",  
+        persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -351,7 +352,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         val_ds,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",  # persistent_workers=True,
+        multiprocessing_context="spawn",  
+        persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

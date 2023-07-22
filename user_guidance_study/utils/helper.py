@@ -12,6 +12,7 @@ from datetime import datetime
 from functools import wraps
 from typing import List
 
+import psutil
 import cupy as cp
 import pandas as pd
 import torch
@@ -20,7 +21,8 @@ from pynvml import (
     nvmlDeviceGetMemoryInfo,
     nvmlDeviceGetUtilizationRates,
     nvmlInit,
-    nvmlDeviceGetComputeRunningProcesses
+    nvmlDeviceGetComputeRunningProcesses,
+    nvmlShutdown,
 )
 
 from monai.data.meta_tensor import MetaTensor
@@ -57,7 +59,8 @@ def gpu_usage(device: torch.device, used_memory_only=False):
     with cp.cuda.Device(device.index):
         mempool = cp.get_default_memory_pool()
         cupy_usage = mempool.used_bytes() / 1024**2
-
+    
+    nvmlShutdown()
     if not used_memory_only:
         return (
             cuda_index,
@@ -74,13 +77,17 @@ def gpu_usage(device: torch.device, used_memory_only=False):
 
 def gpu_usage_per_process(device: torch.device, used_memory_only=False) -> List:
     # empty the cache first
-    nvmlInit()
-    cuda_index = get_actual_cuda_index_of_device(device)
-    h = nvmlDeviceGetHandleByIndex(cuda_index)
-    process_list = []
-    for proc in nvmlDeviceGetComputeRunningProcesses(h):
-        process_list.append((cuda_index, proc.pid, proc.usedGpuMemory / (1024**2)))
-
+    try:
+        nvmlInit()
+        cuda_index = get_actual_cuda_index_of_device(device)
+        h = nvmlDeviceGetHandleByIndex(cuda_index)
+        process_list = []
+        for proc in nvmlDeviceGetComputeRunningProcesses(h):
+            process_list.append((cuda_index, psutil.Process(proc.pid).name(), proc.usedGpuMemory / (1024**2)))
+        nvmlShutdown()
+    except NVMLError:
+        return []
+    
     return process_list
 
 
@@ -140,7 +147,7 @@ def print_gpu_usage(*args, **kwargs):
     logger.info(get_gpu_usage(*args, **kwargs))
 
 def print_gpu_usage_per_process(*args, **kwargs):
-    logger.info(get_gpu_usage_per_process(*args, **kwargs))
+    logger.info(gpu_usage_per_process(*args, **kwargs))
 
 
 def print_tensor_gpu_usage(a: torch.Tensor):
@@ -366,6 +373,7 @@ class GPU_Thread(threading.Thread):
             self.csv_file.write(usage)
             self.csv_file.write("\n")
             self.csv_file.flush()
+            print_gpu_usage_per_process(self.device)
 
 
 def get_tensor_at_coordinates(

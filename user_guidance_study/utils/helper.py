@@ -20,6 +20,7 @@ from pynvml import (
     nvmlDeviceGetMemoryInfo,
     nvmlDeviceGetUtilizationRates,
     nvmlInit,
+    nvmlDeviceGetComputeRunningProcesses
 )
 
 from monai.data.meta_tensor import MetaTensor
@@ -70,6 +71,17 @@ def gpu_usage(device: torch.device, used_memory_only=False):
         )
     else:
         return nv_used
+
+def gpu_usage_per_process(device: torch.device, used_memory_only=False) -> List:
+    # empty the cache first
+    nvmlInit()
+    cuda_index = get_actual_cuda_index_of_device(device)
+    h = nvmlDeviceGetHandleByIndex(cuda_index)
+    process_list = []
+    for proc in nvmlDeviceGetComputeRunningProcesses(h):
+        process_list.append((cuda_index, proc.pid, proc.usedGpuMemory / (1024**2)))
+
+    return process_list
 
 
 def get_gpu_usage(
@@ -126,6 +138,9 @@ def get_gpu_usage(
 
 def print_gpu_usage(*args, **kwargs):
     logger.info(get_gpu_usage(*args, **kwargs))
+
+def print_gpu_usage_per_process(*args, **kwargs):
+    logger.info(get_gpu_usage_per_process(*args, **kwargs))
 
 
 def print_tensor_gpu_usage(a: torch.Tensor):

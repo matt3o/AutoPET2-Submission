@@ -23,6 +23,7 @@ from pynvml import (
     nvmlInit,
     nvmlDeviceGetComputeRunningProcesses,
     nvmlShutdown,
+    NVMLError
 )
 
 from monai.data.meta_tensor import MetaTensor
@@ -38,29 +39,40 @@ def get_actual_cuda_index_of_device(device: torch.device):
     return int(cuda_indexes[device.index])
 
 
-def gpu_usage(device: torch.device, used_memory_only=False):
+def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle = None):
     # empty the cache first
-    nvmlInit()
-    cuda_index = get_actual_cuda_index_of_device(device)
-    h = nvmlDeviceGetHandleByIndex(cuda_index)
-    info = nvmlDeviceGetMemoryInfo(h)
-    util = nvmlDeviceGetUtilizationRates(h)
-    nv_total, nv_free, nv_used = (
-        info.total / (1024**2),
-        info.free / (1024**2),
-        info.used / (1024**2),
-    )
-    # utilization = torch.cuda.utilization(device)
-    util_gpu = util.gpu / 100
-    util_memory = util.memory / 100
-
-    torch_reserved = torch.cuda.memory_reserved(device) / (1024**2)
-
-    with cp.cuda.Device(device.index):
-        mempool = cp.get_default_memory_pool()
-        cupy_usage = mempool.used_bytes() / 1024**2
+    shutdown = False
+    if nvml_handle is None:
+        nvmlInit()
+        cuda_index = get_actual_cuda_index_of_device(device)
+        h = nvmlDeviceGetHandleByIndex(cuda_index)
+        shutdown = True
+    else:
+        h = nvml_handle
     
-    nvmlShutdown()
+    try:
+        info = nvmlDeviceGetMemoryInfo(h)
+        util = nvmlDeviceGetUtilizationRates(h)
+        nv_total, nv_free, nv_used = (
+            info.total / (1024**2),
+            info.free / (1024**2),
+            info.used / (1024**2),
+        )
+        # utilization = torch.cuda.utilization(device)
+        util_gpu = util.gpu / 100
+        util_memory = util.memory / 100
+
+        torch_reserved = torch.cuda.memory_reserved(device) / (1024**2)
+
+        with cp.cuda.Device(device.index):
+            mempool = cp.get_default_memory_pool()
+            cupy_usage = mempool.used_bytes() / 1024**2
+    except NVMLError:
+        return []
+    finally:
+        if shutdown:
+            nvmlShutdown()
+    
     if not used_memory_only:
         return (
             cuda_index,
@@ -75,24 +87,34 @@ def gpu_usage(device: torch.device, used_memory_only=False):
     else:
         return nv_used
 
-def gpu_usage_per_process(device: torch.device, used_memory_only=False) -> List:
+def gpu_usage_per_process(device: torch.device, nvml_handle = None) -> List:
     # empty the cache first
-    try:
+    if nvml_handle is None:
         nvmlInit()
         cuda_index = get_actual_cuda_index_of_device(device)
         h = nvmlDeviceGetHandleByIndex(cuda_index)
+        shutdown = True
+    else:
+        h = nvml_handle
+        shutdown = False
+
+    try:
         process_list = []
         for proc in nvmlDeviceGetComputeRunningProcesses(h):
             process_list.append((cuda_index, psutil.Process(proc.pid).name(), proc.usedGpuMemory / (1024**2)))
-        nvmlShutdown()
+        if shutdown:
+            nvmlShutdown()
     except NVMLError:
         return []
-    
+    finally:
+        if shutdown:
+            nvmlShutdown()
+
     return process_list
 
 
 def get_gpu_usage(
-    device: torch.device, used_memory_only=False, context="", csv_format=False
+    device: torch.device, used_memory_only=False, context="", csv_format=False, nvml_handle = None
 ):
     (
         cuda_index,
@@ -103,7 +125,7 @@ def get_gpu_usage(
         nv_used,
         torch_reserved,
         cupy_usage,
-    ) = gpu_usage(device=device)
+    ) = gpu_usage(device=device, nvml_handle=nvml_handle)
     usage = ""
 
     if csv_format and used_memory_only:
@@ -361,6 +383,12 @@ class GPU_Thread(threading.Thread):
         self.csv_file.flush()
         self.stopFlag = threading.Event()
 
+
+        nvmlInit()
+        cuda_index = get_actual_cuda_index_of_device(self.device)
+        self.nvml_handle = nvmlDeviceGetHandleByIndex(cuda_index)
+
+
     def __del__(self):
         self.csv_file.flush()
         self.csv_file.close()
@@ -368,12 +396,12 @@ class GPU_Thread(threading.Thread):
     def run(self):
         while not self.stopFlag.wait(1):
             header, usage = get_gpu_usage(
-                self.device, used_memory_only=False, context="", csv_format=True
+                self.device, used_memory_only=False, context="", csv_format=True, nvml_handle=self.nvml_handle
             )
             self.csv_file.write(usage)
             self.csv_file.write("\n")
             self.csv_file.flush()
-            print_gpu_usage_per_process(self.device)
+            print_gpu_usage_per_process(self.device, nvml_handle=self.nvml_handle)
 
 
 def get_tensor_at_coordinates(

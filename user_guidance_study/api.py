@@ -137,7 +137,7 @@ def get_inferers(
         )
         logger.info(f"{train_batch_size=}")
         average_sample_shape = (300, 300, 400)
-        if val_crop_size != "None":
+        if val_crop_size is not None:
             average_sample_shape = val_crop_size
 
         val_batch_size = max(

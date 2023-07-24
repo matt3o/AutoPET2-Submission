@@ -1,5 +1,7 @@
-import torch
+from __future__ import annotations
+
 import monai.transforms as mt
+import torch
 from monai.data import ArrayDataset, DataLoader, MetaTensor
 
 NETWORK_INPUT_SHAPE = (1, 128, 128, 256)

@@ -1,52 +1,47 @@
 
-import time
-import os
-import glob
-import logging
+from __future__ import annotations
 
 import argparse
+import gc
+import glob
+import logging
+import os
+import time
 
-import torch
-from monai.networks.nets.dynunet import DynUNet
-from monai.networks.nets import UNet
 import monai.transforms as mt
-
+import torch
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import Dataset
-
-from monai.inferers import SimpleInferer, SlidingWindowInferer
-import gc
-from monai.handlers.garbage_collector import GarbageCollector
-
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
+from monai.handlers.garbage_collector import GarbageCollector
+from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
-
+from monai.networks.nets import UNet
+from monai.networks.nets.dynunet import DynUNet
 from monai.transforms import (
     Activationsd,
     AsDiscreted,
+    CenterSpatialCropd,
     Compose,
+    CropForegroundd,
+    CuCIMd,
+    DeleteItemsd,
+    DivisiblePadd,
     EnsureChannelFirstd,
     LoadImaged,
     Orientationd,
-    Spacingd,
+    RandCropByPosNegLabeld,
+    RandCuCIMd,
     RandFlipd,
-    RandShiftIntensityd,
     RandRotate90d,
+    RandShiftIntensityd,
     Resized,
     ScaleIntensityRanged,
-    DivisiblePadd,
+    Spacingd,
+    ToCupyd,
     ToNumpyd,
     ToTensord,
-    CenterSpatialCropd,
-    RandCropByPosNegLabeld,
-    DeleteItemsd,
-    CuCIMd, 
-    RandCuCIMd,
-    ToCupyd,
-    CropForegroundd,
 )
-
-
 
 location = "/cvhci/data/AutoPET/AutoPET/"
 all_images = sorted(glob.glob(os.path.join(location, "imagesTr", "*.nii.gz")))

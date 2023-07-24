@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import torch
 from monai.losses import DiceLoss
 from monai.metrics import compute_dice

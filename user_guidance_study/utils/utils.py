@@ -5,8 +5,7 @@ import logging
 import os
 
 import torch
-
-from monai.data import partition_dataset, ThreadDataLoader
+from monai.data import ThreadDataLoader, partition_dataset
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
 from monai.transforms import (  # RandShiftIntensityd,; Resized,
@@ -27,6 +26,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     Spacingd,
     ToTensord,
 )
+
 from utils.transforms import (
     AddGuidanceSignalDeepEditd,
     AddRandomGuidanceDeepEditd,

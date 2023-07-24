@@ -12,21 +12,20 @@ from datetime import datetime
 from functools import wraps
 from typing import List
 
-import psutil
 import cupy as cp
 import pandas as pd
+import psutil
 import torch
+from monai.data.meta_tensor import MetaTensor
 from pynvml import (
+    NVMLError,
+    nvmlDeviceGetComputeRunningProcesses,
     nvmlDeviceGetHandleByIndex,
     nvmlDeviceGetMemoryInfo,
     nvmlDeviceGetUtilizationRates,
     nvmlInit,
-    nvmlDeviceGetComputeRunningProcesses,
     nvmlShutdown,
-    NVMLError
 )
-
-from monai.data.meta_tensor import MetaTensor
 
 logger = logging.getLogger("sw_interactive_segmentation")
 

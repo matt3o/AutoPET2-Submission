@@ -18,13 +18,13 @@ from typing import Callable, Dict, Sequence, Union
 import nibabel as nib
 import numpy as np
 import torch
-
 from monai.data import decollate_batch, list_data_collate
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
+from monai.losses import DiceLoss
 from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
-from monai.losses import DiceLoss
+
 from utils.helper import print_gpu_usage, timeit
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 

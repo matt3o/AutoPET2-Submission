@@ -1,17 +1,16 @@
 #! /usr/bin/env python
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
+from __future__ import absolute_import, annotations, division, print_function
 
-import py3nvml.py3nvml as nvml
-from datetime import datetime
-import re
+import argparse
 import os
 import pwd
-from subprocess import Popen, PIPE
-import argparse
-from time import sleep
+import re
 import sys
+from datetime import datetime
+from subprocess import PIPE, Popen
+from time import sleep
+
+import py3nvml.py3nvml as nvml
 
 parser = argparse.ArgumentParser(description='Print GPU stats')
 parser.add_argument('-l', '--loop', action='store', type=int, default=0, help='Loop period')

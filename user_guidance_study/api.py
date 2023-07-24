@@ -9,7 +9,6 @@ import cupy as cp
 import torch
 from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
-
 from monai.data import set_track_meta
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
@@ -29,6 +28,7 @@ from monai.metrics import LossMetric
 from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
+
 from utils.helper import count_parameters, run_once
 from utils.interaction import Interaction
 from utils.utils import get_click_transforms, get_loaders, get_post_transforms, get_pre_transforms

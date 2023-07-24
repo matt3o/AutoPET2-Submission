@@ -36,7 +36,7 @@ from utils.helper import (
     get_gpu_usage,
     handle_exception,
 )
-from utils.api import get_trainer, resume_network
+from api import get_trainer, resume_network
 
 # Various settings
 

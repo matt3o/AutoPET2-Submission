@@ -47,7 +47,7 @@ from monai.handlers import (
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.metrics import LossMetric
-from monai.networks.nets.dynunet import DynUNet
+
 from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
@@ -60,12 +60,7 @@ from utils.helper import (
     handle_exception,
 )
 from utils.interaction import Interaction
-from utils.utils import (
-    get_click_transforms,
-    get_loaders,
-    get_post_transforms,
-    get_pre_transforms,
-)
+from utils.api import *
 
 # Various settings
 
@@ -90,6 +85,7 @@ def oom_observer(device, alloc, device_alloc, device_free):
         logger.critical(torch.cuda.memory_summary(device))
     # snapshot right after an OOM happened
     print("saving allocated state during OOM")
+    print("Tips: \nReduce sw_batch_size if there is an OOM (maybe even roi_size)")
     snapshot = torch.cuda.memory._snapshot()
     dump(snapshot, open(f"{output_dir}/oom_snapshot.pickle", "wb"))
     # logger.critical(snapshot)
@@ -100,40 +96,7 @@ def oom_observer(device, alloc, device_alloc, device_free):
         filename=f"{output_dir}/segments.svg", snapshot=snapshot
     )
 
-
 sys.excepthook = handle_exception
-
-
-def get_network(network, labels, args):
-    if network == "dynunet":
-        network = DynUNet(
-            spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
-            out_channels=len(labels),
-            kernel_size=[3, 3, 3, 3, 3, 3],
-            strides=[1, 2, 2, 2, 2, [2, 2, 1]],
-            upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
-            norm_name="instance",
-            deep_supervision=False,
-            res_block=True,
-        )
-    elif network == "smalldynunet":
-        network = DynUNet(
-            spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
-            out_channels=len(labels),
-            kernel_size=[3, 3, 3],
-            strides=[1, 2, [2, 2, 1]],
-            upsample_kernel_size=[2, [2, 2, 1]],
-            norm_name="instance",
-            deep_supervision=False,
-            res_block=True,
-        )
-    set_track_meta(False)
-    return network
-
 
 def create_trainer(args):
     set_determinism(seed=args.seed)
@@ -153,91 +116,12 @@ def create_trainer(args):
         args, pre_transforms_train, pre_transforms_val
     )
 
-    # NETWORK - define training components
-    network = get_network(args.network, args.labels, args).to(device)
-
-    print("Number of parameters:", f"{count_parameters(network):,}")
-
-    # INFERER
-    if args.inferer == "SimpleInferer":
-        train_inferer = SimpleInferer()
-        eval_inferer = SimpleInferer()
-    elif args.inferer == "SlidingWindowInferer":
-        # train_batch_size is limited due to this bug: https://github.com/Project-MONAI/MONAI/issues/6628
-        train_batch_size = max(
-            1,
-            min(
-                reduce(
-                    lambda x, y: x * y,
-                    [
-                        round(args.train_crop_size[i] / args.sw_roi_size[i])
-                        for i in range(len(args.sw_roi_size))
-                    ],
-                ),
-                args.train_sw_batch_size,
-            ),
-        )
-        train_batch_size = args.train_sw_batch_size
-        logger.info(f"{train_batch_size=}")
-        if args.val_crop_size != "None":
-            val_batch_size = max(
-                1,
-                min(
-                    reduce(
-                        lambda x, y: x * y,
-                        [
-                            round((300, 300, 400)[i] / args.sw_roi_size[i])
-                            for i in range(len(args.sw_roi_size))
-                        ],
-                    ),
-                    args.val_sw_batch_size,
-                ),
-            )
-            logger.info(f"{val_batch_size=}")
-        # Reduce sw_batch_size if there is an OOM (maybe even roi_size)
-        train_inferer = SlidingWindowInferer(
-            roi_size=args.sw_roi_size,
-            sw_batch_size=train_batch_size,
-            mode="gaussian",
-            cache_roi_weight_map=True,
-        )
-        eval_inferer = SlidingWindowInferer(
-            roi_size=args.sw_roi_size,
-            sw_batch_size=val_batch_size,
-            mode="gaussian",
-            cache_roi_weight_map=True,
-        )
-
-    # OPTIMIZER
-    if args.optimizer == "Novograd":
-        optimizer = Novograd(network.parameters(), args.learning_rate)
-    elif args.optimizer == "Adam":  # default
-        optimizer = torch.optim.Adam(network.parameters(), args.learning_rate)
+    network = get_network(args.network, args.labels).to(device)
+    inferer = get_inferer(args.inferer)
+    optimizer = get_optimizer(args.optimizer, args.learning_rate)
 
     # SCHEDULER
-    if args.scheduler == "MultiStepLR":
-        steps = 4
-        steps_per_epoch = round(args.epochs / steps)
-        if steps_per_epoch < 1:
-            logger.error("Chosen number of epochs {args.epochs}/{steps} < 0")
-            milestones = range(0, args.epochs)
-        else:
-            milestones = [
-                num
-                for num in range(0, args.epochs)
-                if num % round(steps_per_epoch) == 0
-            ][1:]
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            optimizer, milestones=milestones, gamma=0.333
-        )
-    elif args.scheduler == "PolynomialLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(
-            optimizer, total_iters=args.epochs, power=2
-        )
-    elif args.scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=args.epochs, eta_min=1e-6
-        )
+    lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
 
     if args.sw_roi_size[0] < 128:
         train_trigger_event = (
@@ -261,7 +145,6 @@ def create_trainer(args):
             if args.gpu_size == "large"
             else Events.ITERATION_COMPLETED(every=1)
         )
-
     # define event-handlers for engine
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
@@ -271,8 +154,7 @@ def create_trainer(args):
         GarbageCollector(log_level=10),
     ]
 
-    # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
+    loss_function = get_loss_function()
 
     loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
     metric_fn = LossMetric(

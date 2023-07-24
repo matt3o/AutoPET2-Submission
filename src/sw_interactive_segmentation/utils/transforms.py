@@ -32,18 +32,18 @@ from monai.transforms import (
 from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
-from utils.distance_transform import (
+from sw_interactive_segmentation.utils.distance_transform import (
     get_choice_from_distance_transform_cp,
     get_choice_from_tensor,
     get_distance_transform,
 )
-from utils.helper import (
+from sw_interactive_segmentation.utils.helper import (
     describe_batch_data,
     get_global_coordinates_from_patch_coordinates,
     get_tensor_at_coordinates,
     timeit,
 )
-from utils.logger import get_logger, setup_loggers
+from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
 
 np.seterr(all="raise")
 logger = None

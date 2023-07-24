@@ -27,7 +27,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     ToTensord,
 )
 
-from utils.transforms import (
+from sw_interactive_segmentation.utils.transforms import (
     AddGuidanceSignalDeepEditd,
     AddRandomGuidanceDeepEditd,
     CheckTheAmountOfInformationLossByCropd,

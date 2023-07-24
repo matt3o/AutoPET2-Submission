@@ -30,9 +30,9 @@ from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
 
-from utils.helper import count_parameters, run_once
-from utils.interaction import Interaction
-from utils.utils import (
+from sw_interactive_segmentation.utils.helper import count_parameters, run_once
+from sw_interactive_segmentation.utils.interaction import Interaction
+from sw_interactive_segmentation.utils.utils import (
     get_click_transforms,
     get_loaders,
     get_post_transforms,

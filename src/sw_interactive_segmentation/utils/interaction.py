@@ -25,8 +25,8 @@ from monai.losses import DiceLoss
 from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
 
-from utils.helper import print_gpu_usage, timeit
-from utils.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_interactive_segmentation.utils.helper import print_gpu_usage, timeit
+from sw_interactive_segmentation.utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
 logger = logging.getLogger("sw_interactive_segmentation")
 np.seterr(all="raise")

@@ -7,7 +7,7 @@ logger = None
 
 def setup_loggers(loglevel=logging.INFO, log_file_folder=None):
     global logger
-    logger = logging.getLogger("interactive_segmentation")
+    logger = logging.getLogger("sw_interactive_segmentation")
     if logger.hasHandlers():
         logger.handlers.clear()
     logger.propagate = False

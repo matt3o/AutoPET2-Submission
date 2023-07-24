@@ -98,224 +98,6 @@ def oom_observer(device, alloc, device_alloc, device_free):
 
 sys.excepthook = handle_exception
 
-def create_trainer(args):
-    set_determinism(seed=args.seed)
-    with cp.cuda.Device(args.gpu):
-        mempool = cp.get_default_memory_pool()
-        mempool.set_limit(size=14 * 1024**3)
-        cp.random.seed(seed=args.seed)
-
-    device = torch.device(f"cuda:{args.gpu}")
-
-    pre_transforms_train, pre_transforms_val = get_pre_transforms(
-        args.labels, device, args
-    )
-    click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device)
-    train_loader, val_loader = get_loaders(
-        args, pre_transforms_train, pre_transforms_val
-    )
-
-    network = get_network(args.network, args.labels).to(device)
-    inferer = get_inferer(args.inferer)
-    optimizer = get_optimizer(args.optimizer, args.learning_rate)
-
-    # SCHEDULER
-    lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-
-    if args.sw_roi_size[0] < 128:
-        train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=10)
-            if args.gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=1)
-        )
-        val_trigger_event = (
-            Events.ITERATION_COMPLETED(every=2)
-            if args.gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=1)
-        )
-    else:
-        train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=10)
-            if args.gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=5)
-        )
-        val_trigger_event = (
-            Events.ITERATION_COMPLETED(every=2)
-            if args.gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=1)
-        )
-    # define event-handlers for engine
-    val_handlers = [
-        StatsHandler(output_transform=lambda x: None),
-        # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=10, trigger_event=val_trigger_event),
-        # End of epoch GarbageCollection
-        GarbageCollector(log_level=10),
-    ]
-
-    loss_function = get_loss_function()
-
-    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
-    metric_fn = LossMetric(
-        loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
-    )
-    ignite_metric = IgniteMetric(
-        metric_fn=metric_fn,
-        output_transform=from_engine(["pred", "label"]),
-        save_details=True,
-    )
-
-    all_val_metrics = OrderedDict()
-    all_val_metrics["val_mean_dice"] = MeanDice(
-        output_transform=from_engine(["pred", "label"]), include_background=False
-    )
-    all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
-
-    # Disabled since it led to weird artefacts in the Tensorboard diagram
-    # for key_label in args.labels:
-    #     if key_label != "background":
-    #         all_val_metrics[key_label + "_dice"] = MeanDice(
-    #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
-    #         )
-
-    evaluator = SupervisedEvaluator(
-        device=device,
-        val_data_loader=val_loader,
-        network=network,
-        iteration_update=Interaction(
-            deepgrow_probability=args.deepgrow_probability_val,
-            transforms=click_transforms,
-            click_probability_key="probability",
-            train=False,
-            label_names=args.labels,
-            max_interactions=args.max_val_interactions,
-            args=args,
-            loss_function=loss_function,
-            post_transform=post_transform,
-            click_generation_strategy=args.val_click_generation,
-            stopping_criterion=args.val_click_generation_stopping_criterion,
-        ),
-        inferer=eval_inferer,
-        postprocessing=post_transform,
-        amp=args.amp,
-        key_val_metric=all_val_metrics,
-        val_handlers=val_handlers,
-    )
-
-    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
-    metric_fn = LossMetric(
-        loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
-    )
-    ignite_metric = IgniteMetric(
-        metric_fn=metric_fn,
-        output_transform=from_engine(["pred", "label"]),
-        save_details=True,
-    )
-
-    all_train_metrics = OrderedDict()
-    all_train_metrics["train_dice"] = MeanDice(
-        output_transform=from_engine(["pred", "label"]), include_background=False
-    )
-    all_train_metrics["train_dice_ce_loss"] = ignite_metric
-
-    train_handlers = [
-        LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
-        ValidationHandler(
-            validator=evaluator,
-            interval=args.val_freq,
-            epoch_level=(not args.eval_only),
-        ),
-        StatsHandler(
-            tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
-        ),
-        # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=10, trigger_event=train_trigger_event),
-        # End of epoch GarbageCollection
-        GarbageCollector(log_level=10),
-    ]
-
-    trainer = SupervisedTrainer(
-        device=device,
-        max_epochs=args.epochs,
-        train_data_loader=train_loader,
-        network=network,
-        iteration_update=Interaction(
-            deepgrow_probability=args.deepgrow_probability_train,
-            transforms=click_transforms,
-            click_probability_key="probability",
-            train=True,
-            label_names=args.labels,
-            max_interactions=args.max_train_interactions,
-            args=args,
-            loss_function=loss_function,
-            post_transform=post_transform,
-            click_generation_strategy=args.train_click_generation,
-            stopping_criterion=args.train_click_generation_stopping_criterion,
-        ),
-        optimizer=optimizer,
-        loss_function=loss_function,
-        inferer=train_inferer,
-        postprocessing=post_transform,
-        amp=args.amp,
-        key_train_metric=all_train_metrics,
-        train_handlers=train_handlers,
-    )
-
-    save_dict = {
-        "trainer": trainer,
-        "net": network,
-        "opt": optimizer,
-        "lr": lr_scheduler,
-    }
-    CheckpointSaver(
-        save_dir=args.output,
-        save_dict=save_dict,
-        save_interval=args.save_interval,
-        save_final=True,
-        final_filename="checkpoint.pt",
-        n_saved=2,
-    ).attach(trainer)
-    CheckpointSaver(
-        save_dir=args.output,
-        save_dict=save_dict,
-        save_key_metric=True,
-        save_final=True,
-        save_interval=args.save_interval,
-        final_filename="pretrained_deepedit_" + args.network + ".pt",
-    ).attach(evaluator)
-
-    # handler = None
-    if args.resume_from != "None":
-        logger.info("{}:: Loading Network...".format(args.gpu))
-        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
-        checkpoint = torch.load(args.resume_from)
-
-        for key in save_dict:
-            # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
-            assert (
-                key in checkpoint
-            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys}"
-
-        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        handler = CheckpointLoader(
-            load_path=args.resume_from, load_dict=save_dict, map_location=map_location
-        )
-        handler(trainer)
-    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
-
-    tb_logger = init_tensorboard_logger(
-        trainer,
-        evaluator,
-        optimizer,
-        all_train_metrics,
-        all_val_metrics,
-        network=network,
-        output_dir=args.output,
-    )
-
-    return trainer, evaluator, tb_logger
-
 
 def run(args):
     for arg in vars(args):
@@ -328,7 +110,20 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        trainer, evaluator, tb_logger = create_trainer(args)
+        trainer, evaluator = get_trainer(args)
+
+        tb_logger = init_tensorboard_logger(
+                trainer,
+                evaluator,
+                optimizer,
+                all_train_metrics,
+                all_val_metrics,
+                network=network,
+                output_dir=args.output,
+            )
+        if args.resume_from != "None":
+            resume_network(resume_from = args.resume_from, trainer=trainer, gpu=args.gpu)
+
         gpu_thread.start()
         terminator = TerminationHandler(args, tb_logger, wp, gpu_thread)
 

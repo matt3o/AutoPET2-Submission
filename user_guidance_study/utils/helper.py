@@ -436,3 +436,11 @@ def get_global_coordinates_from_patch_coordinates(
     for _ in range(1, len(current_coordinates)):
         current_coordinates[_] += patch_coordinates[_, 0]
     return current_coordinates
+
+def run_once(f):
+    def wrapper(*args, **kwargs):
+        if not wrapper.has_run:
+            wrapper.has_run = True
+            return f(*args, **kwargs)
+    wrapper.has_run = False
+    return wrapper

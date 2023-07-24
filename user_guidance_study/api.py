@@ -1,9 +1,21 @@
 import logging
+from typing import List
 
 from monai.networks.nets.dynunet import DynUNet
 from monai.data import set_track_meta
 
-logger = logging.getLogger("interactive_segmentation")
+from monai.handlers import (
+    CheckpointLoader,
+    CheckpointSaver,
+    GarbageCollector,
+    IgniteMetric,
+    LrScheduleHandler,
+    MeanDice,
+    StatsHandler,
+    ValidationHandler,
+    from_engine,
+)
+
 
 from utils.utils import (
     get_click_transforms,
@@ -12,7 +24,9 @@ from utils.utils import (
     get_pre_transforms,
 )
 
-from utils.helper import count_parameters
+from utils.helper import count_parameters, run_once
+
+logger = logging.getLogger("interactive_segmentation")
 
 __all__ = [
     'get_optimizer',
@@ -22,7 +36,14 @@ __all__ = [
     'get_loaders',
     'get_loss_function',
     'get_network',
-    'get_inferers'
+    'get_inferers',
+    'get_scheduler',
+    'get_train_handlers',
+    'get_val_handlers',
+    'get_key_val_metrics',
+    'get_key_train_metrics'
+    'get_trainer',
+    'get_evaluator',
 ]
 
 
@@ -159,3 +180,248 @@ def get_scheduler(optimizer, scheduler_str: str = "MultiStepLR", epochs_to_run):
             optimizer, T_max=epochs_to_run, eta_min=1e-6
         )
     return lr_scheduler
+
+def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
+    if sw_roi_size[0] < 128:
+        val_trigger_event = (
+            Events.ITERATION_COMPLETED(every=2)
+            if gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=1)
+        )
+    else:
+        val_trigger_event = (
+            Events.ITERATION_COMPLETED(every=2)
+            if gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=1)
+        )
+
+    # define event-handlers for engine
+    val_handlers = [
+        StatsHandler(output_transform=lambda x: None),
+        # End of epoch GarbageCollection
+        GarbageCollector(log_level=10),
+    ]
+    if inferer == "SlidingWindowInferer":
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        iteration_gc = GarbageCollector(log_level=10, trigger_event=val_trigger_event)
+        val_handlers.append(iteration_gc)
+
+    return val_handlers
+
+def get_train_handlers(lr_scheduler, evaluator, val_freq, eval_only: bool, sw_roi_size: List, inferer: str, gpu_size: str):
+    if sw_roi_size[0] < 128:
+        train_trigger_event = (
+            Events.ITERATION_COMPLETED(every=10)
+            if gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=1)
+        )
+    else:
+        train_trigger_event = (
+            Events.ITERATION_COMPLETED(every=10)
+            if gpu_size == "large"
+            else Events.ITERATION_COMPLETED(every=5)
+        )    
+    
+    train_handlers = [
+        LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
+        ValidationHandler(
+            validator=evaluator,
+            interval=val_freq,
+            epoch_level=(not eval_only),
+        ),
+        StatsHandler(
+            tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
+        ),
+        # End of epoch GarbageCollection
+        GarbageCollector(log_level=10),
+    ]
+    if inferer == "SlidingWindowInferer":
+        # https://github.com/Project-MONAI/MONAI/issues/3423
+        iteration_gc = GarbageCollector(log_level=10, trigger_event=train_trigger_event)
+        train_handlers.append(iteration_gc)
+
+    return train_handlers
+
+def get_key_val_metrics():
+    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
+    metric_fn = LossMetric(
+        loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
+    )
+    ignite_metric = IgniteMetric(
+        metric_fn=metric_fn,
+        output_transform=from_engine(["pred", "label"]),
+        save_details=False,
+    )
+
+    all_val_metrics = OrderedDict()
+    all_val_metrics["val_mean_dice"] = MeanDice(
+        output_transform=from_engine(["pred", "label"]), include_background=False
+    )
+    all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
+
+    # Disabled since it led to weird artefacts in the Tensorboard diagram
+    # for key_label in args.labels:
+    #     if key_label != "background":
+    #         all_val_metrics[key_label + "_dice"] = MeanDice(
+    #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
+    #         )
+
+    return all_val_metrics
+
+
+def get_key_train_metrics():
+    all_train_metrics = get_key_val_metrics()
+    all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
+    all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_mean_dice_ce_loss")
+    return all_train_metrics
+
+def get_evaluator(args,network, inferer, device,val_loader,loss_function, click_transforms, post_transform):
+    init()
+    
+    # if network is None:
+    #     network = get_network(args.network, args.labels).to(device)
+    # if inferer is None:
+    #     inferer = get_inferer(args.inferer)
+
+    # val_handlers = get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size)
+    
+    # if loss_function is None:
+    #     loss_function = get_loss_function()
+
+    # if val_loader is None:
+    #     pre_transforms_train, pre_transforms_val = get_pre_transforms(
+    #     args.labels, device, args
+    #     )
+    #     _, val_loader = get_loaders(
+    #     args, pre_transforms_train, pre_transforms_val
+    #     )
+
+    evaluator = SupervisedEvaluator(
+        device=device,
+        val_data_loader=val_loader,
+        network=network,
+        iteration_update=Interaction(
+            deepgrow_probability=args.deepgrow_probability_val,
+            transforms=click_transforms,
+            train=False,
+            label_names=args.labels,
+            max_interactions=args.max_val_interactions,
+            args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
+            click_generation_strategy=args.val_click_generation,
+            stopping_criterion=args.val_click_generation_stopping_criterion,
+        ),
+        inferer=inferer,
+        postprocessing=post_transform,
+        amp=args.amp,
+        key_val_metric=get_key_val_metrics(),
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+    )
+    return evaluator
+
+
+def get_trainer(args):
+    init()
+    device = torch.device(f"cuda:{args.gpu}")
+
+    pre_transforms_train, pre_transforms_val = get_pre_transforms(
+        args.labels, device, args
+    )
+    click_transforms = get_click_transforms(device, args)
+    post_transform = get_post_transforms(args.labels, device)
+    train_loader, val_loader = get_loaders(
+        args, pre_transforms_train, pre_transforms_val
+    )
+
+    network = get_network(args.network, args.labels).to(device)
+    inferer = get_inferer(args.inferer)
+    loss_function = get_loss_function()
+    optimizer = get_optimizer(args.optimizer, args.learning_rate)
+    lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
+
+    evaluator = get_evaluator(args,network=network, inferer=inferer, device=device,val_loader=val_loader,loss_function=loss_function, click_transforms=click_transforms, post_transform=post_transform)
+
+    train_handlers = get_train_handlers(lr_scheduler, evaluator, args.val_freq, args.eval_only, args.sw_roi_size, args.inferer, args.gpu_size)
+    trainer = SupervisedTrainer(
+        device=device,
+        max_epochs=args.epochs,
+        train_data_loader=train_loader,
+        network=network,
+        iteration_update=Interaction(
+            deepgrow_probability=args.deepgrow_probability_train,
+            transforms=click_transforms,
+            train=True,
+            label_names=args.labels,
+            max_interactions=args.max_train_interactions,
+            args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
+            click_generation_strategy=args.train_click_generation,
+            stopping_criterion=args.train_click_generation_stopping_criterion,
+        ),
+        optimizer=optimizer,
+        loss_function=loss_function,
+        inferer=train_inferer,
+        postprocessing=post_transform,
+        amp=args.amp,
+        key_train_metric=get_key_train_metrics(),
+        train_handlers=train_handlers,
+    )
+
+    save_dict = get_save_dict()
+    CheckpointSaver(
+        save_dir=args.output,
+        save_dict=save_dict,
+        save_interval=args.save_interval,
+        save_final=True,
+        final_filename="checkpoint.pt",
+        n_saved=2,
+    ).attach(trainer)
+    CheckpointSaver(
+        save_dir=args.output,
+        save_dict=save_dict,
+        save_key_metric=True,
+        save_final=True,
+        save_interval=args.save_interval,
+        final_filename="pretrained_deepedit_" + args.network + ".pt",
+    ).attach(evaluator)
+    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
+
+    return trainer, evaluator
+
+def resume_network(resume_from: str = None, trainer: SupervisedTrainer, gpu):
+    if resume_from != "None":
+        logger.info("{}:: Loading Network...".format(gpu))
+        map_location = {f"cuda:{gpu}": "cuda:{}".format(gpu)}
+        checkpoint = torch.load(resume_from)
+
+        save_dict = get_save_dict()
+        for key in save_dict:
+            # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
+            assert (
+                key in checkpoint
+            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys}"
+
+        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+        handler = CheckpointLoader(
+            load_path=resume_from, load_dict=save_dict, map_location=map_location
+        )
+        handler(trainer)
+
+def get_save_dict():
+    save_dict = {
+        "trainer": trainer,
+        "net": network,
+        "opt": optimizer,
+        "lr": lr_scheduler,
+    }
+    return save_dict
+
+@run_once
+def init():
+    set_determinism(seed=args.seed)
+    with cp.cuda.Device(args.gpu):
+        mempool = cp.get_default_memory_pool()
+        mempool.set_limit(size=14 * 1024**3)
+        cp.random.seed(seed=args.seed)

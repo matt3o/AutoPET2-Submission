@@ -1,9 +1,16 @@
+from __future__ import annotations
+
 import logging
-from typing import List
+from collections import OrderedDict
+from functools import reduce
+from typing import List, Iterable
 
-from monai.networks.nets.dynunet import DynUNet
+import cupy as cp
+import torch
+from ignite.handlers import TerminateOnNan
+
 from monai.data import set_track_meta
-
+from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
     CheckpointLoader,
     CheckpointSaver,
@@ -15,8 +22,15 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-
-
+from ignite.engine import Events
+from monai.inferers import SimpleInferer, SlidingWindowInferer
+from monai.losses import DiceCELoss
+from monai.metrics import LossMetric
+from monai.networks.nets.dynunet import DynUNet
+from monai.optimizers.novograd import Novograd
+from monai.utils import set_determinism
+from utils.helper import count_parameters, run_once
+from utils.interaction import Interaction
 from utils.utils import (
     get_click_transforms,
     get_loaders,
@@ -24,30 +38,28 @@ from utils.utils import (
     get_pre_transforms,
 )
 
-from utils.helper import count_parameters, run_once
-
 logger = logging.getLogger("interactive_segmentation")
 
 __all__ = [
-    'get_optimizer',
-    'get_click_transforms',
-    'get_click_transforms',
-    'get_post_transforms',
-    'get_loaders',
-    'get_loss_function',
-    'get_network',
-    'get_inferers',
-    'get_scheduler',
-    'get_train_handlers',
-    'get_val_handlers',
-    'get_key_val_metrics',
-    'get_key_train_metrics'
-    'get_trainer',
-    'get_evaluator',
+    "get_optimizer",
+    "get_click_transforms",
+    "get_click_transforms",
+    "get_post_transforms",
+    "get_loaders",
+    "get_loss_function",
+    "get_network",
+    "get_inferers",
+    "get_scheduler",
+    "get_train_handlers",
+    "get_val_handlers",
+    "get_key_val_metrics",
+    "get_key_train_metrics",
+    "get_trainer",
+    "get_evaluator",
 ]
 
 
-def get_optimizer(optimizer: str, lr: float):
+def get_optimizer(optimizer: str, lr: float, network):
     # OPTIMIZER
     if optimizer == "Novograd":
         optimizer = Novograd(network.parameters(), lr)
@@ -55,13 +67,14 @@ def get_optimizer(optimizer: str, lr: float):
         optimizer = torch.optim.Adam(network.parameters(), lr)
     return optimizer
 
+
 def get_loss_function():
     # squared_pred enables much faster convergence, possibly even better results in the long run
     loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
     return loss_function
 
 
-def get_network(network_str: str = "dynunet", labels: Iterable):
+def get_network(network_str: str, labels: Iterable):
     if network_str == "dynunet":
         network = DynUNet(
             spatial_dims=3,
@@ -95,12 +108,14 @@ def get_network(network_str: str = "dynunet", labels: Iterable):
     return network
 
 
-def get_inferers(inferer: str = "SlidingWindowInferer", 
-                sw_roi_size, 
-                train_crop_size, 
-                val_crop_size, 
-                train_sw_batch_size, 
-                val_sw_batch_size):
+def get_inferers(
+    inferer: str,
+    sw_roi_size,
+    train_crop_size,
+    val_crop_size,
+    train_sw_batch_size,
+    val_sw_batch_size,
+):
     if inferer == "SimpleInferer":
         train_inferer = SimpleInferer()
         eval_inferer = SimpleInferer()
@@ -124,7 +139,7 @@ def get_inferers(inferer: str = "SlidingWindowInferer",
         average_sample_shape = (300, 300, 400)
         if val_crop_size != "None":
             average_sample_shape = val_crop_size
-            
+
         val_batch_size = max(
             1,
             min(
@@ -140,7 +155,6 @@ def get_inferers(inferer: str = "SlidingWindowInferer",
         )
         logger.info(f"{val_batch_size=}")
 
-        
         train_inferer = SlidingWindowInferer(
             roi_size=sw_roi_size,
             sw_batch_size=train_batch_size,
@@ -155,7 +169,8 @@ def get_inferers(inferer: str = "SlidingWindowInferer",
         )
     return train_inferer, eval_inferer
 
-def get_scheduler(optimizer, scheduler_str: str = "MultiStepLR", epochs_to_run):
+
+def get_scheduler(optimizer, scheduler_str: str, epochs_to_run: int):
     if scheduler_str == "MultiStepLR":
         steps = 4
         steps_per_epoch = round(epochs_to_run / steps)
@@ -180,6 +195,7 @@ def get_scheduler(optimizer, scheduler_str: str = "MultiStepLR", epochs_to_run):
             optimizer, T_max=epochs_to_run, eta_min=1e-6
         )
     return lr_scheduler
+
 
 def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
     if sw_roi_size[0] < 128:
@@ -208,7 +224,16 @@ def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
 
     return val_handlers
 
-def get_train_handlers(lr_scheduler, evaluator, val_freq, eval_only: bool, sw_roi_size: List, inferer: str, gpu_size: str):
+
+def get_train_handlers(
+    lr_scheduler,
+    evaluator,
+    val_freq,
+    eval_only: bool,
+    sw_roi_size: List,
+    inferer: str,
+    gpu_size: str,
+):
     if sw_roi_size[0] < 128:
         train_trigger_event = (
             Events.ITERATION_COMPLETED(every=10)
@@ -220,8 +245,8 @@ def get_train_handlers(lr_scheduler, evaluator, val_freq, eval_only: bool, sw_ro
             Events.ITERATION_COMPLETED(every=10)
             if gpu_size == "large"
             else Events.ITERATION_COMPLETED(every=5)
-        )    
-    
+        )
+
     train_handlers = [
         LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True),
         ValidationHandler(
@@ -241,6 +266,7 @@ def get_train_handlers(lr_scheduler, evaluator, val_freq, eval_only: bool, sw_ro
         train_handlers.append(iteration_gc)
 
     return train_handlers
+
 
 def get_key_val_metrics():
     loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
@@ -272,19 +298,32 @@ def get_key_val_metrics():
 def get_key_train_metrics():
     all_train_metrics = get_key_val_metrics()
     all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
-    all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_mean_dice_ce_loss")
+    all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop(
+        "val_mean_dice_ce_loss"
+    )
     return all_train_metrics
 
-def get_evaluator(args,network, inferer, device,val_loader,loss_function, click_transforms, post_transform):
-    init()
-    
+
+def get_evaluator(
+    args,
+    network,
+    inferer,
+    device,
+    val_loader,
+    loss_function,
+    click_transforms,
+    post_transform,
+    key_val_metric,
+) -> SupervisedEvaluator:
+    init(args)
+
     # if network is None:
     #     network = get_network(args.network, args.labels).to(device)
     # if inferer is None:
     #     inferer = get_inferer(args.inferer)
 
     # val_handlers = get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size)
-    
+
     # if loss_function is None:
     #     loss_function = get_loss_function()
 
@@ -315,14 +354,16 @@ def get_evaluator(args,network, inferer, device,val_loader,loss_function, click_
         inferer=inferer,
         postprocessing=post_transform,
         amp=args.amp,
-        key_val_metric=get_key_val_metrics(),
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+        key_val_metric=key_val_metric,
+        val_handlers=get_val_handlers(
+            sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size
+        ),
     )
     return evaluator
 
 
-def get_trainer(args):
-    init()
+def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
+    init(args)
     device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_train, pre_transforms_val = get_pre_transforms(
@@ -335,14 +376,41 @@ def get_trainer(args):
     )
 
     network = get_network(args.network, args.labels).to(device)
-    inferer = get_inferer(args.inferer)
+    train_inferer, eval_inferer = get_inferers(
+        args.inferer,
+        args.sw_roi_size,
+        args.train_crop_size,
+        args.val_crop_size,
+        args.train_sw_batch_size,
+        args.val_sw_batch_size,
+    )
     loss_function = get_loss_function()
-    optimizer = get_optimizer(args.optimizer, args.learning_rate)
+    optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
+    train_metrics = get_key_train_metrics()
+    val_metrics = get_key_val_metrics()
 
-    evaluator = get_evaluator(args,network=network, inferer=inferer, device=device,val_loader=val_loader,loss_function=loss_function, click_transforms=click_transforms, post_transform=post_transform)
+    evaluator = get_evaluator(
+        args,
+        network=network,
+        inferer=eval_inferer,
+        device=device,
+        val_loader=val_loader,
+        loss_function=loss_function,
+        click_transforms=click_transforms,
+        post_transform=post_transform,
+        key_val_metric=val_metrics,
+    )
 
-    train_handlers = get_train_handlers(lr_scheduler, evaluator, args.val_freq, args.eval_only, args.sw_roi_size, args.inferer, args.gpu_size)
+    train_handlers = get_train_handlers(
+        lr_scheduler,
+        evaluator,
+        args.val_freq,
+        args.eval_only,
+        args.sw_roi_size,
+        args.inferer,
+        args.gpu_size,
+    )
     trainer = SupervisedTrainer(
         device=device,
         max_epochs=args.epochs,
@@ -365,11 +433,11 @@ def get_trainer(args):
         inferer=train_inferer,
         postprocessing=post_transform,
         amp=args.amp,
-        key_train_metric=get_key_train_metrics(),
+        key_train_metric=train_metrics,
         train_handlers=train_handlers,
     )
 
-    save_dict = get_save_dict()
+    save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
     CheckpointSaver(
         save_dir=args.output,
         save_dict=save_dict,
@@ -388,15 +456,11 @@ def get_trainer(args):
     ).attach(evaluator)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
-    return trainer, evaluator
+    if args.resume_from != "None":
+        logger.info("{}:: Loading Network...".format(args.gpu))
+        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
+        checkpoint = torch.load(args.resume_from)
 
-def resume_network(resume_from: str = None, trainer: SupervisedTrainer, gpu):
-    if resume_from != "None":
-        logger.info("{}:: Loading Network...".format(gpu))
-        map_location = {f"cuda:{gpu}": "cuda:{}".format(gpu)}
-        checkpoint = torch.load(resume_from)
-
-        save_dict = get_save_dict()
         for key in save_dict:
             # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
             assert (
@@ -405,11 +469,14 @@ def resume_network(resume_from: str = None, trainer: SupervisedTrainer, gpu):
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
         handler = CheckpointLoader(
-            load_path=resume_from, load_dict=save_dict, map_location=map_location
+            load_path=args.resume_from, load_dict=save_dict, map_location=map_location
         )
         handler(trainer)
 
-def get_save_dict():
+    return trainer, evaluator, train_metrics, val_metrics
+
+
+def get_save_dict(trainer, network, optimizer, lr_scheduler):
     save_dict = {
         "trainer": trainer,
         "net": network,
@@ -418,8 +485,9 @@ def get_save_dict():
     }
     return save_dict
 
+
 @run_once
-def init():
+def init(args):
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):
         mempool = cp.get_default_memory_pool()

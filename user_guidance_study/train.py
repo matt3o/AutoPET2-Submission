@@ -19,48 +19,24 @@ import pathlib
 import resource
 import sys
 import time
-from collections import OrderedDict
-from functools import reduce
 from parser import parse_args
 from pickle import dump
 
-import cupy as cp
 import pandas as pd
 import torch
 from ignite.engine import Events
-from ignite.handlers import TerminateOnNan
 
-from monai.data import set_track_meta
-from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.engines.utils import IterationEvents
-from monai.handlers import (
-    CheckpointLoader,
-    CheckpointSaver,
-    GarbageCollector,
-    IgniteMetric,
-    LrScheduleHandler,
-    MeanDice,
-    StatsHandler,
-    ValidationHandler,
-    from_engine,
-)
-from monai.inferers import SimpleInferer, SlidingWindowInferer
-from monai.losses import DiceCELoss
-from monai.metrics import LossMetric
 
-from monai.optimizers.novograd import Novograd
-from monai.utils import set_determinism
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from tensorboard_logger import init_tensorboard_logger
 from utils.helper import (
     GPU_Thread,
     TerminationHandler,
-    count_parameters,
     get_gpu_usage,
     handle_exception,
 )
-from utils.interaction import Interaction
-from utils.api import *
+from utils.api import get_trainer, resume_network
 
 # Various settings
 
@@ -96,6 +72,7 @@ def oom_observer(device, alloc, device_alloc, device_free):
         filename=f"{output_dir}/segments.svg", snapshot=snapshot
     )
 
+
 sys.excepthook = handle_exception
 
 
@@ -110,19 +87,19 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        trainer, evaluator = get_trainer(args)
+        trainer, evaluator, all_train_metrics, all_val_metrics = get_trainer(args)
 
         tb_logger = init_tensorboard_logger(
-                trainer,
-                evaluator,
-                optimizer,
-                all_train_metrics,
-                all_val_metrics,
-                network=network,
-                output_dir=args.output,
-            )
+            trainer,
+            evaluator,
+            trainer.optimizer,
+            all_train_metrics,
+            all_val_metrics,
+            network=trainer.network,
+            output_dir=args.output,
+        )
         if args.resume_from != "None":
-            resume_network(resume_from = args.resume_from, trainer=trainer, gpu=args.gpu)
+            resume_network(resume_from=args.resume_from, trainer=trainer, gpu=args.gpu)
 
         gpu_thread.start()
         terminator = TerminationHandler(args, tb_logger, wp, gpu_thread)

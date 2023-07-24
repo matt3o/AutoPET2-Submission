@@ -26,54 +26,15 @@ import pandas as pd
 import torch
 from ignite.engine import Events
 
+from api import get_trainer, oom_observer
 from monai.engines.utils import IterationEvents
-
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from tensorboard_logger import init_tensorboard_logger
-from utils.helper import (
-    GPU_Thread,
-    TerminationHandler,
-    get_gpu_usage,
-    handle_exception,
-)
-from api import get_trainer
+from utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception
 
-# Various settings
+# Various settings #
 
 logger = None
-output_dir = None
-
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-
-tmpdir = "/local/work/mhadlich/tmp"
-if os.environ.get("SLURM_JOB_ID") is not None:
-    os.environ["TMPDIR"] = tmpdir
-    if not os.path.exists(tmpdir):
-        pathlib.Path(tmpdir).mkdir(parents=True)
-
-rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
-
-
-def oom_observer(device, alloc, device_alloc, device_free):
-    if device is not None and logger is not None:
-        logger.critical(torch.cuda.memory_summary(device))
-    # snapshot right after an OOM happened
-    print("saving allocated state during OOM")
-    print("Tips: \nReduce sw_batch_size if there is an OOM (maybe even roi_size)")
-    snapshot = torch.cuda.memory._snapshot()
-    dump(snapshot, open(f"{output_dir}/oom_snapshot.pickle", "wb"))
-    # logger.critical(snapshot)
-    torch.cuda.memory._save_memory_usage(
-        filename=f"{output_dir}/memory.svg", snapshot=snapshot
-    )
-    torch.cuda.memory._save_segment_usage(
-        filename=f"{output_dir}/segments.svg", snapshot=snapshot
-    )
-
-
-sys.excepthook = handle_exception
 
 
 def run(args):
@@ -188,16 +149,26 @@ def run(args):
 
 def main():
     global logger
-    global output_dir
+
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    tmpdir = "/local/work/mhadlich/tmp"
+    if os.environ.get("SLURM_JOB_ID") is not None:
+        os.environ["TMPDIR"] = tmpdir
+        if not os.path.exists(tmpdir):
+            pathlib.Path(tmpdir).mkdir(parents=True)
+
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
+
+    sys.excepthook = handle_exception
 
     torch.set_num_threads(
         int(os.cpu_count() / 3)
     )  # Limit number of threads to 1/3 of resources
 
     args, logger = parse_args()
-
-    # for OOM debugging
-    output_dir = args.output
 
     run(args)
 

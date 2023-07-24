@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 from functools import reduce
-from typing import List, Iterable
+from typing import Iterable, List
 
 import cupy as cp
 import torch
+from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
 
 from monai.data import set_track_meta
@@ -22,7 +23,6 @@ from monai.handlers import (
     ValidationHandler,
     from_engine,
 )
-from ignite.engine import Events
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
 from monai.metrics import LossMetric
@@ -31,14 +31,10 @@ from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
 from utils.helper import count_parameters, run_once
 from utils.interaction import Interaction
-from utils.utils import (
-    get_click_transforms,
-    get_loaders,
-    get_post_transforms,
-    get_pre_transforms,
-)
+from utils.utils import get_click_transforms, get_loaders, get_post_transforms, get_pre_transforms
 
 logger = logging.getLogger("interactive_segmentation")
+output_dir = None
 
 __all__ = [
     "get_optimizer",
@@ -102,7 +98,7 @@ def get_network(network_str: str, labels: Iterable):
             res_block=True,
         )
     set_track_meta(False)
-    logger.info(f"Selected network {network_str}")
+    logger.info(f"Selected network {network_str.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
 
     return network
@@ -488,8 +484,29 @@ def get_save_dict(trainer, network, optimizer, lr_scheduler):
 
 @run_once
 def init(args):
+    global output_dir
+    # for OOM debugging
+    output_dir = args.output
+
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):
         mempool = cp.get_default_memory_pool()
         mempool.set_limit(size=14 * 1024**3)
         cp.random.seed(seed=args.seed)
+
+
+def oom_observer(device, alloc, device_alloc, device_free):
+    if device is not None and logger is not None:
+        logger.critical(torch.cuda.memory_summary(device))
+    # snapshot right after an OOM happened
+    print("saving allocated state during OOM")
+    print("Tips: \nReduce sw_batch_size if there is an OOM (maybe even roi_size)")
+    snapshot = torch.cuda.memory._snapshot()
+    dump(snapshot, open(f"{output_dir}/oom_snapshot.pickle", "wb"))
+    # logger.critical(snapshot)
+    torch.cuda.memory._save_memory_usage(
+        filename=f"{output_dir}/memory.svg", snapshot=snapshot
+    )
+    torch.cuda.memory._save_segment_usage(
+        filename=f"{output_dir}/segments.svg", snapshot=snapshot
+    )

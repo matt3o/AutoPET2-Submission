@@ -124,6 +124,9 @@ def parse_args():
 
     # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()
+    return args
+
+def setup_environment_and_adapt_args(args):
     args.caller_args = sys.argv
     args.env = os.environ
     args.git = get_git_information()

@@ -19,16 +19,16 @@ import pathlib
 import resource
 import sys
 import time
-from parser import parse_args
+from parser import parse_args, setup_environment_and_adapt_args
 from pickle import dump
 
 import pandas as pd
 import torch
 from ignite.engine import Events
-
-from api import get_trainer, oom_observer
 from monai.engines.utils import IterationEvents
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
+
+from api import get_trainer, oom_observer
 from tensorboard_logger import init_tensorboard_logger
 from utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception
 
@@ -168,7 +168,8 @@ def main():
         int(os.cpu_count() / 3)
     )  # Limit number of threads to 1/3 of resources
 
-    args, logger = parse_args()
+    args = parse_args()
+    args, logger = setup_environment_and_adapt_args(args)
 
     run(args)
 

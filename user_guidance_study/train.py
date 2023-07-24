@@ -36,7 +36,7 @@ from utils.helper import (
     get_gpu_usage,
     handle_exception,
 )
-from api import get_trainer, resume_network
+from api import get_trainer
 
 # Various settings
 
@@ -98,8 +98,6 @@ def run(args):
             network=trainer.network,
             output_dir=args.output,
         )
-        if args.resume_from != "None":
-            resume_network(resume_from=args.resume_from, trainer=trainer, gpu=args.gpu)
 
         gpu_thread.start()
         terminator = TerminationHandler(args, tb_logger, wp, gpu_thread)

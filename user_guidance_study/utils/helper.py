@@ -42,9 +42,9 @@ def get_actual_cuda_index_of_device(device: torch.device):
 def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle = None):
     # empty the cache first
     shutdown = False
+    cuda_index = get_actual_cuda_index_of_device(device)
     if nvml_handle is None:
         nvmlInit()
-        cuda_index = get_actual_cuda_index_of_device(device)
         h = nvmlDeviceGetHandleByIndex(cuda_index)
         shutdown = True
     else:
@@ -89,9 +89,9 @@ def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle = None):
 
 def gpu_usage_per_process(device: torch.device, nvml_handle = None) -> List:
     # empty the cache first
+    cuda_index = get_actual_cuda_index_of_device(device)
     if nvml_handle is None:
         nvmlInit()
-        cuda_index = get_actual_cuda_index_of_device(device)
         h = nvmlDeviceGetHandleByIndex(cuda_index)
         shutdown = True
     else:

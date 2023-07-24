@@ -6,7 +6,7 @@ import os
 
 import torch
 
-from monai.data import partition_dataset
+from monai.data import partition_dataset, ThreadDataLoader
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
 from monai.transforms import (  # RandShiftIntensityd,; Resized,
@@ -97,8 +97,8 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             # PrintDatad(),
-            EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
+            #EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            PrintGPUUsaged(device=device, name="pre"),
             # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
@@ -139,8 +139,8 @@ def get_pre_transforms(labels, device, args):
             DivisiblePadd(keys=["image", "label"], k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
-            EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
+            #EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            PrintGPUUsaged(device=device, name="pre"),
         ]
     # TODO fix and reenable the part below
     # else:  # MSD Spleen
@@ -274,7 +274,7 @@ def get_post_transforms(labels, device):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
-        # PrintGPUUsaged(device=device, name="post"),
+        #PrintGPUUsaged(device=device, name="post"),
     ]
     return Compose(t)
 
@@ -330,13 +330,13 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
     # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
-    train_loader = DataLoader(
+    train_loader = ThreadDataLoader(
         train_ds,
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
         multiprocessing_context="spawn",  
-        persistent_workers=True,
+        #persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -348,12 +348,12 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         val_datalist, pre_transforms_val, cache_dir=args.cache_dir
     )
 
-    val_loader = DataLoader(
+    val_loader = ThreadDataLoader(
         val_ds,
         num_workers=args.num_workers,
         batch_size=1,
         multiprocessing_context="spawn",  
-        persistent_workers=True,
+        #persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

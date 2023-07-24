@@ -266,7 +266,9 @@ def create_trainer(args):
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
         # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=20, trigger_event=val_trigger_event),
+        GarbageCollector(log_level=10, trigger_event=val_trigger_event),
+        # End of epoch GarbageCollection
+        GarbageCollector(log_level=10),
     ]
 
     # squared_pred enables much faster convergence, possibly even better results in the long run
@@ -346,7 +348,9 @@ def create_trainer(args):
             tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
         ),
         # https://github.com/Project-MONAI/MONAI/issues/3423
-        GarbageCollector(log_level=20, trigger_event=train_trigger_event),
+        GarbageCollector(log_level=10, trigger_event=train_trigger_event),
+        # End of epoch GarbageCollection
+        GarbageCollector(log_level=10),
     ]
 
     trainer = SupervisedTrainer(

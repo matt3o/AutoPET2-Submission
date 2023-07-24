@@ -28,7 +28,7 @@ from pynvml import (
 
 from monai.data.meta_tensor import MetaTensor
 
-logger = logging.getLogger("interactive_segmentation")
+logger = logging.getLogger("sw_interactive_segmentation")
 
 
 def get_actual_cuda_index_of_device(device: torch.device):

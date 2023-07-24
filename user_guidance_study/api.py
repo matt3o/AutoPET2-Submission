@@ -33,7 +33,7 @@ from utils.helper import count_parameters, run_once
 from utils.interaction import Interaction
 from utils.utils import get_click_transforms, get_loaders, get_post_transforms, get_pre_transforms
 
-logger = logging.getLogger("interactive_segmentation")
+logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
 
 __all__ = [

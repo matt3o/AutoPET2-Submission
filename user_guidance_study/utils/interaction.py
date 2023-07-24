@@ -28,7 +28,7 @@ from monai.losses import DiceLoss
 from utils.helper import print_gpu_usage, timeit
 from utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
-logger = logging.getLogger("interactive_segmentation")
+logger = logging.getLogger("sw_interactive_segmentation")
 np.seterr(all="raise")
 
 # To debug Nans, slows down code:

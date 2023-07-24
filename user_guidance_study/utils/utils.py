@@ -40,7 +40,7 @@ from utils.transforms import (
     threshold_foreground,
 )
 
-logger = logging.getLogger("interactive_segmentation")
+logger = logging.getLogger("sw_interactive_segmentation")
 
 AUTPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]

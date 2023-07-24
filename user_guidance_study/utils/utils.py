@@ -97,7 +97,7 @@ def get_pre_transforms(labels, device, args):
             RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
             # PrintDatad(),
-            #EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             PrintGPUUsaged(device=device, name="pre"),
             # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
             # Move to GPU
@@ -139,7 +139,7 @@ def get_pre_transforms(labels, device, args):
             DivisiblePadd(keys=["image", "label"], k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
-            #EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             PrintGPUUsaged(device=device, name="pre"),
         ]
     # TODO fix and reenable the part below
@@ -274,7 +274,7 @@ def get_post_transforms(labels, device):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
-        #PrintGPUUsaged(device=device, name="post"),
+        # PrintGPUUsaged(device=device, name="post"),
     ]
     return Compose(t)
 
@@ -335,8 +335,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",  
-        #persistent_workers=True,
+        multiprocessing_context="spawn",
+        # persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -352,8 +352,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         val_ds,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",  
-        #persistent_workers=True,
+        multiprocessing_context="spawn",
+        # persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

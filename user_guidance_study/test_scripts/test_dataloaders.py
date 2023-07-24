@@ -20,7 +20,9 @@ transform = mt.Compose([mt.ToDevice(device="cpu")])
 def get_data_loader():
     x, y = get_xy()
     dataset = ArrayDataset(x, seg=y, img_transform=transform, seg_transform=transform)
-    loader = DataLoader(dataset, num_workers=1, batch_size=1, multiprocessing_context='spawn')
+    loader = DataLoader(
+        dataset, num_workers=1, batch_size=1, multiprocessing_context="spawn"
+    )
     return loader
 
 

@@ -126,6 +126,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
 def setup_environment_and_adapt_args(args):
     args.caller_args = sys.argv
     args.env = os.environ
@@ -197,8 +198,8 @@ def setup_environment_and_adapt_args(args):
         # raise UserWarning("For DeepGrow to work you have to set args.val_click_generation_stopping_criterion to 5!")
         logger.warning("############## DeepGrow mode activated ###################")
         logger.warning(
-            """args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion 
-            and args.val_click_generation_stopping_criterion will be overwritten by this option"""
+            """args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion
+             and args.val_click_generation_stopping_criterion will be overwritten by this option"""
         )
         logger.warning("##########################################################")
         # logger.info("To reproduce ")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 from functools import reduce
+from pickle import dump
 from typing import Iterable, List
 
 import cupy as cp
@@ -31,7 +32,12 @@ from monai.utils import set_determinism
 
 from utils.helper import count_parameters, run_once
 from utils.interaction import Interaction
-from utils.utils import get_click_transforms, get_loaders, get_post_transforms, get_pre_transforms
+from utils.utils import (
+    get_click_transforms,
+    get_loaders,
+    get_post_transforms,
+    get_pre_transforms,
+)
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None

@@ -22,12 +22,27 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
-from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd
+from monai.transforms import (
+    Activationsd,
+    AsDiscreted,
+    CenterSpatialCropd,
+    Compose,
+    CropForegroundd,
+)
 from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
-from utils.distance_transform import get_choice_from_distance_transform_cp, get_choice_from_tensor, get_distance_transform
-from utils.helper import describe_batch_data, get_global_coordinates_from_patch_coordinates, get_tensor_at_coordinates, timeit
+from utils.distance_transform import (
+    get_choice_from_distance_transform_cp,
+    get_choice_from_tensor,
+    get_distance_transform,
+)
+from utils.helper import (
+    describe_batch_data,
+    get_global_coordinates_from_patch_coordinates,
+    get_tensor_at_coordinates,
+    timeit,
+)
 from utils.logger import get_logger, setup_loggers
 
 np.seterr(all="raise")
@@ -613,7 +628,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         # Positive clicks of the segment in the iteration
         discrepancy = data[self.discrepancy_key][key_label]
         # idx 0 is positive discrepancy and idx 1 is negative discrepancy
-        pos_discr = discrepancy[0]  
+        pos_discr = discrepancy[0]
 
         if coordinates is None:
             # Add guidance to the current key label

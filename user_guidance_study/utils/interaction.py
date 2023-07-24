@@ -36,6 +36,7 @@ np.seterr(all="raise")
 
 # WARNING Code is not tested on batch_size > 1!!!!!!!!!!!!
 
+
 class Interaction:
     """
     Ignite process_function used to introduce interactions (simulation of clicks) for DeepEdit Training/Evaluation.
@@ -90,7 +91,9 @@ class Interaction:
         self.iteration_probability = iteration_probability
         self.loss_stopping_threshold = loss_stopping_threshold
         self.click_generation_strategy_key = click_generation_strategy_key
-        self.dice_loss_function = DiceLoss(include_background=False, to_onehot_y=True, softmax=True)
+        self.dice_loss_function = DiceLoss(
+            include_background=False, to_onehot_y=True, softmax=True
+        )
 
     @timeit
     def __call__(
@@ -132,7 +135,7 @@ class Interaction:
         batchdata = list_data_collate(batchdata_list)
 
         iteration = 0
-        last_loss = 1
+        # last_loss = 1
         last_dice_loss = 1
         before_it = time.time()
         while True:
@@ -161,14 +164,20 @@ class Interaction:
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE]:
                 # Abort if dice / loss is good enough
                 if last_dice_loss < self.loss_stopping_threshold:
-                    logger.info(f"DICE stop, since {last_dice_loss} < {self.loss_stopping_threshold}")
+                    logger.info(
+                        f"DICE stop, since {last_dice_loss} < {self.loss_stopping_threshold}"
+                    )
                     break
 
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
             ]:
-                if np.random.choice([True, False], p=[1 - last_dice_loss, last_dice_loss]):
-                    logger.info(f"DICE_PROBABILITY stop, since dice loss is already {last_dice_loss}")
+                if np.random.choice(
+                    [True, False], p=[1 - last_dice_loss, last_dice_loss]
+                ):
+                    logger.info(
+                        f"DICE_PROBABILITY stop, since dice loss is already {last_dice_loss}"
+                    )
                     break
 
             if (
@@ -217,7 +226,7 @@ class Interaction:
                     predictions = engine.inferer(inputs, engine.network)
 
             batchdata[CommonKeys.PRED] = predictions
-            
+
             # Not necessary for anything anymore
             # loss = self.loss_function(
             #     batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
@@ -226,17 +235,19 @@ class Interaction:
             # logger.info(
             #     f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
             # )
-            last_dice_loss = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]).item()
+            last_dice_loss = self.dice_loss_function(
+                batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
+            ).item()
             logger.info(
                 f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice_loss:.4f} Epoch: {engine.state.epoch}"
             )
 
             if self.args.save_nifti:
-                # tmp_batchdata = {
-                #     CommonKeys.PRED: predictions,
-                #     CommonKeys.LABEL: batchdata[CommonKeys.LABEL],
-                #     "label_names": batchdata["label_names"],
-                # }
+                tmp_batchdata = {
+                    CommonKeys.PRED: batchdata[CommonKeys.PRED].detach().clone(),
+                    CommonKeys.LABEL: batchdata[CommonKeys.LABEL].detach().clone(),
+                    "label_names": batchdata["label_names"],
+                }
                 tmp_batchdata_list = decollate_batch(tmp_batchdata)
                 for i in range(len(tmp_batchdata_list)):
                     tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
@@ -267,7 +278,7 @@ class Interaction:
 
         logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
         # Might be needed for sw_roi_size smaller than 128
-        #torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         engine.state.batch = batchdata
         return engine._iteration(
             engine, batchdata

@@ -20,7 +20,6 @@ import resource
 import sys
 import time
 from parser import parse_args, setup_environment_and_adapt_args
-from pickle import dump
 
 import pandas as pd
 import torch

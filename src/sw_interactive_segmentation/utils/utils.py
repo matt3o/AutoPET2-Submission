@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import logging
 import os
+from tkinter import NO
 
 import torch
 from monai.data import ThreadDataLoader, partition_dataset
@@ -49,6 +50,8 @@ MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
     spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
+    
+    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset == "AutoPET":
         t_train = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -113,14 +116,14 @@ def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
-            ),
+            ) if "label" in input_keys else NoOpd(),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(
                 keys=input_keys, pixdim=spacing
             ),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
                 keys="label", roi_size=args.val_crop_size, label_names=labels
-            ),
+            ) if "label" in input_keys else NoOpd(),
             CropForegroundd(
                 keys=input_keys,
                 source_key="image",
@@ -136,7 +139,7 @@ def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
             if args.inferer == "SimpleInferer"
             else NoOpd(),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            PrintGPUUsaged(device=device, name="pre"),
+            # PrintGPUUsaged(device=device, name="pre"),
         ]
     # TODO fix and reenable the part below
     # else:  # MSD Spleen

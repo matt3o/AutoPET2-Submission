@@ -43,12 +43,11 @@ logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
 
 __all__ = [
-    "get_optimizer",
-    "get_click_transforms",
     "get_click_transforms",
     "get_pre_transforms",
     "get_post_transforms",
     "get_loaders",
+    "get_optimizer",
     "get_loss_function",
     "get_network",
     "get_inferers",

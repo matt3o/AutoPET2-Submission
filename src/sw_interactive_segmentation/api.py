@@ -46,6 +46,7 @@ __all__ = [
     "get_optimizer",
     "get_click_transforms",
     "get_click_transforms",
+    "get_pre_transforms",
     "get_post_transforms",
     "get_loaders",
     "get_loss_function",

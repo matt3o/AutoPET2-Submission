@@ -46,7 +46,7 @@ AUTPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
-def get_pre_transforms(labels, device, args):
+def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
     spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     if args.dataset == "AutoPET":
@@ -56,21 +56,21 @@ def get_pre_transforms(labels, device, args):
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(
-                keys=("image", "label"),
+                keys=input_keys,
                 reader="ITKReader",
                 image_only=False,
                 simple_keys=True,
             ),
-            ToTensord(keys=("image", "label"), device=cpu_device, track_meta=True),
-            EnsureChannelFirstd(keys=("image", "label")),
+            ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
+            EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
             ),
             # PrintDatad(),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
-            Spacingd(keys=["image", "label"], pixdim=spacing),
+            Orientationd(keys=input_keys, axcodes="RAS"),
+            Spacingd(keys=input_keys, pixdim=spacing),
             CropForegroundd(
-                keys=("image", "label"),
+                keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
             ),
@@ -80,7 +80,7 @@ def get_pre_transforms(labels, device, args):
             # Random Transforms #
             # allow_smaller=True not necessary for the default AUTOPET split, just there for safety so that training does not get interrupted
             RandCropByPosNegLabeld(
-                keys=("image", "label"),
+                keys=input_keys,
                 label_key="label",
                 spatial_size=args.train_crop_size,
                 pos=0.6,
@@ -89,17 +89,13 @@ def get_pre_transforms(labels, device, args):
             )
             if args.train_crop_size is not None
             else NoOpd(),
-            DivisiblePadd(keys=["image", "label"], k=64, value=0)
+            DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),  # UNet needs this
-            RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
-            RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
-            RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
-            RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            # PrintDatad(),
-            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            PrintGPUUsaged(device=device, name="pre"),
-            # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
+            RandFlipd(keys=input_keys, spatial_axis=[0], prob=0.10),
+            RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
+            RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
+            RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -113,30 +109,30 @@ def get_pre_transforms(labels, device, args):
             InitLoggerd(
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
-            LoadImaged(keys=("image", "label"), reader="ITKReader", image_only=False),
-            EnsureChannelFirstd(keys=("image", "label")),
+            LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
+            EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
             ),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(
-                keys=["image", "label"], pixdim=spacing
+                keys=input_keys, pixdim=spacing
             ),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
                 keys="label", roi_size=args.val_crop_size, label_names=labels
             ),
             CropForegroundd(
-                keys=("image", "label"),
+                keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
             ),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size)
+            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else NoOpd(),
             ScaleIntensityRanged(
                 keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
-            DivisiblePadd(keys=["image", "label"], k=64, value=0)
+            DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),

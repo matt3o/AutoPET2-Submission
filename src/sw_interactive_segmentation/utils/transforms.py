@@ -228,6 +228,33 @@ class InitLoggerd(MapTransform):
         logger = get_logger()
         return data
 
+class AddEmptySignalChannels(MapTransform):
+    def __init__(self, device, label_names: Dict, keys: KeysCollection = None):
+        """
+        Prints the GPU usage
+        """
+        super().__init__(keys)
+        self.device = device
+        self.label_names = label_names 
+
+    def __call__(
+        self, data: Mapping[Hashable, torch.Tensor]
+    ) -> Mapping[Hashable, torch.Tensor]:
+        # Set up the initial batch data
+        in_channels = 1 + len(self.label_names)
+        tmp_image = data[CommonKeys.IMAGE][0 : 0 + 1, ...]
+        assert len(tmp_image.shape) == 4
+        new_shape = list(tmp_image.shape)
+        new_shape[0] = in_channels
+        # Set the signal to 0 for all input images
+        # image is on channel 0 of e.g. (1,128,128,128) and the signals get appended, so
+        # e.g. (3,128,128,128) for two labels
+        inputs = torch.zeros(new_shape, device=self.device)
+        inputs[0] = data[CommonKeys.IMAGE][0]
+        data[CommonKeys.IMAGE] = inputs
+        
+        return data
+
 
 class NormalizeLabelsInDatasetd(MapTransform):
     def __init__(

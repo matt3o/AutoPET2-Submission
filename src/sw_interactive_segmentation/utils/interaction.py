@@ -118,21 +118,22 @@ class Interaction:
             context="START interaction class",
         )
 
-        # Set up the initial batch data
-        in_channels = 1 + len(self.args.labels)
-        batchdata_list = decollate_batch(batchdata)
-        for i in range(len(batchdata_list)):
-            tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
-            assert len(tmp_image.shape) == 4
-            new_shape = list(tmp_image.shape)
-            new_shape[0] = in_channels
-            # Set the signal to 0 for all input images
-            # image is on channel 0 of e.g. (1,128,128,128) and the signals get appended, so
-            # e.g. (3,128,128,128) for two labels
-            inputs = torch.zeros(new_shape, device=engine.state.device)
-            inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
-            batchdata_list[i][CommonKeys.IMAGE] = inputs
-        batchdata = list_data_collate(batchdata_list)
+        # -> Moved to AddEmptySignalChannels
+        # # Set up the initial batch data
+        # in_channels = 1 + len(self.args.labels)
+        # batchdata_list = decollate_batch(batchdata)
+        # for i in range(len(batchdata_list)):
+        #     tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
+        #     assert len(tmp_image.shape) == 4
+        #     new_shape = list(tmp_image.shape)
+        #     new_shape[0] = in_channels
+        #     # Set the signal to 0 for all input images
+        #     # image is on channel 0 of e.g. (1,128,128,128) and the signals get appended, so
+        #     # e.g. (3,128,128,128) for two labels
+        #     inputs = torch.zeros(new_shape, device=engine.state.device)
+        #     inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
+        #     batchdata_list[i][CommonKeys.IMAGE] = inputs
+        # batchdata = list_data_collate(batchdata_list)
 
         iteration = 0
         # last_loss = 1

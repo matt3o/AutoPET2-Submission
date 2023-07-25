@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 import logging
 import os
-from tkinter import NO
+from typing import Dict
 
 import torch
 from monai.data import ThreadDataLoader, partition_dataset
@@ -39,6 +39,7 @@ from sw_interactive_segmentation.utils.transforms import (
     PrintGPUUsaged,
     SplitPredsLabeld,
     threshold_foreground,
+    AddEmptySignalChannels,
 )
 
 logger = logging.getLogger("sw_interactive_segmentation")
@@ -47,7 +48,7 @@ AUTPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
-def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
+def get_pre_transforms(labels: Dict, device, args, input_keys=["image", "label"]):
     spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
@@ -99,6 +100,7 @@ def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
+            AddEmptySignalChannels(keys=input_keys, device=device, label_names=labels),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -138,6 +140,7 @@ def get_pre_transforms(labels, device, args, input_keys=["image", "label"]):
             DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
+            AddEmptySignalChannels(keys=input_keys, device=device, label_names=labels),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]

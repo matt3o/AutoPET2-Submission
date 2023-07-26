@@ -17,6 +17,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     CropForegroundd,
     DivisiblePadd,
     EnsureChannelFirstd,
+    AsChannelFirstd,
     EnsureTyped,
     LoadImaged,
     Orientationd,
@@ -29,10 +30,10 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
 )
 
 from sw_interactive_segmentation.utils.transforms import (
-    AddGuidanceSignalDeepEditd,
-    AddRandomGuidanceDeepEditd,
+    AddGuidanceSignal,
+    AddGuidance,
     CheckTheAmountOfInformationLossByCropd,
-    FindDiscrepancyRegionsDeepEditd,
+    FindDiscrepancyRegions,
     InitLoggerd,
     NoOpd,
     NormalizeLabelsInDatasetd,
@@ -48,7 +49,7 @@ AUTPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
-def get_pre_transforms(labels: Dict, device, args, input_keys=["image", "label"]):
+def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
     spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
@@ -66,7 +67,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=["image", "label"]
                 simple_keys=True,
             ),
             ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
-            EnsureChannelFirstd(keys=input_keys),
+            AsChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
             ),
@@ -115,7 +116,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=["image", "label"]
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-            EnsureChannelFirstd(keys=input_keys),
+            AsChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
             ) if "label" in input_keys else NoOpd(),
@@ -236,17 +237,17 @@ def get_click_transforms(device, args):
         InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        FindDiscrepancyRegionsDeepEditd(
+        FindDiscrepancyRegions(
             keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device
         ),
-        AddRandomGuidanceDeepEditd(
+        AddGuidance(
             keys="NA",
             guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
         ),
-        AddGuidanceSignalDeepEditd(
+        AddGuidanceSignal(
             keys="image",
             guidance_key="guidance",
             sigma=args.sigma,
@@ -279,6 +280,21 @@ def get_post_transforms(labels, device):
         # PrintGPUUsaged(device=device, name="post"),
     ]
     return Compose(t)
+
+def get_val_post_transforms(labels, device):
+    t = [
+        Activationsd(keys="pred", softmax=True),
+        AsDiscreted(
+            keys=("pred"),
+            argmax=(True, False),
+            to_onehot=(len(labels), len(labels)),
+        ),
+        # This transform is to check dice score per segment/label
+        SplitPredsLabeld(keys="pred"),
+        # PrintGPUUsaged(device=device, name="post"),
+    ]
+    return Compose(t)
+
 
 
 def get_loaders(args, pre_transforms_train, pre_transforms_val):

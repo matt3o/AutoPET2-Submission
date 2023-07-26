@@ -252,7 +252,7 @@ class AddEmptySignalChannels(MapTransform):
         inputs = torch.zeros(new_shape, device=self.device)
         inputs[0] = data[CommonKeys.IMAGE][0]
         data[CommonKeys.IMAGE] = inputs
-        
+
         return data
 
 
@@ -304,7 +304,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
         return data
 
 
-class AddGuidanceSignalDeepEditd(MapTransform):
+class AddGuidanceSignal(MapTransform):
     """
     Add Guidance signal for input image. Multilabel DeepEdit
 
@@ -507,7 +507,7 @@ class AddGuidanceSignalDeepEditd(MapTransform):
         raise UserWarning("image key has not been been found")
 
 
-class FindDiscrepancyRegionsDeepEditd(MapTransform):
+class FindDiscrepancyRegions(MapTransform):
     """
     Find discrepancy between prediction and actual during click interactions during training.
 
@@ -594,9 +594,9 @@ class FindDiscrepancyRegionsDeepEditd(MapTransform):
         raise UserWarning
 
 
-class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
+class AddGuidance(Randomizable, MapTransform):
     """
-    Add random guidance based on discrepancies that were found between label and prediction.
+    Add guidance based on different click generation strategies.
 
     Args:
         guidance_key: key to guidance source, shape (2, N, # of dim)
@@ -725,6 +725,18 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 len(new_guidance) == 3
             ), f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
 
+    @staticmethod
+    def get_guidance_tensor_for_key_label(data, guidance_key, key_label, device) -> torch.Tensor:
+        """Makes sure the guidance is in a tensor format.
+        """
+        tmp_gui = data[guidance_key].get(
+            key_label, torch.tensor([], dtype=torch.int32, device=device)
+        )
+        if isinstance(tmp_gui, list):
+            tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
+        assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
+        return tmp_gui
+
     @timeit
     def __call__(
         self, data: Mapping[Hashable, torch.Tensor]
@@ -741,9 +753,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
             for idx, (key_label, _) in enumerate(data["label_names"].items()):
-                tmp_gui = data[self.guidance_key].get(
-                    key_label, torch.tensor([], dtype=torch.int32, device=self.device)
-                )
+                tmp_gui = self.get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                 data[self.guidance_key][key_label] = self.add_guidance_based_on_label(
                     data, tmp_gui, data["label"].eq(idx).to(dtype=torch.int32)
                 )
@@ -763,12 +773,8 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
 
             if self._will_interact:
                 for key_label in data["label_names"].keys():
-                    tmp_gui = data[self.guidance_key].get(
-                        key_label,
-                        torch.tensor([], dtype=torch.int32, device=self.device),
-                    )
-                    assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
-
+                    tmp_gui = self.get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
+                    
                     # Add guidance based on discrepancy
                     data[self.guidance_key][
                         key_label
@@ -826,10 +832,7 @@ class AddRandomGuidanceDeepEditd(Randomizable, MapTransform):
                 #     f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"
                 # )
 
-                tmp_gui = data[self.guidance_key].get(
-                    key_label, torch.tensor([], dtype=torch.int32, device=self.device)
-                )
-                assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
+                tmp_gui = self.get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                 # Add guidance based on discrepancy
                 data[self.guidance_key][
                     key_label

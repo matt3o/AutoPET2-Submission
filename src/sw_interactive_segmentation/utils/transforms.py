@@ -48,6 +48,7 @@ from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
 np.seterr(all="raise")
 logger = None
 
+LABELS_KEY = "label_names"
 
 class ClickGenerationStrategy(IntEnum):
     # Sample a click randomly based on the label, so no correction based on the prediction
@@ -105,17 +106,17 @@ class NoOpd(MapTransform):
 
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection, roi_size: Iterable, label_names: Dict):
+    def __init__(self, keys: KeysCollection, roi_size: Iterable):
         """
         Prints how much information is lost due to the crop.
         """
         super().__init__(keys)
         self.roi_size = roi_size
-        self.label_names = label_names
 
     def __call__(
         self, data: Mapping[Hashable, torch.Tensor]
     ) -> Mapping[Hashable, torch.Tensor]:
+        labels = data[LABELS_KEY]
         for key in self.key_iterator(data):
             if key == "label":
                 label = data[key]
@@ -135,7 +136,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                 cropped_label = Compose(t)(new_data)["label"]
 
                 # label_num_el = torch.numel(label)
-                for idx, (key_label, _) in enumerate(self.label_names.items(), start=1):
+                for idx, (key_label, _) in enumerate(labels.items(), start=1):
                     # Only count non-background lost labels
                     if key_label != "background":
                         sum_label = torch.sum(label == idx).item()
@@ -241,19 +242,18 @@ class InitLoggerd(MapTransform):
         return data
 
 class AddEmptySignalChannels(MapTransform):
-    def __init__(self, device, label_names: Dict, keys: KeysCollection = None):
+    def __init__(self, device, keys: KeysCollection = None):
         """
         Prints the GPU usage
         """
         super().__init__(keys)
         self.device = device
-        self.label_names = label_names 
 
     def __call__(
         self, data: Mapping[Hashable, torch.Tensor]
     ) -> Mapping[Hashable, torch.Tensor]:
         # Set up the initial batch data
-        in_channels = 1 + len(self.label_names)
+        in_channels = 1 + len(data[LABELS_KEY])
         tmp_image = data[CommonKeys.IMAGE][0 : 0 + 1, ...]
         assert len(tmp_image.shape) == 4
         new_shape = list(tmp_image.shape)
@@ -272,7 +272,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        label_names=None,
+        labels=None,
         allow_missing_keys: bool = False,
         device=None,
     ):
@@ -281,10 +281,12 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
         Args:
             keys: The ``keys`` parameter will be used to get and set the actual data item to transform
-            label_names: all label names
+            labels: all label names
+
+        Returns: data and also the new labels will be stored in data with key LABELS_KEY
         """
         super().__init__(keys, allow_missing_keys)
-        self.label_names = label_names
+        self.labels = labels
         self.device = device
 
     @timeit
@@ -293,22 +295,22 @@ class NormalizeLabelsInDatasetd(MapTransform):
     ) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             # Dictionary containing new label numbers
-            new_label_names = {}
+            new_labels = {}
             label = torch.zeros(data[key].shape, device=self.device)
             # Making sure the range values and number of labels are the same
             for idx, (key_label, val_label) in enumerate(
-                self.label_names.items(), start=1
+                self.labels.items(), start=1
             ):
                 if key_label != "background":
-                    new_label_names[key_label] = idx
+                    new_labels[key_label] = idx
                     label[data[key] == val_label] = idx
                 if key_label == "background":
-                    new_label_names["background"] = 0
+                    new_labels["background"] = 0
                 else:
-                    new_label_names[key_label] = idx
+                    new_labels[key_label] = idx
                     label[data[key] == val_label] = idx
 
-            data["label_names"] = new_label_names
+            data[LABELS_KEY] = new_labels
             if isinstance(data[key], MetaTensor):
                 data[key].array = label
             else:
@@ -487,7 +489,7 @@ class AddGuidanceSignal(MapTransform):
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
                 for _, (label_key, label_value) in enumerate(
-                    data["label_names"].items()
+                    data[LABELS_KEY].items()
                 ):
                     # label_guidance = data[label_key]
                     label_guidance = get_guidance_tensor_for_key_label(data, label_key, self.device)
@@ -574,9 +576,8 @@ class FindDiscrepancyRegions(MapTransform):
                 all_discrepancies = {}
                 assert data[key].is_cuda and data["pred"].is_cuda
 
-                # label_names: e.g. [('spleen', 1), ('background', 0)]
                 for _, (label_key, label_value) in enumerate(
-                    data["label_names"].items()
+                    data[LABELS_KEY].items()
                 ):
                     if label_key != "background":
                         label = torch.clone(data[key].detach())
@@ -757,7 +758,7 @@ class AddGuidance(Randomizable, MapTransform):
 
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
-            for idx, (key_label, _) in enumerate(data["label_names"].items()):
+            for idx, (key_label, _) in enumerate(data[LABELS_KEY].items()):
                 tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                 data[self.guidance_key][key_label] = self.add_guidance_based_on_label(
                     data, tmp_gui, data["label"].eq(idx).to(dtype=torch.int32)
@@ -777,7 +778,7 @@ class AddGuidance(Randomizable, MapTransform):
                 self._will_interact = True
 
             if self._will_interact:
-                for key_label in data["label_names"].keys():
+                for key_label in data[LABELS_KEY].keys():
                     tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                     
                     # Add guidance based on discrepancy
@@ -794,7 +795,7 @@ class AddGuidance(Randomizable, MapTransform):
                 AsDiscreted(
                     keys=("pred", "label"),
                     argmax=(True, False),
-                    to_onehot=(len(data["label_names"]), len(data["label_names"])),
+                    to_onehot=(len(data[LABELS_KEY]), len(data[LABELS_KEY])),
                 ),
             ]
             post_transform = Compose(t)
@@ -826,10 +827,10 @@ class AddGuidance(Randomizable, MapTransform):
                 assert len(loss_per_label.shape) == 2
                 # 1. dim: patch number, 2. dim: number of labels, e.g. [27,2]
                 max_loss_position_per_label = torch.argmax(loss_per_label, dim=0)
-                assert len(max_loss_position_per_label) == len(data["label_names"])
+                assert len(max_loss_position_per_label) == len(data[LABELS_KEY])
 
             # We now have the worst patches for each label, now sample clicks on them
-            for idx, (key_label, _) in enumerate(data["label_names"].items()):
+            for idx, (key_label, _) in enumerate(data[LABELS_KEY].items()):
                 patch_number = max_loss_position_per_label[idx]
                 # label_loss = loss_per_label[patch_number, idx]
                 coordinates = coordinate_list[patch_number]
@@ -864,7 +865,7 @@ class SplitPredsLabeld(MapTransform):
     ) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             if key == "pred":
-                for idx, (key_label, _) in enumerate(data["label_names"].items()):
+                for idx, (key_label, _) in enumerate(data[LABELS_KEY].items()):
                     if key_label != "background":
                         data[f"pred_{key_label}"] = data[key][idx + 1, ...][None]
                         data[f"label_{key_label}"] = data["label"][idx + 1, ...][None]

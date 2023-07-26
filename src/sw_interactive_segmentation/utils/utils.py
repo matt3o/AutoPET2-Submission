@@ -68,7 +68,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
-                keys="label", label_names=labels, device=cpu_device
+                keys="label", labels=labels, device=cpu_device
             ),
             # PrintDatad(),
             Orientationd(keys=input_keys, axcodes="RAS"),
@@ -100,7 +100,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
-            AddEmptySignalChannels(keys=input_keys, device=device, label_names=labels),
+            AddEmptySignalChannels(keys=input_keys, device=device),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -117,14 +117,14 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
-                keys="label", label_names=labels, device=cpu_device
+                keys="label", labels=labels, device=cpu_device
             ) if "label" in input_keys else NoOpd(),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(
                 keys=input_keys, pixdim=spacing
             ),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
-                keys="label", roi_size=args.val_crop_size, label_names=labels
+                keys="label", roi_size=args.val_crop_size
             ) if "label" in input_keys else NoOpd(),
             CropForegroundd(
                 keys=input_keys,
@@ -140,7 +140,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
-            AddEmptySignalChannels(keys=input_keys, device=device, label_names=labels),
+            AddEmptySignalChannels(keys=input_keys, device=device),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]

@@ -78,6 +78,18 @@ class StoppingCriterion(IntEnum):
 def threshold_foreground(x):
     return x > 0.005
 
+def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
+    """Makes sure the guidance is in a tensor format.
+    """
+    tmp_gui = data.get(
+        key_label, torch.tensor([], dtype=torch.int32, device=device)
+    )
+    if isinstance(tmp_gui, list):
+        tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
+    assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
+    return tmp_gui
+
+
 
 class NoOpd(MapTransform):
     def __init__(self, keys: KeysCollection = None):
@@ -306,7 +318,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
 
 class AddGuidanceSignal(MapTransform):
     """
-    Add Guidance signal for input image. Multilabel DeepEdit
+    Add Guidance signal for input image.
 
     Based on the "guidance" points, apply Gaussian to them and add them as new channel for input image.
 
@@ -319,7 +331,7 @@ class AddGuidanceSignal(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        guidance_key: str = "guidance",
+        # guidance_key: str = "guidance",
         sigma: int = 1,
         number_intensity_ch: int = 1,
         allow_missing_keys: bool = False,
@@ -331,11 +343,9 @@ class AddGuidanceSignal(MapTransform):
         device=None,
         spacing=None,
         adaptive_sigma=False,
-        click_generation=2,
-        val_click_generation=2,
     ):
         super().__init__(keys, allow_missing_keys)
-        self.guidance_key = guidance_key
+        # self.guidance_key = guidance_key
         self.sigma = sigma
         self.number_intensity_ch = number_intensity_ch
         self.disks = disks
@@ -471,28 +481,35 @@ class AddGuidanceSignal(MapTransform):
                 assert image.is_cuda
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
 
-                guidance = data[self.guidance_key]
+                # try:
+                #     guidance = data[self.guidance_key]
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]',
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
-                for key_label in guidance.keys():
+                for _, (label_key, label_value) in enumerate(
+                    data["label_names"].items()
+                ):
+                    # label_guidance = data[label_key]
+                    label_guidance = get_guidance_tensor_for_key_label(data, label_key, self.device)
+
+                # for key_label in data["label_names"]:
                     # Getting signal based on guidance
-                    assert (
-                        type(guidance[key_label]) == torch.Tensor
-                        or type(guidance[key_label]) == MetaTensor
-                    ), f"guidance[key_label]: {type(guidance[key_label])}\n{guidance[key_label]}"
-                    if guidance[key_label] is not None and guidance[key_label].numel():
+                    # assert (
+                    #     type(label_guidance) == torch.Tensor
+                    #     or type(label_guidance) == MetaTensor
+                    # ), f"guidance[key_label]: {type(label_guidance)}\n{label_guidance}"
+                    if label_guidance is not None and label_guidance.numel():
                         signal = self._get_corrective_signal(
                             image,
-                            guidance[key_label].to(device=self.device),
-                            key_label=key_label,
+                            label_guidance.to(device=self.device),
+                            key_label=label_key,
                         )
                     else:
                         # TODO can speed this up here
                         signal = self._get_corrective_signal(
                             image,
                             torch.Tensor([]).to(device=self.device),
-                            key_label=key_label,
+                            key_label=label_key,
                         )
                     assert signal.is_cuda
                     assert tmp_image.is_cuda
@@ -608,7 +625,7 @@ class AddGuidance(Randomizable, MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        guidance_key: str = "guidance",
+        # guidance_key: str = "guidance",
         discrepancy_key: str = "discrepancy",
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
@@ -617,7 +634,7 @@ class AddGuidance(Randomizable, MapTransform):
         patch_size: Tuple[int] = (128, 128, 128),
     ):
         super().__init__(keys, allow_missing_keys)
-        self.guidance_key = guidance_key
+        # self.guidance_key = guidance_key
         self.discrepancy_key = discrepancy_key
         self.probability_key = probability_key
         self._will_interact = None
@@ -725,18 +742,6 @@ class AddGuidance(Randomizable, MapTransform):
                 len(new_guidance) == 3
             ), f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
 
-    @staticmethod
-    def get_guidance_tensor_for_key_label(data, guidance_key, key_label, device) -> torch.Tensor:
-        """Makes sure the guidance is in a tensor format.
-        """
-        tmp_gui = data[guidance_key].get(
-            key_label, torch.tensor([], dtype=torch.int32, device=device)
-        )
-        if isinstance(tmp_gui, list):
-            tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
-        assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
-        return tmp_gui
-
     @timeit
     def __call__(
         self, data: Mapping[Hashable, torch.Tensor]
@@ -753,7 +758,7 @@ class AddGuidance(Randomizable, MapTransform):
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
             for idx, (key_label, _) in enumerate(data["label_names"].items()):
-                tmp_gui = self.get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
+                tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                 data[self.guidance_key][key_label] = self.add_guidance_based_on_label(
                     data, tmp_gui, data["label"].eq(idx).to(dtype=torch.int32)
                 )
@@ -773,7 +778,7 @@ class AddGuidance(Randomizable, MapTransform):
 
             if self._will_interact:
                 for key_label in data["label_names"].keys():
-                    tmp_gui = self.get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
+                    tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                     
                     # Add guidance based on discrepancy
                     data[self.guidance_key][
@@ -832,7 +837,7 @@ class AddGuidance(Randomizable, MapTransform):
                 #     f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"
                 # )
 
-                tmp_gui = self.get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
+                tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
                 # Add guidance based on discrepancy
                 data[self.guidance_key][
                     key_label

@@ -414,7 +414,7 @@ class GPU_Thread(threading.Thread):
             self.csv_file.write(usage)
             self.csv_file.write("\n")
             self.csv_file.flush()
-            print_gpu_usage_per_process(self.device, nvml_handle=self.nvml_handle)
+            # print_gpu_usage_per_process(self.device, nvml_handle=self.nvml_handle)
 
 
 def get_tensor_at_coordinates(

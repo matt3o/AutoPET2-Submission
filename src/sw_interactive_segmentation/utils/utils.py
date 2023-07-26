@@ -17,7 +17,6 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     CropForegroundd,
     DivisiblePadd,
     EnsureChannelFirstd,
-    AsChannelFirstd,
     EnsureTyped,
     LoadImaged,
     Orientationd,
@@ -67,7 +66,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
                 simple_keys=True,
             ),
             ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
-            AsChannelFirstd(keys=input_keys),
+            EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
             ),
@@ -116,7 +115,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-            AsChannelFirstd(keys=input_keys),
+            EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", label_names=labels, device=cpu_device
             ) if "label" in input_keys else NoOpd(),

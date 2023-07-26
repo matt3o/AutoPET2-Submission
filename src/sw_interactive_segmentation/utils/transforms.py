@@ -320,7 +320,7 @@ class AddGuidanceSignal(MapTransform):
         self,
         keys: KeysCollection,
         guidance_key: str = "guidance",
-        sigma: int = 3,
+        sigma: int = 1,
         number_intensity_ch: int = 1,
         allow_missing_keys: bool = False,
         disks: bool = False,

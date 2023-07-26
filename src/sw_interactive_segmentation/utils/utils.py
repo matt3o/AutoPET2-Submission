@@ -241,14 +241,14 @@ def get_click_transforms(device, args):
         ),
         AddGuidance(
             keys="NA",
-            guidance_key="guidance",
+            # guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
         ),
         AddGuidanceSignal(
             keys="image",
-            guidance_key="guidance",
+            # guidance_key="guidance",
             sigma=args.sigma,
             disks=args.disks,
             edt=args.edt,

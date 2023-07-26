@@ -118,7 +118,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", labels=labels, device=cpu_device
-            ) if "label" in input_keys else NoOpd(),
+            ),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(
                 keys=input_keys, pixdim=spacing

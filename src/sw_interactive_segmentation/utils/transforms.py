@@ -14,6 +14,7 @@ from __future__ import annotations
 import gc
 import logging
 from enum import IntEnum
+from socketserver import UnixStreamServer
 from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
 
 import numpy as np
@@ -294,27 +295,37 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self, data: Mapping[Hashable, torch.Tensor]
     ) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
-            # Dictionary containing new label numbers
-            new_labels = {}
-            label = torch.zeros(data[key].shape, device=self.device)
-            # Making sure the range values and number of labels are the same
-            for idx, (key_label, val_label) in enumerate(
-                self.labels.items(), start=1
-            ):
-                if key_label != "background":
-                    new_labels[key_label] = idx
-                    label[data[key] == val_label] = idx
-                if key_label == "background":
-                    new_labels["background"] = 0
-                else:
-                    new_labels[key_label] = idx
-                    label[data[key] == val_label] = idx
+            if key == "label":
+                try:
+                    label = data[key]
+                except AttributeError:
+                    # label does not exist - this might be a validation run
+                    data[LABELS_KEY] = self.labels
+                    continue
+                    
+                # Dictionary containing new label numbers
+                new_labels = {}
+                label = torch.zeros(data[key].shape, device=self.device)
+                # Making sure the range values and number of labels are the same
+                for idx, (key_label, val_label) in enumerate(
+                    self.labels.items(), start=1
+                ):
+                    if key_label != "background":
+                        new_labels[key_label] = idx
+                        label[data[key] == val_label] = idx
+                    if key_label == "background":
+                        new_labels["background"] = 0
+                    else:
+                        new_labels[key_label] = idx
+                        label[data[key] == val_label] = idx
 
-            data[LABELS_KEY] = new_labels
-            if isinstance(data[key], MetaTensor):
-                data[key].array = label
+                data[LABELS_KEY] = new_labels
+                if isinstance(data[key], MetaTensor):
+                    data[key].array = label
+                else:
+                    data[key] = label
             else:
-                data[key] = label
+                raise UserWarning("Only the key label is allowed here!")
         return data
 
 

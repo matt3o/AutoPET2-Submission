@@ -388,8 +388,9 @@ class AddGuidanceSignal(MapTransform):
             first_point_size = guidance[0].numel()
             if dimensions == 3:
                 # Assume channel is first and depth is last CHWD
+                # Assuming the guidance has either shape (1, x, y , z) or (x, y, z)
                 assert (
-                    first_point_size == 4
+                    first_point_size == 4 or first_point_size == 3
                 ), f"first_point_size is {first_point_size}, first_point is {guidance[0]}"
                 signal = torch.zeros(
                     (1, image.shape[-3], image.shape[-2], image.shape[-1]),

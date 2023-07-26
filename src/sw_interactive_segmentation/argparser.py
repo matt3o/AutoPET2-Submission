@@ -155,6 +155,10 @@ def setup_environment_and_adapt_args(args):
     setup_loggers(loglevel, log_folder_path)
     logger = get_logger()
 
+    if args.eval_only:
+        # Avoid a loading error from the training where it complains the number of epochs is too low
+        args.epochs = 100000
+    
     if args.throw_away_cache:
         args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
     else:

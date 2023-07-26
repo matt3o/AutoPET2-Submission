@@ -125,24 +125,24 @@ def run(args):
                         "Total Training Time {}".format(time.time() - start_time)
                     )
 
-        if not args.eval_only:
-            logger.info("{}:: Saving Final PT Model".format(args.gpu))
+        # if not args.eval_only:
+        #     logger.info("{}:: Saving Final PT Model".format(args.gpu))
 
-            torch.save(
-                trainer.network.state_dict(),
-                os.path.join(
-                    args.output, "pretrained_deepedit_" + args.network + "-final.pt"
-                ),
-            )
+            # torch.save(
+            #     trainer.network.state_dict(),
+            #     os.path.join(
+            #         args.output, "pretrained_deepedit_" + args.network + "-final.pt"
+            #     ),
+            # )
 
-            logger.info("{}:: Saving TorchScript Model".format(args.gpu))
-            model_ts = torch.jit.script(trainer.network)
-            torch.jit.save(
-                model_ts,
-                os.path.join(
-                    args.output, "pretrained_deepedit_" + args.network + "-final.ts"
-                ),
-            )
+            # logger.info("{}:: Saving TorchScript Model".format(args.gpu))
+            # model_ts = torch.jit.script(trainer.network)
+            # torch.jit.save(
+            #     model_ts,
+            #     os.path.join(
+            #         args.output, "pretrained_deepedit_" + args.network + "-final.ts"
+            #     ),
+            # )
     finally:
         terminator.cleanup()
         terminator.join_threads()

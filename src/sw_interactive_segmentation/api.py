@@ -42,23 +42,7 @@ from sw_interactive_segmentation.utils.utils import (
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
 
-__all__ = [
-    "get_click_transforms",
-    "get_pre_transforms",
-    "get_post_transforms",
-    "get_loaders",
-    "get_optimizer",
-    "get_loss_function",
-    "get_network",
-    "get_inferers",
-    "get_scheduler",
-    "get_train_handlers",
-    "get_val_handlers",
-    "get_key_val_metrics",
-    "get_key_train_metrics",
-    "get_trainer",
-    "get_evaluator",
-]
+
 
 
 def get_optimizer(optimizer: str, lr: float, network):
@@ -454,7 +438,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         save_key_metric=True,
         save_final=True,
         save_interval=args.save_interval,
-        final_filename="pretrained_deepedit_" + args.network + ".pt",
+        final_filename="pretrained_deepedit_" + args.network + "-final.pt",
     ).attach(evaluator)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 

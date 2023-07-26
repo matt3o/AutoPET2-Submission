@@ -763,10 +763,10 @@ class AddGuidance(Randomizable, MapTransform):
         self, data: Mapping[Hashable, torch.Tensor]
     ) -> Mapping[Hashable, torch.Tensor]:
         # Get the previously generated clicks aka guidance
-        guidance = data.get(self.guidance_key, None)
-        if guidance is None:
-            # Initialize the guidance dict
-            data[self.guidance_key] = {}
+        # guidance = data.get(self.guidance_key, None)
+        # if guidance is None:
+        #     # Initialize the guidance dict
+        #     data[self.guidance_key] = {}
 
         click_generation_strategy = data[self.click_generation_strategy_key]
         # logger.info(f"click generation strategy is {click_generation_strategy}")
@@ -774,8 +774,8 @@ class AddGuidance(Randomizable, MapTransform):
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
             for idx, (key_label, _) in enumerate(data[LABELS_KEY].items()):
-                tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
-                data[self.guidance_key][key_label] = self.add_guidance_based_on_label(
+                tmp_gui = get_guidance_tensor_for_key_label(data, key_label, self.device)
+                data[key_label] = self.add_guidance_based_on_label(
                     data, tmp_gui, data["label"].eq(idx).to(dtype=torch.int32)
                 )
         elif (
@@ -794,12 +794,10 @@ class AddGuidance(Randomizable, MapTransform):
 
             if self._will_interact:
                 for key_label in data[LABELS_KEY].keys():
-                    tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
+                    tmp_gui = get_guidance_tensor_for_key_label(data, key_label, self.device)
                     
                     # Add guidance based on discrepancy
-                    data[self.guidance_key][
-                        key_label
-                    ] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label)
+                    data[key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label)
         elif (
             click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE
         ):
@@ -853,11 +851,9 @@ class AddGuidance(Randomizable, MapTransform):
                 #     f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"
                 # )
 
-                tmp_gui = get_guidance_tensor_for_key_label(data, self.guidance_key, key_label, self.device)
+                tmp_gui = get_guidance_tensor_for_key_label(data, key_label, self.device)
                 # Add guidance based on discrepancy
-                data[self.guidance_key][
-                    key_label
-                ] = self.add_guidance_based_on_discrepancy(
+                data[key_label] = self.add_guidance_based_on_discrepancy(
                     data, tmp_gui, key_label, coordinates
                 )
 

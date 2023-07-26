@@ -298,10 +298,13 @@ class NormalizeLabelsInDatasetd(MapTransform):
             if key == "label":
                 try:
                     label = data[key]
+                    if isinstance(label, str):
+                        # Special case since label has been defined to be a string in MONAILabel
+                        raise AttributeError
                 except AttributeError:
                     # label does not exist - this might be a validation run
                     data[LABELS_KEY] = self.labels
-                    continue
+                    break
                     
                 # Dictionary containing new label numbers
                 new_labels = {}

@@ -10,7 +10,6 @@ import cupy as cp
 import torch
 from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
-from monai.data import set_track_meta
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
     CheckpointLoader,
@@ -88,7 +87,6 @@ def get_network(network_str: str, labels: Iterable):
             deep_supervision=False,
             res_block=True,
         )
-    set_track_meta(False)
     logger.info(f"Selected network {network_str.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
 

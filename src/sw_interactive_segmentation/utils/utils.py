@@ -41,6 +41,8 @@ from sw_interactive_segmentation.utils.transforms import (
     threshold_foreground,
     AddEmptySignalChannels,
 )
+from monai.data import set_track_meta
+
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
@@ -362,6 +364,8 @@ def get_val_post_transforms(labels, device):
 
 
 def get_loaders(args, pre_transforms_train, pre_transforms_val):
+    # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..
+    set_track_meta(True)
     all_images = sorted(glob.glob(os.path.join(args.input, "imagesTr", "*.nii.gz")))
     all_labels = sorted(glob.glob(os.path.join(args.input, "labelsTr", "*.nii.gz")))
 

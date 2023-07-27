@@ -197,13 +197,13 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device),
-            ToTensord(keys=input_keys, device=cpu_device, track_meta=False),
+            AddEmptySignalChannels(keys=input_keys, device=device),
+            ToTensord(keys=input_keys, device=device, track_meta=False),
             AddGuidanceSignal(
                 keys=input_keys,
                 sigma=1,
                 disks=True,
-                device=cpu_device,
+                device=device,
             )
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),

@@ -37,6 +37,7 @@ from sw_interactive_segmentation.utils.utils import (
     get_loaders,
     get_post_transforms,
     get_pre_transforms,
+    get_pre_transforms_val_as_list_monailabel,
 )
 
 logger = logging.getLogger("sw_interactive_segmentation")

@@ -49,6 +49,10 @@ MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
 def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
+    return Compose(get_pre_transforms_train_as_list(labels, device, input_keys)), Compose(get_pre_transforms_val_as_list(labels, device, input_keys))
+
+
+def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
     spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
@@ -109,6 +113,14 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
             # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
+    return t_train
+
+def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label")):
+    spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    cpu_device = torch.device("cpu")
+    
+    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
+    if args.dataset == "AutoPET":
         t_val = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(
@@ -144,6 +156,53 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]
+    return t_val
+
+
+def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image", "label")):
+    spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    cpu_device = torch.device("cpu")
+    
+    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
+    if args.dataset == "AutoPET":
+        t_val = [
+            # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
+            InitLoggerd(
+                args
+            ),  # necessary if the dataloader runs in an extra thread / process
+            LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
+            ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
+            EnsureChannelFirstd(keys=input_keys),
+            NormalizeLabelsInDatasetd(
+                keys="label", labels=labels, device=cpu_device
+            ),
+            Orientationd(keys=input_keys, axcodes="RAS"),
+            # Spacingd(
+            #     keys=input_keys, pixdim=spacing
+            # ),  # 2-factor because of the spatial size
+            # CheckTheAmountOfInformationLossByCropd(
+            #     keys="label", roi_size=args.val_crop_size
+            # ) if "label" in input_keys else NoOpd(),
+            # CropForegroundd(
+            #     keys=input_keys,
+            #     source_key="image",
+            #     select_fn=threshold_foreground,
+            # ),
+            # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
+            # if args.val_crop_size is not None
+            # else NoOpd(),
+            ScaleIntensityRanged(
+                keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
+            ),  # 0.05 and 99.95 percentiles of the spleen HUs
+            DivisiblePadd(keys=input_keys, k=64, value=0)
+            if args.inferer == "SimpleInferer"
+            else NoOpd(),
+            AddEmptySignalChannels(keys=input_keys, device=device),
+            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            # PrintGPUUsaged(device=device, name="pre"),
+        ]
+    return t_val
+
     # TODO fix and reenable the part below
     # else:  # MSD Spleen
     #     t_train = [
@@ -227,7 +286,6 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
     #         ),
     #         # ToTensord(keys=("image", "label"), device=torch.device('cpu')),
     # ]
-    return Compose(t_train), Compose(t_val)
 
 
 def get_click_transforms(device, args):

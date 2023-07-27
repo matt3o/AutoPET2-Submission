@@ -26,5 +26,10 @@ python train.py -a --inferer=SlidingWindowInferer --disks --network dynunet --si
 
 
 ## ENV
-PYTORCH_CUDA_ALLOC_CONF=cudaMallocAsync;
+PYTORCH_CUDA_ALLOC_CONF=backend:cudaMallocAsync;
+PYTORCH_CUDA_ALLOC_CONF=garbage_collection_threshold:0.8;
 CUPY_GPU_MEMORY_LIMIT="18%";
+
+## Debugging options
+
+PYTORCH_NO_CUDA_MEMORY_CACHING=1 

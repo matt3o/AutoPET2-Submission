@@ -264,7 +264,10 @@ class AddEmptySignalChannels(MapTransform):
         # e.g. (3,128,128,128) for two labels
         inputs = torch.zeros(new_shape, device=self.device)
         inputs[0] = data[CommonKeys.IMAGE][0]
-        data[CommonKeys.IMAGE] = inputs
+        if isinstance(data[CommonKeys.IMAGE], MetaTensor):
+            data[CommonKeys.IMAGE].array = inputs
+        else:
+            data[CommonKeys.IMAGE] = inputs
 
         return data
 

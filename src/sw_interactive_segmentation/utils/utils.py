@@ -159,7 +159,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
     return t_val
 
 
-def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image", "label")):
+def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image")):
     spacing = AUTPET_SPCING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
@@ -198,6 +198,13 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             if args.inferer == "SimpleInferer"
             else NoOpd(),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device),
+            ToTensord(keys=input_keys, device=cpu_device, track_meta=False),
+            AddGuidanceSignal(
+                keys=input_keys,
+                sigma=1,
+                disks=True,
+                device=cpu_device,
+            )
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]

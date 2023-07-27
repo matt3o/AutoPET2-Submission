@@ -5,9 +5,8 @@ import glob
 import os
 import time
 
-import torch
-
 import monai.transforms as mt
+import torch
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import Dataset
 from monai.inferers import SimpleInferer, SlidingWindowInferer

@@ -15,8 +15,6 @@ from typing import List, Optional, Sequence, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
-from torch.nn.functional import interpolate
-
 from monai.networks.blocks import Convolution
 from monai.networks.blocks.dynunet_block import (
     UnetBasicBlock,
@@ -24,6 +22,7 @@ from monai.networks.blocks.dynunet_block import (
     UnetResBlock,
     UnetUpBlock,
 )
+from torch.nn.functional import interpolate
 
 __all__ = ["DynUNet", "DynUnet", "Dynunet"]
 

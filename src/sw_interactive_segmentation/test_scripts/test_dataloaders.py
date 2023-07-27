@@ -1,5 +1,7 @@
-import torch
+from __future__ import annotations
+
 import monai.transforms as mt
+import torch
 from monai.data import ArrayDataset, DataLoader, MetaTensor
 
 NETWORK_INPUT_SHAPE = (1, 128, 128, 256)
@@ -18,7 +20,9 @@ transform = mt.Compose([mt.ToDevice(device="cpu")])
 def get_data_loader():
     x, y = get_xy()
     dataset = ArrayDataset(x, seg=y, img_transform=transform, seg_transform=transform)
-    loader = DataLoader(dataset, num_workers=1, batch_size=1, multiprocessing_context='spawn')
+    loader = DataLoader(
+        dataset, num_workers=1, batch_size=1, multiprocessing_context="spawn"
+    )
     return loader
 
 

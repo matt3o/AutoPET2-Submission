@@ -2,3 +2,6 @@ cache/*
 output/*
 data/*
 utils/__pycache__/*
+src/sw_interactive_segmentation/data/*
+**/*.egg-info
+dist/

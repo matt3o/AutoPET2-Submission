@@ -9,9 +9,9 @@ import uuid
 
 import torch
 
-from utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
-from utils.logger import get_logger, setup_loggers
-from utils.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_interactive_segmentation.utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
+from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
+from sw_interactive_segmentation.utils.transforms import ClickGenerationStrategy, StoppingCriterion
 
 
 def parse_args():
@@ -124,6 +124,10 @@ def parse_args():
 
     # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()
+    return args
+
+
+def setup_environment_and_adapt_args(args):
     args.caller_args = sys.argv
     args.env = os.environ
     args.git = get_git_information()
@@ -151,6 +155,10 @@ def parse_args():
     setup_loggers(loglevel, log_folder_path)
     logger = get_logger()
 
+    if args.eval_only:
+        # Avoid a loading error from the training where it complains the number of epochs is too low
+        args.epochs = 100000
+    
     if args.throw_away_cache:
         args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
     else:
@@ -194,8 +202,8 @@ def parse_args():
         # raise UserWarning("For DeepGrow to work you have to set args.val_click_generation_stopping_criterion to 5!")
         logger.warning("############## DeepGrow mode activated ###################")
         logger.warning(
-            """args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion 
-            and args.val_click_generation_stopping_criterion will be overwritten by this option"""
+            """args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion
+             and args.val_click_generation_stopping_criterion will be overwritten by this option"""
         )
         logger.warning("##########################################################")
         # logger.info("To reproduce ")

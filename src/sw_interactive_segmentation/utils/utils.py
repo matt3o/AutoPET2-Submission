@@ -3,10 +3,10 @@ from __future__ import annotations
 import glob
 import logging
 import os
+from typing import Dict
 
 import torch
-
-from monai.data import partition_dataset
+from monai.data import ThreadDataLoader, partition_dataset
 from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset
 from monai.transforms import (  # RandShiftIntensityd,; Resized,
@@ -27,28 +27,32 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     Spacingd,
     ToTensord,
 )
-from utils.transforms import (
-    AddGuidanceSignalDeepEditd,
-    AddRandomGuidanceDeepEditd,
+
+from sw_interactive_segmentation.utils.transforms import (
+    AddGuidanceSignal,
+    AddGuidance,
     CheckTheAmountOfInformationLossByCropd,
-    FindDiscrepancyRegionsDeepEditd,
+    FindDiscrepancyRegions,
     InitLoggerd,
     NoOpd,
     NormalizeLabelsInDatasetd,
     PrintGPUUsaged,
     SplitPredsLabeld,
     threshold_foreground,
+    AddEmptySignalChannels,
 )
 
-logger = logging.getLogger("interactive_segmentation")
+logger = logging.getLogger("sw_interactive_segmentation")
 
 AUTPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
-def get_pre_transforms(labels, device, args):
+def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
     spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
+    
+    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset == "AutoPET":
         t_train = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
@@ -56,21 +60,21 @@ def get_pre_transforms(labels, device, args):
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(
-                keys=("image", "label"),
+                keys=input_keys,
                 reader="ITKReader",
                 image_only=False,
                 simple_keys=True,
             ),
-            ToTensord(keys=("image", "label"), device=cpu_device, track_meta=True),
-            EnsureChannelFirstd(keys=("image", "label")),
+            ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
+            EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
-                keys="label", label_names=labels, device=cpu_device
+                keys="label", labels=labels, device=cpu_device
             ),
             # PrintDatad(),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
-            Spacingd(keys=["image", "label"], pixdim=spacing),
+            Orientationd(keys=input_keys, axcodes="RAS"),
+            Spacingd(keys=input_keys, pixdim=spacing),
             CropForegroundd(
-                keys=("image", "label"),
+                keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
             ),
@@ -80,7 +84,7 @@ def get_pre_transforms(labels, device, args):
             # Random Transforms #
             # allow_smaller=True not necessary for the default AUTOPET split, just there for safety so that training does not get interrupted
             RandCropByPosNegLabeld(
-                keys=("image", "label"),
+                keys=input_keys,
                 label_key="label",
                 spatial_size=args.train_crop_size,
                 pos=0.6,
@@ -89,17 +93,14 @@ def get_pre_transforms(labels, device, args):
             )
             if args.train_crop_size is not None
             else NoOpd(),
-            DivisiblePadd(keys=["image", "label"], k=64, value=0)
+            DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),  # UNet needs this
-            RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
-            RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
-            RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
-            RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-            # PrintDatad(),
-            EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
-            # ToTensord(keys=("image", "label"), device=cpu_device, track_meta=False),
+            RandFlipd(keys=input_keys, spatial_axis=[0], prob=0.10),
+            RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
+            RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
+            RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
+            AddEmptySignalChannels(keys=input_keys, device=device),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -113,33 +114,34 @@ def get_pre_transforms(labels, device, args):
             InitLoggerd(
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
-            LoadImaged(keys=("image", "label"), reader="ITKReader", image_only=False),
-            EnsureChannelFirstd(keys=("image", "label")),
+            LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
+            EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
-                keys="label", label_names=labels, device=cpu_device
+                keys="label", labels=labels, device=cpu_device
             ),
-            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(
-                keys=["image", "label"], pixdim=spacing
+                keys=input_keys, pixdim=spacing
             ),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
-                keys="label", roi_size=args.val_crop_size, label_names=labels
-            ),
+                keys="label", roi_size=args.val_crop_size
+            ) if "label" in input_keys else NoOpd(),
             CropForegroundd(
-                keys=("image", "label"),
+                keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
             ),
-            CenterSpatialCropd(keys=["image", "label"], roi_size=args.val_crop_size)
+            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else NoOpd(),
             ScaleIntensityRanged(
                 keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
-            DivisiblePadd(keys=["image", "label"], k=64, value=0)
+            DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
-            EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+            AddEmptySignalChannels(keys=input_keys, device=device),
+            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]
     # TODO fix and reenable the part below
@@ -234,19 +236,19 @@ def get_click_transforms(device, args):
         InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-        FindDiscrepancyRegionsDeepEditd(
+        FindDiscrepancyRegions(
             keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device
         ),
-        AddRandomGuidanceDeepEditd(
+        AddGuidance(
             keys="NA",
-            guidance_key="guidance",
+            # guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
         ),
-        AddGuidanceSignalDeepEditd(
+        AddGuidanceSignal(
             keys="image",
-            guidance_key="guidance",
+            # guidance_key="guidance",
             sigma=args.sigma,
             disks=args.disks,
             edt=args.edt,
@@ -277,6 +279,21 @@ def get_post_transforms(labels, device):
         # PrintGPUUsaged(device=device, name="post"),
     ]
     return Compose(t)
+
+def get_val_post_transforms(labels, device):
+    t = [
+        Activationsd(keys="pred", softmax=True),
+        AsDiscreted(
+            keys=("pred"),
+            argmax=(True, False),
+            to_onehot=(len(labels), len(labels)),
+        ),
+        # This transform is to check dice score per segment/label
+        SplitPredsLabeld(keys="pred"),
+        # PrintGPUUsaged(device=device, name="post"),
+    ]
+    return Compose(t)
+
 
 
 def get_loaders(args, pre_transforms_train, pre_transforms_val):
@@ -330,13 +347,13 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         train_datalist, pre_transforms_train, cache_dir=args.cache_dir
     )
     # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
-    train_loader = DataLoader(
+    train_loader = ThreadDataLoader(
         train_ds,
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",  
-        persistent_workers=True,
+        multiprocessing_context="spawn",
+        # persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Training is: {}/{}".format(
@@ -348,12 +365,12 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         val_datalist, pre_transforms_val, cache_dir=args.cache_dir
     )
 
-    val_loader = DataLoader(
+    val_loader = ThreadDataLoader(
         val_ds,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",  
-        persistent_workers=True,
+        multiprocessing_context="spawn",
+        # persistent_workers=True,
     )
     logger.info(
         "{} :: Total Records used for Validation is: {}/{}".format(

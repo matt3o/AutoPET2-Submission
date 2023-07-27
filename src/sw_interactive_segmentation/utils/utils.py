@@ -44,7 +44,7 @@ from sw_interactive_segmentation.utils.transforms import (
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
-AUTPET_SPACING = [2.03642011, 2.03642011, 3.0]
+AUTOPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
@@ -53,7 +53,7 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
 
 
 def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
-    spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
@@ -116,7 +116,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
     return t_train
 
 def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label")):
-    spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
@@ -160,7 +160,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
 
 
 def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image")):
-    spacing = AUTPET_SPCING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
     
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val

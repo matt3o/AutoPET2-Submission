@@ -245,20 +245,22 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
     else:
         batch_data_string += f"Type of batch data: {type(batchdata)}\n"
         for key in batchdata:
-            if type(batchdata[key]) == torch.Tensor:
+            extra_info = ""
+            if key == "pred":
+                extra_info = torch.unique(batchdata[key]).tolist()
+                if len(extra_info) > 20:
+                    extra_info = f"Unique values in pred was way too long: {len(extra_info)}"
+            if type(batchdata[key]) == torch.Tensor or type(batchdata[key]) == MetaTensor:
                 batch_data_string += (
-                    f"- {key}(Tensor) size: {batchdata[key].size()} "
+                    f"- {key}({batchdata[key].__class__.__qualname__}) size: {batchdata[key].size()} "
                     f"size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB "
                     f"device: {batchdata[key].device} "
-                    f"dtype: {batchdata[key].dtype} \n"
+                    f"dtype: {batchdata[key].dtype} "
+                    f"sum: {torch.sum(batchdata[key])} "
+                    f"unique values: {extra_info}"
+                    "\n"
                 )
-            elif type(batchdata[key]) == MetaTensor:
-                batch_data_string += (
-                    f"- {key}(MetaTensor) size: {batchdata[key].size()} "
-                    f"size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB "
-                    f"device: {batchdata[key].device} "
-                    f"dtype: {batchdata[key].dtype} \n"
-                )
+            if type(batchdata[key]) == MetaTensor:
                 batch_data_string += f"  Meta: {batchdata[key].meta}\n" ""
             elif type(batchdata[key]) == dict:
                 batch_data_string += f"- {key}(dict)\n"

@@ -511,6 +511,7 @@ class AddGuidanceSignal(MapTransform):
                 ):
                     # label_guidance = data[label_key]
                     label_guidance = get_guidance_tensor_for_key_label(data, label_key, self.device)
+                    logger.debug(f"Converting guidance for label {label_key}:{label_guidance} into a guidance signal..")
 
                 # for key_label in data["label_names"]:
                     # Getting signal based on guidance
@@ -524,6 +525,7 @@ class AddGuidanceSignal(MapTransform):
                             label_guidance.to(device=self.device),
                             key_label=label_key,
                         )
+                        assert torch.sum(signal) > 0
                     else:
                         # TODO can speed this up here
                         signal = self._get_corrective_signal(
@@ -531,6 +533,7 @@ class AddGuidanceSignal(MapTransform):
                             torch.Tensor([]).to(device=self.device),
                             key_label=label_key,
                         )
+                    
                     assert signal.is_cuda
                     assert tmp_image.is_cuda
                     tmp_image = torch.cat([tmp_image, signal], dim=0)
@@ -588,9 +591,8 @@ class FindDiscrepancyRegions(MapTransform):
         for key in self.key_iterator(data):
             if key == "label":
                 assert (
-                    type(data[key]) == torch.Tensor
-                    and type(data[self.pred_key]) == torch.Tensor
-                ), "{}{}".format(type(data[key]), type(data[self.pred_key]))
+                    (type(data[key]) == torch.Tensor) or (type(data[key]) == MetaTensor)
+                    and (type(data[self.pred_key]) == torch.Tensor or type(data[self.pred_key]) == MetaTensor))
                 all_discrepancies = {}
                 assert data[key].is_cuda and data["pred"].is_cuda
 

@@ -40,6 +40,7 @@ from sw_interactive_segmentation.utils.transforms import (
     SplitPredsLabeld,
     threshold_foreground,
     AddEmptySignalChannels,
+    PrintDatad,
 )
 from monai.data import set_track_meta
 
@@ -51,7 +52,7 @@ MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
 def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
-    return Compose(get_pre_transforms_train_as_list(labels, device, input_keys)), Compose(get_pre_transforms_val_as_list(labels, device, input_keys))
+    return Compose(get_pre_transforms_train_as_list(labels, device, args, input_keys)), Compose(get_pre_transforms_val_as_list(labels, device, args, input_keys))
 
 
 def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
@@ -106,7 +107,8 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
-            AddEmptySignalChannels(keys=input_keys, device=device),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device),
+            PrintDatad(),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -173,26 +175,18 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-            ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
+            #ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", labels=labels, device=cpu_device
             ),
             Orientationd(keys=input_keys, axcodes="RAS"),
-            # Spacingd(
-            #     keys=input_keys, pixdim=spacing
-            # ),  # 2-factor because of the spatial size
-            # CheckTheAmountOfInformationLossByCropd(
-            #     keys="label", roi_size=args.val_crop_size
-            # ) if "label" in input_keys else NoOpd(),
-            # CropForegroundd(
-            #     keys=input_keys,
-            #     source_key="image",
-            #     select_fn=threshold_foreground,
-            # ),
-            # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
-            # if args.val_crop_size is not None
-            # else NoOpd(),
+            Spacingd(
+                keys=input_keys, pixdim=spacing
+            ),  # 2-factor because of the spatial size
+            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
+            if args.val_crop_size is not None
+            else NoOpd(),
             ScaleIntensityRanged(
                 keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
@@ -200,13 +194,13 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             if args.inferer == "SimpleInferer"
             else NoOpd(),
             AddEmptySignalChannels(keys=input_keys, device=device),
-            ToTensord(keys=input_keys, device=device, track_meta=False),
+            EnsureTyped(keys=input_keys, device=device, data_type='tensor'),
             AddGuidanceSignal(
                 keys=input_keys,
                 sigma=1,
                 disks=True,
                 device=device,
-            )
+            ),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]
@@ -298,7 +292,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
 
 
 def get_click_transforms(device, args):
-    spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     t = [
         InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
@@ -421,7 +415,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",
+        #multiprocessing_context="spawn",
         # persistent_workers=True,
     )
     logger.info(
@@ -438,7 +432,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         val_ds,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",
+        #multiprocessing_context="spawn",
         # persistent_workers=True,
     )
     logger.info(

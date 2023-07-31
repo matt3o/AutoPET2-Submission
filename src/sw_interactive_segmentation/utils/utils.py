@@ -108,7 +108,6 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device),
-            PrintDatad(),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -180,6 +179,17 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             NormalizeLabelsInDatasetd(
                 keys="label", labels=labels, device=cpu_device
             ),
+            ScaleIntensityRanged(
+                keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
+            ),  # 0.05 and 99.95 percentiles of the spleen HUs
+            EnsureTyped(keys=input_keys, device=device, data_type='tensor'),
+            AddEmptySignalChannels(keys=input_keys, device=device),
+            AddGuidanceSignal(
+                keys=input_keys,
+                sigma=1,
+                disks=True,
+                device=device,
+            ),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(
                 keys=input_keys, pixdim=spacing
@@ -187,20 +197,9 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else NoOpd(),
-            ScaleIntensityRanged(
-                keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
-            ),  # 0.05 and 99.95 percentiles of the spleen HUs
             DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
             else NoOpd(),
-            AddEmptySignalChannels(keys=input_keys, device=device),
-            EnsureTyped(keys=input_keys, device=device, data_type='tensor'),
-            AddGuidanceSignal(
-                keys=input_keys,
-                sigma=1,
-                disks=True,
-                device=device,
-            ),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]

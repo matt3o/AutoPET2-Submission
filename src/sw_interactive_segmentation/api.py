@@ -102,6 +102,7 @@ def get_inferers(
     val_crop_size,
     train_sw_batch_size,
     val_sw_batch_size,
+    cache_roi_weight_map: bool=True,
 ):
     if inferer == "SimpleInferer":
         train_inferer = SimpleInferer()
@@ -146,13 +147,13 @@ def get_inferers(
             roi_size=sw_roi_size,
             sw_batch_size=train_batch_size,
             mode="gaussian",
-            cache_roi_weight_map=True,
+            cache_roi_weight_map=cache_roi_weight_map,
         )
         eval_inferer = SlidingWindowInferer(
             roi_size=sw_roi_size,
             sw_batch_size=val_batch_size,
             mode="gaussian",
-            cache_roi_weight_map=True,
+            cache_roi_weight_map=cache_roi_weight_map,
         )
     return train_inferer, eval_inferer
 

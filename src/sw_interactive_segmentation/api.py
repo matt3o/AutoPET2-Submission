@@ -37,7 +37,9 @@ from sw_interactive_segmentation.utils.utils import (
     get_post_transforms,
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
+    get_validation_loader,
 )
+from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
@@ -412,6 +414,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
             post_transform=post_transform,
             click_generation_strategy=args.train_click_generation,
             stopping_criterion=args.train_click_generation_stopping_criterion,
+            iteration_probability=args.iteration_probability,
+            loss_stopping_threshold=args.loss_stopping_threshold
         ),
         optimizer=optimizer,
         loss_function=loss_function,
@@ -470,6 +474,39 @@ def get_save_dict(trainer, network, optimizer, lr_scheduler):
     }
     return save_dict
 
+# def get_tester(args) -> List[SupervisedValidator, List]:
+#     init(args)
+#     test_loader = get_test_loader(args)
+
+#     key_test_metric = get_key_val_metrics()
+
+#     tester = SupervisedTester(
+#         # device=device,
+#         val_data_loader=test_loader,
+#         # network=network,
+#         # iteration_update=Interaction(
+#         #     deepgrow_probability=args.deepgrow_probability_val,
+#         #     transforms=click_transforms,
+#         #     train=False,
+#         #     label_names=args.labels,
+#         #     max_interactions=args.max_val_interactions,
+#         #     args=args,
+#         #     loss_function=loss_function,
+#         #     post_transform=post_transform,
+#         #     click_generation_strategy=args.val_click_generation,
+#         #     stopping_criterion=args.val_click_generation_stopping_criterion,
+#         # ),
+#         # inferer=inferer,
+#         # postprocessing=post_transform,
+#         # amp=args.amp,
+#         key_val_metric=key_test_metric,
+#         val_handlers=get_val_handlers(
+#             sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size
+#         ),
+#     )
+
+#     return tester, key_test_metric
+
 
 @run_once
 def init(args):
@@ -479,8 +516,8 @@ def init(args):
 
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):
-        mempool = cp.get_default_memory_pool()
-        mempool.set_limit(size=14 * 1024**3)
+        # mempool = cp.get_default_memory_pool()
+        # mempool.set_limit(size=10 * 1024**3)
         cp.random.seed(seed=args.seed)
 
 

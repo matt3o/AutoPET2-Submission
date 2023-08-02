@@ -18,7 +18,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
-    parser.add_argument("-i", "--input", default="/cvhci/data/AutoPET/AutoPET/")
+    parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-o", "--output", default="/cvhci/temp/mhadlich/output")
     parser.add_argument("-d", "--data", default="None")
     # a subdirectory is created below cache_dir for every run
@@ -121,6 +121,9 @@ def parse_args():
         default=1,
         choices=[1, 2, 3, 4, 5],
     )
+    # only needed for training 
+    parser.add_argument("--train_loss_stopping_threshold", type=float, default=0.1)
+    parser.add_argument("--train_iteration_probability", type=float, default=0.5)
 
     # Set up additional information concerning the environment and the way the script was called
     args = parser.parse_args()

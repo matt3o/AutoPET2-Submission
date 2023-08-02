@@ -57,7 +57,7 @@ from monai.handlers import write_metrics_reports
 logger = None
 
 
-def compute(args):
+def run(args):
     device = torch.device(f"cuda:{args.gpu}")
     torch.cuda.set_device(device)
 
@@ -103,7 +103,7 @@ def parse_args():
     parser.add_argument("-p", "--predictions_dir", default="None")
     parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
 
-    parser.add_argument("-s", "--seed", type=int, default=36)
+    # parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)
 
     args = parser.parse_args()
@@ -133,6 +133,9 @@ def main():
 
     args = parse_args()
     # args, logger = setup_environment_and_adapt_args(args)
+
+    if not os.path.exists(args.output_dir):
+        pathlib.Path(args.output_dir).mkdir(parents=True)
 
     run(args)
 

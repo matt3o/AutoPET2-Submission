@@ -116,11 +116,7 @@ def run(args):
                     logger.critical(
                         get_gpu_usage(device, used_memory_only=False, context="ERROR")
                     )
-
                 finally:
-                    logger.info(
-                        get_gpu_usage(device, used_memory_only=False, context="ERROR")
-                    )
                     logger.info(
                         "Total Training Time {}".format(time.time() - start_time)
                     )

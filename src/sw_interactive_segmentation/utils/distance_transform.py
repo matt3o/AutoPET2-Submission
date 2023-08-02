@@ -73,9 +73,9 @@ def get_distance_transform(
     special_case = False
     if torch.equal(tensor, torch.ones_like(tensor, device=device)):
         # special case of the distance, this code shall behave like distance_transform_cdt from scipy
-        # which means it will return a vector full of -1s in this case
+        # which means it will return a vector full of 1s in this case
         # Otherwise there is a corner case where if all items in label are 1, the distance will become inf..
-        distance = torch.ones_like(tensor, device=device)  # * -1
+        distance = torch.ones_like(tensor, device=device)
         special_case = True
     else:
         with cp.cuda.Device(device.index):
@@ -105,7 +105,7 @@ def get_choice_from_distance_transform_cp(
 
     with cp.cuda.Device(device.index):
         if max_threshold is None:
-            # divide by the maximum number of elements in a volume
+            # divide by the maximum number of elements in a volume, otherwise we will get integer overflows..
             max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (
                 800 * 800 * 800
             )

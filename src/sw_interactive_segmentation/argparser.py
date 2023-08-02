@@ -73,6 +73,7 @@ def parse_args():
         default="MultiStepLR",
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
+    parser.add_argument("--loss_dont_include_background", default=False, action="store_true")
     parser.add_argument("--resume_from", type=str, default="None")
 
     # Logging

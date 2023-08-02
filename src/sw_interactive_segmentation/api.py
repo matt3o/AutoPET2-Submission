@@ -89,6 +89,20 @@ def get_network(network_str: str, labels: Iterable):
             deep_supervision=False,
             res_block=True,
         )
+    elif network_str == "bigdynunet":
+        network = DynUNet(
+            spatial_dims=3,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3, 3, 3, 3, 3, 3],
+            strides=[1, 2, 2, 2, 2, 2, 2, [2, 2, 1]],
+            upsample_kernel_size=[2, 2, 2, 2, 2, 2, [2, 2, 1]],
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,        
+    )
+
     logger.info(f"Selected network {network_str.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
 
@@ -256,8 +270,8 @@ def get_train_handlers(
     return train_handlers
 
 
-def get_key_val_metrics():
-    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
+def get_key_val_metrics(include_background=False):
+    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True, include_background=include_background)
     metric_fn = LossMetric(
         loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
     )
@@ -283,8 +297,8 @@ def get_key_val_metrics():
     return all_val_metrics
 
 
-def get_key_train_metrics():
-    all_train_metrics = get_key_val_metrics()
+def get_key_train_metrics(include_background=False):
+    all_train_metrics = get_key_val_metrics(include_background=include_background)
     all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
     all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop(
         "val_mean_dice_ce_loss"
@@ -375,8 +389,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     loss_function = get_loss_function()
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    train_metrics = get_key_train_metrics()
-    val_metrics = get_key_val_metrics()
+    train_metrics = get_key_train_metrics(include_background=args.loss_dont_include_background)
+    val_metrics = get_key_val_metrics(include_background=args.loss_dont_include_background)
 
     evaluator = get_evaluator(
         args,

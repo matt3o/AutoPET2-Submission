@@ -37,9 +37,9 @@ from sw_interactive_segmentation.utils.utils import (
     get_post_transforms,
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
-    get_validation_loader,
+    #    get_validation_loader,
 )
-from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
+#from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None

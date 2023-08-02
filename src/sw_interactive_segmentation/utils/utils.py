@@ -8,7 +8,7 @@ from typing import Dict
 import torch
 from monai.data import ThreadDataLoader, partition_dataset
 from monai.data.dataloader import DataLoader
-from monai.data.dataset import PersistentDataset
+from monai.data.dataset import PersistentDataset, Dataset
 from monai.transforms import (  # RandShiftIntensityd,; Resized,
     Activationsd,
     AsDiscreted,
@@ -484,5 +484,19 @@ def get_test_loader(args, file_glob="*.nii.gz"):
         ] 
         test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
 
-    return test_datalist
+    test_ds = Dataset(
+        test_datalist, []
+    )
+    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
+    test_loader = ThreadDataLoader(
+        test_ds,
+        # shuffle=True,
+        num_workers=args.num_workers,
+        batch_size=1,
+        #multiprocessing_context="spawn",
+        # persistent_workers=True,
+    )
+
+
+    return test_loader
 

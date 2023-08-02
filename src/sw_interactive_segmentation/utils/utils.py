@@ -483,6 +483,7 @@ def get_test_loader(args, file_glob="*.nii.gz"):
             for image_name, label_name, pred_name in zip(test_images, test_labels, test_predictions)
         ] 
         test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
+        total_l = len(test_datalist)
 
     test_ds = Dataset(
         test_datalist, []
@@ -497,6 +498,11 @@ def get_test_loader(args, file_glob="*.nii.gz"):
         # persistent_workers=True,
     )
 
+    logger.info(
+        "{} :: Total Records used for Dataloader is: {}/{}".format(
+            args.gpu, len(test_ds), total_l
+        )
+    )
 
     return test_loader
 

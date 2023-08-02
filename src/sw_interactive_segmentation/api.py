@@ -415,8 +415,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
             post_transform=post_transform,
             click_generation_strategy=args.train_click_generation,
             stopping_criterion=args.train_click_generation_stopping_criterion,
-            iteration_probability=args.iteration_probability,
-            loss_stopping_threshold=args.loss_stopping_threshold
+            iteration_probability=args.train_iteration_probability,
+            loss_stopping_threshold=args.train_loss_stopping_threshold
         ),
         optimizer=optimizer,
         loss_function=loss_function,

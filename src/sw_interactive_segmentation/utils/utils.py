@@ -43,6 +43,7 @@ from sw_interactive_segmentation.utils.transforms import (
     PrintDatad,
 )
 from monai.data import set_track_meta
+from monai.utils.enums import CommonKeys
 
 
 logger = logging.getLogger("sw_interactive_segmentation")
@@ -359,15 +360,17 @@ def get_val_post_transforms(labels, device):
 def get_loaders(args, pre_transforms_train, pre_transforms_val):
     # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..
     set_track_meta(True)
-    all_images = sorted(glob.glob(os.path.join(args.input, "imagesTr", "*.nii.gz")))
-    all_labels = sorted(glob.glob(os.path.join(args.input, "labelsTr", "*.nii.gz")))
+    # I WARNED YOU..
+
+    all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
+    all_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
 
     if args.dataset == "AutoPET":
         test_images = sorted(
-            glob.glob(os.path.join(args.input, "imagesTs", "*.nii.gz"))
+            glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz"))
         )
         test_labels = sorted(
-            glob.glob(os.path.join(args.input, "labelsTs", "*.nii.gz"))
+            glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz"))
         )
 
         # TODO try if this impacts training?!?
@@ -388,7 +391,6 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
             train_datalist[0 : args.limit] if args.limit else train_datalist
         )
         val_datalist = val_datalist[0 : args.limit] if args.limit else val_datalist
-
     else:  # MSD_Spleen
         datalist = [
             {"image": image_name, "label": label_name}
@@ -441,3 +443,44 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
 
     return train_loader, val_loader
+
+def get_test_loader(args, file_glob="*.nii.gz"):
+    input_dir = args.input_dir
+    # image_dir = args.input_dir
+    labels_dir = args.labels_dir
+    predictions_dir = args.predictions_dir
+
+    if args.dataset == "AutoPET":
+        image_glob = os.path.join(input_dir, "imagesTs", file_glob)
+        if labels_dir == "None":
+            labels_glob = os.path.join(input_dir, "labelsTs", file_glob)
+        else:
+            labels_glob = os.path.join(labels_dir, file_glob)
+        if predictions_dir == "None":
+            predictions_glob = os.path.join(input_dir, "imagesTs", "labels", "final", file_glob)
+        else:
+            predictions_glob = os.path.join(predictions_dir, file_glob)
+
+    else:
+        raise NotImplementedError
+
+    if args.dataset == "AutoPET":
+        test_images = sorted(
+            glob.glob(image_glob)
+        )
+        test_labels = sorted(
+            glob.glob(labels_glob)
+        )
+        test_predictions = sorted(
+            glob.glob(predictions_glob)
+        )
+        assert len(test_images[:args.limit]) == len(test_labels[:args.limit]) == len(test_predictions[:args.limit])
+
+        test_datalist = [
+            {CommonKeys.IMAGE: image_name, CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
+            for image_name, label_name, pred_name in zip(test_images, test_labels, test_predictions)
+        ] 
+        test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
+
+    return test_datalist
+

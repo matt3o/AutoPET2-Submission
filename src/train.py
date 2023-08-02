@@ -47,8 +47,8 @@ def run(args):
     print("")
     device = torch.device(f"cuda:{args.gpu}")
 
-    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", f"{args.output}/usage.csv", device)
-    logger.info(f"Logging GPU usage to {args.output}/usage.csv")
+    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", os.path.join(args.output_dir, "usage.csv"), device)
+    logger.info(f"Logging GPU usage to {args.output_dir}/usage.csv")
 
     try:
         wp = WorkflowProfiler()
@@ -61,7 +61,7 @@ def run(args):
             all_train_metrics,
             all_val_metrics,
             network=trainer.network,
-            output_dir=args.output,
+            output_dir=args.output_dir,
         )
 
         gpu_thread.start()
@@ -127,7 +127,7 @@ def run(args):
             # torch.save(
             #     trainer.network.state_dict(),
             #     os.path.join(
-            #         args.output, "pretrained_deepedit_" + args.network + "-final.pt"
+            #         args.output_dir, "pretrained_deepedit_" + args.network + "-final.pt"
             #     ),
             # )
 
@@ -136,7 +136,7 @@ def run(args):
             # torch.jit.save(
             #     model_ts,
             #     os.path.join(
-            #         args.output, "pretrained_deepedit_" + args.network + "-final.ts"
+            #         args.output_dir, "pretrained_deepedit_" + args.network + "-final.ts"
             #     ),
             # )
     finally:

@@ -227,7 +227,7 @@ class InitLoggerd(MapTransform):
         if args.debug:
             self.loglevel = logging.DEBUG
 
-        self.log_file_folder = args.output
+        self.log_file_folder = args.output_dir
         if args.no_log:
             self.log_file_folder = None
         setup_loggers(self.loglevel, self.log_file_folder)

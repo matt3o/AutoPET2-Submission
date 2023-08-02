@@ -428,7 +428,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
 
     save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
     CheckpointSaver(
-        save_dir=args.output,
+        save_dir=args.output_dir,
         save_dict=save_dict,
         save_interval=args.save_interval,
         save_final=True,
@@ -436,7 +436,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         n_saved=2,
     ).attach(trainer)
     CheckpointSaver(
-        save_dir=args.output,
+        save_dir=args.output_dir,
         save_dict=save_dict,
         save_key_metric=True,
         save_final=True,
@@ -512,7 +512,7 @@ def get_save_dict(trainer, network, optimizer, lr_scheduler):
 def init(args):
     global output_dir
     # for OOM debugging
-    output_dir = args.output
+    output_dir = args.output_dir
 
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):

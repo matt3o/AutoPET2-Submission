@@ -367,7 +367,7 @@ class TerminationHandler:
         self.gpu_thread.join()
 
     def cleanup(self):
-        logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
+        logger.info(f"#### LOGGED ALL DATA TO {self.args.output_dir} ############")
         # Cleanup
         if self.args.throw_away_cache:
             logger.info(f"Cleaning up the cache dir {self.args.cache_dir}")

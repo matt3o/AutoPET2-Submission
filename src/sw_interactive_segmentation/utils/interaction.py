@@ -284,16 +284,16 @@ class Interaction:
         )  # train network with the final iteration cycle
 
     def debug_viz(self, inputs, labels, preds, j):
-        self.save_nifti(f"{self.args.data}/im", inputs[0, 0].cpu().detach().numpy())
+        self.save_nifti(f"{self.args.data_dir}/im", inputs[0, 0].cpu().detach().numpy())
         self.save_nifti(
-            f"{self.args.data}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy()
+            f"{self.args.data_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy()
         )
         self.save_nifti(
-            f"{self.args.data}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy()
+            f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy()
         )
-        self.save_nifti(f"{self.args.data}/labels", labels[0, 0].cpu().detach().numpy())
+        self.save_nifti(f"{self.args.data_dir}/labels", labels[0, 0].cpu().detach().numpy())
         self.save_nifti(
-            f"{self.args.data}/pred_{j}", preds[0, 1].cpu().detach().numpy()
+            f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy()
         )
         if j == self.max_interactions:
             exit()

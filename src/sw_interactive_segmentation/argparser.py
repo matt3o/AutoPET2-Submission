@@ -19,8 +19,8 @@ def parse_args():
 
     # Data
     parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
-    parser.add_argument("-o", "--output", default="/cvhci/temp/mhadlich/output")
-    parser.add_argument("-d", "--data", default="None")
+    parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
+    parser.add_argument("-d", "--data_dir", default="None")
     # a subdirectory is created below cache_dir for every run
     parser.add_argument(
         "-c", "--cache_dir", type=str, default="/cvhci/temp/mhadlich/cache"
@@ -137,15 +137,21 @@ def setup_environment_and_adapt_args(args):
 
     device = torch.device(f"cuda:{args.gpu}")
 
+    # Aliases for backward compatibility
+    # TODO: Remove
+    args.output = args.output_dir
+    args.input = args.input_dir
+    args.data = args.data_dir
+
     # For single label using one of the Medical Segmentation Decathlon
     args.labels = {"spleen": 1, "background": 0}
 
-    if not args.dont_check_output_dir and os.path.isdir(args.output):
+    if not args.dont_check_output_dir and os.path.isdir(args.output_dir):
         raise UserWarning(
-            f"output path {args.output} already exists. Please choose another path.."
+            f"output path {args.output_dir} already exists. Please choose another path.."
         )
-    if not os.path.exists(args.output):
-        pathlib.Path(args.output).mkdir(parents=True)
+    if not os.path.exists(args.output_dir):
+        pathlib.Path(args.output_dir).mkdir(parents=True)
 
     if args.debug:
         loglevel = logging.DEBUG
@@ -154,7 +160,7 @@ def setup_environment_and_adapt_args(args):
     if args.no_log:
         log_folder_path = None
     else:
-        log_folder_path = args.output
+        log_folder_path = args.output_dir
     setup_loggers(loglevel, log_folder_path)
     logger = get_logger()
 
@@ -170,12 +176,12 @@ def setup_environment_and_adapt_args(args):
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)
 
-    if args.data == "None":
-        args.data = f"{args.output}/data"
-        logger.info(f"--data was None, so that {args.data} was selected instead")
+    if args.data_dir == "None":
+        args.data_dir = f"{args.output_dir}/data"
+        logger.info(f"--data was None, so that {args.data_dir} was selected instead")
 
-    if not os.path.exists(args.data):
-        pathlib.Path(args.data).mkdir(parents=True)
+    if not os.path.exists(args.data_dir):
+        pathlib.Path(args.data_dir).mkdir(parents=True)
 
     # Training only, so done on the patch of size train_crop_size
     train_click_generation_mapping = {

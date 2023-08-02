@@ -168,7 +168,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
     
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset == "AutoPET":
-        t_val = [
+        t_val_1 = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(
                 args
@@ -183,6 +183,8 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
                 keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
             EnsureTyped(keys=input_keys, device=device, data_type='tensor'),
+        ]
+        t_val_2 = [
             AddEmptySignalChannels(keys=input_keys, device=device),
             AddGuidanceSignal(
                 keys=input_keys,
@@ -203,7 +205,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]
-    return t_val
+    return t_val_1, t_val_2
 
     # TODO fix and reenable the part below
     # else:  # MSD Spleen

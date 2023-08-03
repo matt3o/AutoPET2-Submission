@@ -29,6 +29,8 @@ from pynvml import (
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
+gb_divisor = (1024**3)
+memory_unit = "GB"
 
 def get_actual_cuda_index_of_device(device: torch.device):
     try:
@@ -39,6 +41,7 @@ def get_actual_cuda_index_of_device(device: torch.device):
 
 
 def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
+    
     # empty the cache first
     shutdown = False
     cuda_index = get_actual_cuda_index_of_device(device)
@@ -53,19 +56,20 @@ def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
         info = nvmlDeviceGetMemoryInfo(h)
         util = nvmlDeviceGetUtilizationRates(h)
         nv_total, nv_free, nv_used = (
-            info.total / (1024**2),
-            info.free / (1024**2),
-            info.used / (1024**2),
+            info.total / gb_divisor,
+            info.free / gb_divisor,
+            info.used / gb_divisor,
         )
         # utilization = torch.cuda.utilization(device)
         util_gpu = util.gpu / 100
         util_memory = util.memory / 100
 
-        torch_reserved = torch.cuda.memory_reserved(device) / (1024**2)
+        torch_reserved = torch.cuda.memory_reserved(device) / gb_divisor
 
         with cp.cuda.Device(device.index):
             mempool = cp.get_default_memory_pool()
-            cupy_usage = mempool.used_bytes() / 1024**2
+            cupy_total = mempool.total_bytes() / gb_divisor
+            cupy_used = mempool.used_bytes() / gb_divisor
     except NVMLError:
         return []
     finally:
@@ -81,7 +85,8 @@ def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
             nv_free,
             nv_used,
             torch_reserved,
-            cupy_usage,
+            cupy_total,
+            cupy_used
         )
     else:
         return nv_used
@@ -105,7 +110,7 @@ def gpu_usage_per_process(device: torch.device, nvml_handle=None) -> List:
                 (
                     cuda_index,
                     psutil.Process(proc.pid).name(),
-                    proc.usedGpuMemory / (1024**2),
+                    proc.usedGpuMemory / gb_divisor,
                 )
             )
         if shutdown:
@@ -134,7 +139,8 @@ def get_gpu_usage(
         nv_free,
         nv_used,
         torch_reserved,
-        cupy_usage,
+        cupy_total,
+        cupy_used
     ) = gpu_usage(device=device, nvml_handle=nvml_handle)
     usage = ""
 
@@ -143,10 +149,10 @@ def get_gpu_usage(
 
     if csv_format:
         header = (
-            "device,context,time,gpu util (%),memory util (%),total memory (MB),"
-            "free memory (MB),used memory (MB),memory reserved by torch (MB),cupy memory (MB)"
-        )
-        usage += "{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}".format(
+            "device,context,time,gpu util (%),memory util (%),total memory ({0}),"
+            "free memory ({0}),used memory ({0}),memory reserved by torch ({0}),cupy total ({0}),cupy used ({0})"
+        ).format(memory_unit)
+        usage += "{},{},{},{:.2f},{:.2f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f},{:.0f}".format(
             cuda_index,
             context,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -156,37 +162,41 @@ def get_gpu_usage(
             nv_free,
             nv_used,
             torch_reserved,
-            cupy_usage,
+            cupy_total,
+            cupy_used,
         )
         return (header, usage)
     else:
         if used_memory_only:
-            usage += "{} Device: {} --- used:  {:.0f} MB".format(
-                context, cuda_index, nv_used
+            usage += "{} Device: {} --- used:  {:.0f} {}".format(
+                context, cuda_index, nv_used, memory_unit
             )
         else:
             usage += "\ndevice: {} context: {}\ngpu util (%):{:.2f} memory util (%): {:.2f}\n".format(
                 cuda_index, context, util_gpu, util_memory
             )
             usage += (
-                "total memory (MB): {:.0f} free memory (MB): {:.0f} used memory (MB): {:.0f}"
-                "memory reserved by torch (MB): {:.0f} cupy memory (MB): {:.0f}\n"
-            ).format(nv_total, nv_free, nv_used, torch_reserved, cupy_usage)
+                "total memory ({0}): {1:.0f} free memory ({0}): {2:.0f} used memory ({0}): {3:.0f}"
+                "memory reserved by torch ({0}): {4:.0f} cupy total ({0}): {5:.0f}\n"
+            ).format(memory_unit, nv_total, nv_free, nv_used, torch_reserved, cupy_total)
     return usage
 
 
-def print_gpu_usage(*args, **kwargs):
-    logger.info(get_gpu_usage(*args, **kwargs))
+# def print_gpu_usage(*args, **kwargs):
+#     logger.info(get_gpu_usage(*args, **kwargs))
 
 
-def print_gpu_usage_per_process(*args, **kwargs):
-    logger.info(gpu_usage_per_process(*args, **kwargs))
+# def print_gpu_usage_per_process(*args, **kwargs):
+#     logger.info(gpu_usage_per_process(*args, **kwargs))
 
 
 def print_tensor_gpu_usage(a: torch.Tensor):
-    logger.info(
-        "Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2))
-    )
+    if a.cuda:
+        logger.info(
+            "Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2))
+        )
+    else:
+        logger.info("Tensor is not on the GPU.")
 
 
 def print_all_tensor_gpu_memory_usage():
@@ -245,20 +255,22 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
     else:
         batch_data_string += f"Type of batch data: {type(batchdata)}\n"
         for key in batchdata:
-            if type(batchdata[key]) == torch.Tensor:
+            extra_info = ""
+            if key == "pred":
+                extra_info = torch.unique(batchdata[key]).tolist()
+                if len(extra_info) > 20:
+                    extra_info = f"Unique values in pred was way too long: {len(extra_info)}"
+            if type(batchdata[key]) == torch.Tensor or type(batchdata[key]) == MetaTensor:
                 batch_data_string += (
-                    f"- {key}(Tensor) size: {batchdata[key].size()} "
+                    f"- {key}({batchdata[key].__class__.__qualname__}) size: {batchdata[key].size()} "
                     f"size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB "
                     f"device: {batchdata[key].device} "
-                    f"dtype: {batchdata[key].dtype} \n"
+                    f"dtype: {batchdata[key].dtype} "
+                    f"sum: {torch.sum(batchdata[key])} "
+                    f"unique values: {extra_info}"
+                    "\n"
                 )
-            elif type(batchdata[key]) == MetaTensor:
-                batch_data_string += (
-                    f"- {key}(MetaTensor) size: {batchdata[key].size()} "
-                    f"size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB "
-                    f"device: {batchdata[key].device} "
-                    f"dtype: {batchdata[key].dtype} \n"
-                )
+            if type(batchdata[key]) == MetaTensor:
                 batch_data_string += f"  Meta: {batchdata[key].meta}\n" ""
             elif type(batchdata[key]) == dict:
                 batch_data_string += f"- {key}(dict)\n"
@@ -355,7 +367,7 @@ class TerminationHandler:
         self.gpu_thread.join()
 
     def cleanup(self):
-        logger.info(f"#### LOGGED ALL DATA TO {self.args.output} ############")
+        logger.info(f"#### LOGGED ALL DATA TO {self.args.output_dir} ############")
         # Cleanup
         if self.args.throw_away_cache:
             logger.info(f"Cleaning up the cache dir {self.args.cache_dir}")

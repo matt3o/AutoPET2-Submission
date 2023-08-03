@@ -8,7 +8,7 @@ from typing import Dict
 import torch
 from monai.data import ThreadDataLoader, partition_dataset
 from monai.data.dataloader import DataLoader
-from monai.data.dataset import PersistentDataset
+from monai.data.dataset import PersistentDataset, Dataset
 from monai.transforms import (  # RandShiftIntensityd,; Resized,
     Activationsd,
     AsDiscreted,
@@ -26,6 +26,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     ScaleIntensityRanged,
     Spacingd,
     ToTensord,
+    ToDeviced,
 )
 
 from sw_interactive_segmentation.utils.transforms import (
@@ -40,8 +41,10 @@ from sw_interactive_segmentation.utils.transforms import (
     SplitPredsLabeld,
     threshold_foreground,
     AddEmptySignalChannels,
+    PrintDatad,
 )
 from monai.data import set_track_meta
+from monai.utils.enums import CommonKeys
 
 
 logger = logging.getLogger("sw_interactive_segmentation")
@@ -51,7 +54,7 @@ MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 
 
 def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
-    return Compose(get_pre_transforms_train_as_list(labels, device, input_keys)), Compose(get_pre_transforms_val_as_list(labels, device, input_keys))
+    return Compose(get_pre_transforms_train_as_list(labels, device, args, input_keys)), Compose(get_pre_transforms_val_as_list(labels, device, args, input_keys))
 
 
 def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
@@ -106,7 +109,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
-            AddEmptySignalChannels(keys=input_keys, device=device),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -167,50 +170,44 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
     
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset == "AutoPET":
-        t_val = [
+        t_val_1 = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(
                 args
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-            ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
+            #ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(
                 keys="label", labels=labels, device=cpu_device
             ),
-            Orientationd(keys=input_keys, axcodes="RAS"),
-            # Spacingd(
-            #     keys=input_keys, pixdim=spacing
-            # ),  # 2-factor because of the spatial size
-            # CheckTheAmountOfInformationLossByCropd(
-            #     keys="label", roi_size=args.val_crop_size
-            # ) if "label" in input_keys else NoOpd(),
-            # CropForegroundd(
-            #     keys=input_keys,
-            #     source_key="image",
-            #     select_fn=threshold_foreground,
-            # ),
-            # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
-            # if args.val_crop_size is not None
-            # else NoOpd(),
             ScaleIntensityRanged(
                 keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
-            DivisiblePadd(keys=input_keys, k=64, value=0)
-            if args.inferer == "SimpleInferer"
-            else NoOpd(),
+            EnsureTyped(keys=input_keys, device=device, data_type='tensor'),
+        ]
+        t_val_2 = [
             AddEmptySignalChannels(keys=input_keys, device=device),
-            ToTensord(keys=input_keys, device=device, track_meta=False),
             AddGuidanceSignal(
                 keys=input_keys,
                 sigma=1,
                 disks=True,
                 device=device,
-            )
+            ),
+            Orientationd(keys=input_keys, axcodes="RAS"),
+            Spacingd(
+                keys=input_keys, pixdim=spacing
+            ),  # 2-factor because of the spatial size
+            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
+            if args.val_crop_size is not None
+            else NoOpd(),
+            DivisiblePadd(keys=input_keys, k=64, value=0)
+            if args.inferer == "SimpleInferer"
+            else NoOpd(),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
             # PrintGPUUsaged(device=device, name="pre"),
         ]
-    return t_val
+    return t_val_1, t_val_2
 
     # TODO fix and reenable the part below
     # else:  # MSD Spleen
@@ -298,7 +295,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
 
 
 def get_click_transforms(device, args):
-    spacing = AUTPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     t = [
         InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
@@ -366,15 +363,17 @@ def get_val_post_transforms(labels, device):
 def get_loaders(args, pre_transforms_train, pre_transforms_val):
     # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..
     set_track_meta(True)
-    all_images = sorted(glob.glob(os.path.join(args.input, "imagesTr", "*.nii.gz")))
-    all_labels = sorted(glob.glob(os.path.join(args.input, "labelsTr", "*.nii.gz")))
+    # I WARNED YOU..
+
+    all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
+    all_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
 
     if args.dataset == "AutoPET":
         test_images = sorted(
-            glob.glob(os.path.join(args.input, "imagesTs", "*.nii.gz"))
+            glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz"))
         )
         test_labels = sorted(
-            glob.glob(os.path.join(args.input, "labelsTs", "*.nii.gz"))
+            glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz"))
         )
 
         # TODO try if this impacts training?!?
@@ -395,7 +394,6 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
             train_datalist[0 : args.limit] if args.limit else train_datalist
         )
         val_datalist = val_datalist[0 : args.limit] if args.limit else val_datalist
-
     else:  # MSD_Spleen
         datalist = [
             {"image": image_name, "label": label_name}
@@ -421,7 +419,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",
+        #multiprocessing_context="spawn",
         # persistent_workers=True,
     )
     logger.info(
@@ -438,7 +436,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         val_ds,
         num_workers=args.num_workers,
         batch_size=1,
-        multiprocessing_context="spawn",
+        #multiprocessing_context="spawn",
         # persistent_workers=True,
     )
     logger.info(
@@ -448,3 +446,82 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
 
     return train_loader, val_loader
+
+def get_test_loader(args, file_glob="*.nii.gz"):
+    #input_dir = args.input_dir
+    # image_dir = args.input_dir
+    labels_dir = args.labels_dir
+    predictions_dir = args.predictions_dir
+
+    if args.dataset == "AutoPET":
+        #image_glob = os.path.join(input_dir, "imagesTs", file_glob)
+        if labels_dir == "None":
+            labels_glob = os.path.join(input_dir, "labelsTs", file_glob)
+        else:
+            labels_glob = os.path.join(labels_dir, file_glob)
+        if predictions_dir == "None":
+            predictions_glob = os.path.join(input_dir, "imagesTs", "labels", "final", file_glob)
+        else:
+            predictions_glob = os.path.join(predictions_dir, file_glob)
+
+    else:
+        raise NotImplementedError
+
+    if args.dataset == "AutoPET":
+        #test_images = sorted(
+        #    glob.glob(image_glob)
+        #)
+        test_labels = sorted(
+            glob.glob(labels_glob)
+        )
+        test_predictions = sorted(
+            glob.glob(predictions_glob)
+        )
+
+        test_datalist = [
+            {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
+            for label_name, pred_name in zip(test_labels, test_predictions)
+        ]
+        test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
+        total_l = len(test_datalist)
+        assert total_l > 0
+
+#    test_ds = Dataset(
+#        test_datalist, get_test_transforms(device=args.device),
+#    )
+#    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
+#    test_loader = DataLoader(
+#        test_ds,
+#        # shuffle=True,
+#        num_workers=args.num_workers,
+#        batch_size=1,
+#        multiprocessing_context="spawn",
+#        # persistent_workers=True,
+#    )
+
+    logger.info(
+        "{} :: Total Records used for Dataloader is: {}".format(
+            args.gpu, total_l
+        )
+    )
+
+    return test_datalist
+
+def get_test_transforms(device, labels):
+    t = [
+        LoadImaged(
+            keys=["pred", "label"], 
+            reader="ITKReader",
+            image_only=True,
+        ),
+        ToDeviced(keys=["pred", "label"], device=device),
+        EnsureChannelFirstd(keys=["pred", "label"]),
+        AsDiscreted(
+            keys=("pred", "label"),
+            argmax=(False, False),
+            to_onehot=(len(labels), len(labels)),
+        ),
+
+    ]
+
+    return Compose(t)

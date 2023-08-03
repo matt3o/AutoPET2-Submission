@@ -37,7 +37,9 @@ from sw_interactive_segmentation.utils.utils import (
     get_post_transforms,
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
+    #    get_validation_loader,
 )
+#from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
@@ -87,6 +89,20 @@ def get_network(network_str: str, labels: Iterable):
             deep_supervision=False,
             res_block=True,
         )
+    elif network_str == "bigdynunet":
+        network = DynUNet(
+            spatial_dims=3,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3, 3, 3, 3, 3, 3],
+            strides=[1, 2, 2, 2, 2, 2, 2, [2, 2, 1]],
+            upsample_kernel_size=[2, 2, 2, 2, 2, 2, [2, 2, 1]],
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,        
+    )
+
     logger.info(f"Selected network {network_str.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
 
@@ -100,6 +116,7 @@ def get_inferers(
     val_crop_size,
     train_sw_batch_size,
     val_sw_batch_size,
+    cache_roi_weight_map: bool=True,
 ):
     if inferer == "SimpleInferer":
         train_inferer = SimpleInferer()
@@ -144,13 +161,13 @@ def get_inferers(
             roi_size=sw_roi_size,
             sw_batch_size=train_batch_size,
             mode="gaussian",
-            cache_roi_weight_map=True,
+            cache_roi_weight_map=cache_roi_weight_map,
         )
         eval_inferer = SlidingWindowInferer(
             roi_size=sw_roi_size,
             sw_batch_size=val_batch_size,
             mode="gaussian",
-            cache_roi_weight_map=True,
+            cache_roi_weight_map=cache_roi_weight_map,
         )
     return train_inferer, eval_inferer
 
@@ -253,8 +270,8 @@ def get_train_handlers(
     return train_handlers
 
 
-def get_key_val_metrics():
-    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True)
+def get_key_val_metrics(include_background=False):
+    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True, include_background=include_background)
     metric_fn = LossMetric(
         loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
     )
@@ -280,8 +297,8 @@ def get_key_val_metrics():
     return all_val_metrics
 
 
-def get_key_train_metrics():
-    all_train_metrics = get_key_val_metrics()
+def get_key_train_metrics(include_background=False):
+    all_train_metrics = get_key_val_metrics(include_background=include_background)
     all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
     all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop(
         "val_mean_dice_ce_loss"
@@ -372,8 +389,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     loss_function = get_loss_function()
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    train_metrics = get_key_train_metrics()
-    val_metrics = get_key_val_metrics()
+    train_metrics = get_key_train_metrics(include_background=args.loss_dont_include_background)
+    val_metrics = get_key_val_metrics(include_background=args.loss_dont_include_background)
 
     evaluator = get_evaluator(
         args,
@@ -412,6 +429,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
             post_transform=post_transform,
             click_generation_strategy=args.train_click_generation,
             stopping_criterion=args.train_click_generation_stopping_criterion,
+            iteration_probability=args.train_iteration_probability,
+            loss_stopping_threshold=args.train_loss_stopping_threshold
         ),
         optimizer=optimizer,
         loss_function=loss_function,
@@ -424,7 +443,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
 
     save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
     CheckpointSaver(
-        save_dir=args.output,
+        save_dir=args.output_dir,
         save_dict=save_dict,
         save_interval=args.save_interval,
         save_final=True,
@@ -432,7 +451,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         n_saved=2,
     ).attach(trainer)
     CheckpointSaver(
-        save_dir=args.output,
+        save_dir=args.output_dir,
         save_dict=save_dict,
         save_key_metric=True,
         save_final=True,
@@ -470,17 +489,50 @@ def get_save_dict(trainer, network, optimizer, lr_scheduler):
     }
     return save_dict
 
+# def get_tester(args) -> List[SupervisedValidator, List]:
+#     init(args)
+#     test_loader = get_test_loader(args)
+
+#     key_test_metric = get_key_val_metrics()
+
+#     tester = SupervisedTester(
+#         # device=device,
+#         val_data_loader=test_loader,
+#         # network=network,
+#         # iteration_update=Interaction(
+#         #     deepgrow_probability=args.deepgrow_probability_val,
+#         #     transforms=click_transforms,
+#         #     train=False,
+#         #     label_names=args.labels,
+#         #     max_interactions=args.max_val_interactions,
+#         #     args=args,
+#         #     loss_function=loss_function,
+#         #     post_transform=post_transform,
+#         #     click_generation_strategy=args.val_click_generation,
+#         #     stopping_criterion=args.val_click_generation_stopping_criterion,
+#         # ),
+#         # inferer=inferer,
+#         # postprocessing=post_transform,
+#         # amp=args.amp,
+#         key_val_metric=key_test_metric,
+#         val_handlers=get_val_handlers(
+#             sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size
+#         ),
+#     )
+
+#     return tester, key_test_metric
+
 
 @run_once
 def init(args):
     global output_dir
     # for OOM debugging
-    output_dir = args.output
+    output_dir = args.output_dir
 
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):
-        mempool = cp.get_default_memory_pool()
-        mempool.set_limit(size=14 * 1024**3)
+        # mempool = cp.get_default_memory_pool()
+        # mempool.set_limit(size=10 * 1024**3)
         cp.random.seed(seed=args.seed)
 
 

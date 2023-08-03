@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import os
 import pathlib
+from pathlib import Path
 import resource
 import sys
 import time
 import argparse
+import logging
 
 import pandas as pd
 import torch
@@ -36,8 +38,7 @@ from sw_interactive_segmentation.utils.helper import (GPU_Thread,
                                                       TerminationHandler,
                                                       get_gpu_usage,
                                                       handle_exception)
-from sw_interactive_segmentation import get_tester
-from sw_interactive_segmentation.utils.utils import get_test_loader
+from sw_interactive_segmentation.utils.utils import get_test_loader, get_test_transforms
 
 from monai.transforms import (
     AsDiscreted,
@@ -51,32 +52,31 @@ from monai.transforms import (
 from monai.metrics import DiceMetric
 from monai.utils import string_list_all_gather
 from monai.handlers import write_metrics_reports
+from monai.data import set_track_meta
 
-# Various settings #
-
-logger = None
+logger = logging.getLogger(__name__)
 
 
 def run(args):
     device = torch.device(f"cuda:{args.gpu}")
+    args.device = device 
     torch.cuda.set_device(device)
 
-    loader = get_test_loader(args)
+    data_list = get_test_loader(args)
+    transforms = get_test_transforms(device=device, labels=args.labels)
+    print(f"There are {len(data_list)} items in the dataloader")
 
-    # define transforms for predictions and labels
-    transforms = Compose(
-        [
-            LoadImaged(keys=["pred", "label"]),
-            ToDeviced(keys=["pred", "label"], device=device),
-            EnsureChannelFirstd(keys=["pred", "label"]),
-        ]
-    )
-    data_part = [transforms(item) for item in loader]
+    assert len(data_list) > 0
 
     # compute metrics for current process
-    metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
-    metric(y_pred=[i["pred"] for i in data_part], y=[i["label"] for i in data_part])
-    filenames = [item["pred_meta_dict"]["filename_or_obj"] for item in data_part]
+    metric = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    filenames = []
+    for i in data_list:
+        pred_file_name = Path(i["pred"]).stem.split('.')[0]
+        batchdata = transforms(i)
+        print(f"{pred_file_name}:: pred.shape: {batchdata['pred'].shape}")
+        metric(y_pred=batchdata["pred"].unsqueeze(0), y=batchdata["label"].unsqueeze(0))
+        filenames.append(pred_file_name)
     # all-gather results from all the processes and reduce for final result
     result = metric.aggregate().item()
     filenames = string_list_all_gather(strings=filenames)
@@ -98,10 +98,18 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
-    parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
+    #parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-l", "--labels_dir", default="None")
     parser.add_argument("-p", "--predictions_dir", default="None")
     parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
+    parser.add_argument("--dataset", default="AutoPET")
+    parser.add_argument(
+        "-t",
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit the amount of training/validation samples",
+    )
 
     # parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)
@@ -111,10 +119,9 @@ def parse_args():
 
 
 def main():
-    global logger
-
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+    #set_track_meta(False)
 
     tmpdir = "/local/work/mhadlich/tmp"
     if os.environ.get("SLURM_JOB_ID") is not None:
@@ -132,7 +139,8 @@ def main():
     )  # Limit number of threads to 1/3 of resources
 
     args = parse_args()
-    # args, logger = setup_environment_and_adapt_args(args)
+    args.num_workers = 1
+    args.labels = {"spleen": 1, "background": 0}
 
     if not os.path.exists(args.output_dir):
         pathlib.Path(args.output_dir).mkdir(parents=True)

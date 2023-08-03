@@ -163,7 +163,13 @@ class PrintDatad(MapTransform):
     def __call__(
         self, data: Mapping[Hashable, torch.Tensor]
     ) -> Mapping[Hashable, torch.Tensor]:
-        logger.info(describe_batch_data(data))
+        
+        try:
+            logger.info(describe_batch_data(data))
+        except UnboundLocalError:
+            logger = logging.getLogger("sw_interactive_segmentation")
+            logger.info(describe_batch_data(data))
+        
         # exit(0)
         return data
 

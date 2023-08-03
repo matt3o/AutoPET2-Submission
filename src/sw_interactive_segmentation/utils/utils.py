@@ -26,6 +26,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     ScaleIntensityRanged,
     Spacingd,
     ToTensord,
+    ToDeviced,
 )
 
 from sw_interactive_segmentation.utils.transforms import (
@@ -447,13 +448,13 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     return train_loader, val_loader
 
 def get_test_loader(args, file_glob="*.nii.gz"):
-    input_dir = args.input_dir
+    #input_dir = args.input_dir
     # image_dir = args.input_dir
     labels_dir = args.labels_dir
     predictions_dir = args.predictions_dir
 
     if args.dataset == "AutoPET":
-        image_glob = os.path.join(input_dir, "imagesTs", file_glob)
+        #image_glob = os.path.join(input_dir, "imagesTs", file_glob)
         if labels_dir == "None":
             labels_glob = os.path.join(input_dir, "labelsTs", file_glob)
         else:
@@ -467,42 +468,60 @@ def get_test_loader(args, file_glob="*.nii.gz"):
         raise NotImplementedError
 
     if args.dataset == "AutoPET":
-        test_images = sorted(
-            glob.glob(image_glob)
-        )
+        #test_images = sorted(
+        #    glob.glob(image_glob)
+        #)
         test_labels = sorted(
             glob.glob(labels_glob)
         )
         test_predictions = sorted(
             glob.glob(predictions_glob)
         )
-        assert len(test_images[:args.limit]) == len(test_labels[:args.limit]) == len(test_predictions[:args.limit])
 
         test_datalist = [
-            {CommonKeys.IMAGE: image_name, CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
-            for image_name, label_name, pred_name in zip(test_images, test_labels, test_predictions)
-        ] 
+            {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
+            for label_name, pred_name in zip(test_labels, test_predictions)
+        ]
         test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
         total_l = len(test_datalist)
+        assert total_l > 0
 
-    test_ds = Dataset(
-        test_datalist, []
-    )
-    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
-    test_loader = ThreadDataLoader(
-        test_ds,
-        # shuffle=True,
-        num_workers=args.num_workers,
-        batch_size=1,
-        #multiprocessing_context="spawn",
-        # persistent_workers=True,
-    )
+#    test_ds = Dataset(
+#        test_datalist, get_test_transforms(device=args.device),
+#    )
+#    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
+#    test_loader = DataLoader(
+#        test_ds,
+#        # shuffle=True,
+#        num_workers=args.num_workers,
+#        batch_size=1,
+#        multiprocessing_context="spawn",
+#        # persistent_workers=True,
+#    )
 
     logger.info(
-        "{} :: Total Records used for Dataloader is: {}/{}".format(
-            args.gpu, len(test_ds), total_l
+        "{} :: Total Records used for Dataloader is: {}".format(
+            args.gpu, total_l
         )
     )
 
-    return test_loader
+    return test_datalist
 
+def get_test_transforms(device, labels):
+    t = [
+        LoadImaged(
+            keys=["pred", "label"], 
+            reader="ITKReader",
+            image_only=True,
+        ),
+        ToDeviced(keys=["pred", "label"], device=device),
+        EnsureChannelFirstd(keys=["pred", "label"]),
+        AsDiscreted(
+            keys=("pred", "label"),
+            argmax=(False, False),
+            to_onehot=(len(labels), len(labels)),
+        ),
+
+    ]
+
+    return Compose(t)

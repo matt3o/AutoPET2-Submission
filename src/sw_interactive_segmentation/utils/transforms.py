@@ -51,6 +51,7 @@ logger = None
 
 LABELS_KEY = "label_names"
 
+
 class ClickGenerationStrategy(IntEnum):
     # Sample a click randomly based on the label, so no correction based on the prediction
     GLOBAL_NON_CORRECTIVE = 1
@@ -80,17 +81,14 @@ class StoppingCriterion(IntEnum):
 def threshold_foreground(x):
     return x > 0.005
 
+
 def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
-    """Makes sure the guidance is in a tensor format.
-    """
-    tmp_gui = data.get(
-        key_label, torch.tensor([], dtype=torch.int32, device=device)
-    )
+    """Makes sure the guidance is in a tensor format."""
+    tmp_gui = data.get(key_label, torch.tensor([], dtype=torch.int32, device=device))
     if isinstance(tmp_gui, list):
         tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
     assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
     return tmp_gui
-
 
 
 class NoOpd(MapTransform):
@@ -100,9 +98,7 @@ class NoOpd(MapTransform):
         """
         super().__init__(keys)
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         return data
 
 
@@ -114,9 +110,7 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
         super().__init__(keys)
         self.roi_size = roi_size
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         labels = data[LABELS_KEY]
         for key in self.key_iterator(data):
             if key == "label":
@@ -160,16 +154,13 @@ class PrintDatad(MapTransform):
         """
         super().__init__(keys)
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
-        
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         try:
             logger.info(describe_batch_data(data))
         except UnboundLocalError:
             logger = logging.getLogger("sw_interactive_segmentation")
             logger.info(describe_batch_data(data))
-        
+
         # exit(0)
         return data
 
@@ -183,9 +174,7 @@ class PrintGPUUsaged(MapTransform):
         self.device = device
         self.name = name
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         if logger is not None:
             logger.info(
                 f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
@@ -194,9 +183,7 @@ class PrintGPUUsaged(MapTransform):
 
 
 class ClearGPUMemoryd(MapTransform):
-    def __init__(
-        self, device, keys: KeysCollection = None, garbage_collection: bool = True
-    ):
+    def __init__(self, device, keys: KeysCollection = None, garbage_collection: bool = True):
         """
         Prints the GPU usage
         """
@@ -204,9 +191,7 @@ class ClearGPUMemoryd(MapTransform):
         self.device = device
         self.garbage_collection = garbage_collection
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         if self.garbage_collection:
             gc.collect()
         torch.cuda.empty_cache()
@@ -239,14 +224,13 @@ class InitLoggerd(MapTransform):
         setup_loggers(self.loglevel, self.log_file_folder)
         logger = get_logger()
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         global logger
         if logger is None:
             setup_loggers(self.loglevel, self.log_file_folder)
         logger = get_logger()
         return data
+
 
 class AddEmptySignalChannels(MapTransform):
     def __init__(self, device, keys: KeysCollection = None):
@@ -256,9 +240,7 @@ class AddEmptySignalChannels(MapTransform):
         super().__init__(keys)
         self.device = device
 
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         # Set up the initial batch data
         in_channels = 1 + len(data[LABELS_KEY])
         tmp_image = data[CommonKeys.IMAGE][0 : 0 + 1, ...]
@@ -300,9 +282,7 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self.device = device
 
     @timeit
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             if key == "label":
                 try:
@@ -314,14 +294,12 @@ class NormalizeLabelsInDatasetd(MapTransform):
                     # label does not exist - this might be a validation run
                     data[LABELS_KEY] = self.labels
                     break
-                    
+
                 # Dictionary containing new label numbers
                 new_labels = {}
                 label = torch.zeros(data[key].shape, device=self.device)
                 # Making sure the range values and number of labels are the same
-                for idx, (key_label, val_label) in enumerate(
-                    self.labels.items(), start=1
-                ):
+                for idx, (key_label, val_label) in enumerate(self.labels.items(), start=1):
                     if key_label != "background":
                         new_labels[key_label] = idx
                         label[data[key] == val_label] = idx
@@ -406,12 +384,8 @@ class AddGuidanceSignal(MapTransform):
                     device=self.device,
                 )
             else:
-                assert (
-                    first_point_size == 3
-                ), f"first_point_size is {first_point_size}, first_point is {guidance[0]}"
-                signal = torch.zeros(
-                    (1, image.shape[-2], image.shape[-1]), device=self.device
-                )
+                assert first_point_size == 3, f"first_point_size is {first_point_size}, first_point is {guidance[0]}"
+                signal = torch.zeros((1, image.shape[-2], image.shape[-1]), device=self.device)
 
             sshape = signal.shape
 
@@ -433,20 +407,14 @@ class AddGuidanceSignal(MapTransform):
             if torch.max(signal[0]) > 0:
                 signal_tensor = signal[0]
                 if self.sigma != 0:
-                    pt_gaussian = GaussianFilter(
-                        len(signal_tensor.shape), sigma=self.sigma
-                    )
+                    pt_gaussian = GaussianFilter(len(signal_tensor.shape), sigma=self.sigma)
                     signal_tensor = pt_gaussian(signal_tensor.unsqueeze(0).unsqueeze(0))
                     signal_tensor = signal_tensor.squeeze(0).squeeze(0)
 
                 signal[0] = signal_tensor
-                signal[0] = (signal[0] - torch.min(signal[0])) / (
-                    torch.max(signal[0]) - torch.min(signal[0])
-                )
+                signal[0] = (signal[0] - torch.min(signal[0])) / (torch.max(signal[0]) - torch.min(signal[0]))
                 if self.disks:
-                    signal[0] = (
-                        signal[0] > 0.1
-                    ) * 1.0  # 0.1 with sigma=1 --> radius = 3, otherwise it is a cube
+                    signal[0] = (signal[0] > 0.1) * 1.0  # 0.1 with sigma=1 --> radius = 3, otherwise it is a cube
 
                     if self.gdt or self.edt or self.adaptive_sigma:
                         raise UserWarning("Code no longer active")
@@ -472,9 +440,7 @@ class AddGuidanceSignal(MapTransform):
                         #     geos = 1.0 - torch.exp(-geos)
                         # signal[0] = geos[0][0]
 
-            if not (
-                torch.min(signal[0]).item() >= 0 and torch.max(signal[0]).item() <= 1.0
-            ):
+            if not (torch.min(signal[0]).item() >= 0 and torch.max(signal[0]).item() <= 1.0):
                 raise UserWarning(
                     "[WARNING] Bad signal values",
                     torch.min(signal[0]),
@@ -490,17 +456,13 @@ class AddGuidanceSignal(MapTransform):
                     device=self.device,
                 )
             else:
-                signal = torch.zeros(
-                    (1, image.shape[-2], image.shape[-1]), device=self.device
-                )
+                signal = torch.zeros((1, image.shape[-2], image.shape[-1]), device=self.device)
             if signal is None:
                 print("[ERROR] Signal is None")
             return signal
 
     @timeit
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             if key == "image":
                 image = data[key]
@@ -512,14 +474,12 @@ class AddGuidanceSignal(MapTransform):
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]',
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
-                for _, (label_key, label_value) in enumerate(
-                    data[LABELS_KEY].items()
-                ):
+                for _, (label_key, label_value) in enumerate(data[LABELS_KEY].items()):
                     # label_guidance = data[label_key]
                     label_guidance = get_guidance_tensor_for_key_label(data, label_key, self.device)
                     logger.debug(f"Converting guidance for label {label_key}:{label_guidance} into a guidance signal..")
 
-                # for key_label in data["label_names"]:
+                    # for key_label in data["label_names"]:
                     # Getting signal based on guidance
                     # assert (
                     #     type(label_guidance) == torch.Tensor
@@ -539,7 +499,7 @@ class AddGuidanceSignal(MapTransform):
                             torch.Tensor([]).to(device=self.device),
                             key_label=label_key,
                         )
-                    
+
                     assert signal.is_cuda
                     assert tmp_image.is_cuda
                     tmp_image = torch.cat([tmp_image, signal], dim=0)
@@ -579,32 +539,26 @@ class FindDiscrepancyRegions(MapTransform):
         disparity = label - pred
         # +1 means predicted label is not part of the ground truth
         # -1 means predicted label missed that region of the ground truth
-        pos_disparity = (disparity > 0).to(
-            dtype=torch.float32, device=self.device
-        )  # FN
-        neg_disparity = (disparity < 0).to(
-            dtype=torch.float32, device=self.device
-        )  # FP
+        pos_disparity = (disparity > 0).to(dtype=torch.float32, device=self.device)  # FN
+        neg_disparity = (disparity < 0).to(dtype=torch.float32, device=self.device)  # FP
         return [pos_disparity, neg_disparity]
 
     def _apply(self, label, pred):
         return self.disparity(label, pred)
 
     @timeit
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             if key == "label":
                 assert (
-                    (type(data[key]) == torch.Tensor) or (type(data[key]) == MetaTensor)
-                    and (type(data[self.pred_key]) == torch.Tensor or type(data[self.pred_key]) == MetaTensor))
+                    (type(data[key]) == torch.Tensor)
+                    or (type(data[key]) == MetaTensor)
+                    and (type(data[self.pred_key]) == torch.Tensor or type(data[self.pred_key]) == MetaTensor)
+                )
                 all_discrepancies = {}
                 assert data[key].is_cuda and data["pred"].is_cuda
 
-                for _, (label_key, label_value) in enumerate(
-                    data[LABELS_KEY].items()
-                ):
+                for _, (label_key, label_value) in enumerate(data[LABELS_KEY].items()):
                     if label_key != "background":
                         label = torch.clone(data[key].detach())
                         # Label should be represented in 1
@@ -675,16 +629,12 @@ class AddGuidance(Randomizable, MapTransform):
 
     def randomize(self, data: Mapping[Hashable, torch.Tensor]):
         probability = data[self.probability_key]
-        self._will_interact = self.R.choice(
-            [True, False], p=[probability, 1.0 - probability]
-        )
+        self._will_interact = self.R.choice([True, False], p=[probability, 1.0 - probability])
 
     def find_guidance(self, discrepancy) -> List[int | List[int]] | None:
         assert discrepancy.is_cuda
         # discrepancy = discrepancy.to(device=self.device)
-        distance = get_distance_transform(
-            discrepancy, self.device, verify_correctness=False
-        )
+        distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
         t = get_choice_from_distance_transform_cp(distance, device=self.device)
         return t
 
@@ -710,9 +660,7 @@ class AddGuidance(Randomizable, MapTransform):
                     guidance = torch.cat(
                         (
                             guidance,
-                            torch.tensor(
-                                [tmp_gui], dtype=torch.int32, device=guidance.device
-                            ),
+                            torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device),
                         ),
                         0,
                     )
@@ -722,16 +670,12 @@ class AddGuidance(Randomizable, MapTransform):
                 # TODO Add suport for 2d
                 tmp_gui = self.find_guidance(pos_discr)
                 if tmp_gui is not None:
-                    tmp_gui = get_global_coordinates_from_patch_coordinates(
-                        tmp_gui, coordinates
-                    )
+                    tmp_gui = get_global_coordinates_from_patch_coordinates(tmp_gui, coordinates)
                     self.check_guidance_length(data, tmp_gui)
                     guidance = torch.cat(
                         (
                             guidance,
-                            torch.tensor(
-                                [tmp_gui], dtype=torch.int32, device=guidance.device
-                            ),
+                            torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device),
                         ),
                         0,
                     )
@@ -748,9 +692,7 @@ class AddGuidance(Randomizable, MapTransform):
                 guidance = torch.cat(
                     (
                         guidance,
-                        torch.tensor(
-                            [tmp_gui], dtype=torch.int32, device=guidance.device
-                        ),
+                        torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device),
                     ),
                     0,
                 )
@@ -761,18 +703,12 @@ class AddGuidance(Randomizable, MapTransform):
             return
         dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
         if dimensions == 3:
-            assert (
-                len(new_guidance) == 4
-            ), f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
+            assert len(new_guidance) == 4, f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
         else:
-            assert (
-                len(new_guidance) == 3
-            ), f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
+            assert len(new_guidance) == 3, f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"
 
     @timeit
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         # Get the previously generated clicks aka guidance
         # guidance = data.get(self.guidance_key, None)
         # if guidance is None:
@@ -791,13 +727,9 @@ class AddGuidance(Randomizable, MapTransform):
                 )
         elif (
             click_generation_strategy == ClickGenerationStrategy.GLOBAL_CORRECTIVE
-            or click_generation_strategy
-            == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
+            or click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
         ):
-            if (
-                click_generation_strategy
-                == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
-            ):
+            if click_generation_strategy == ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE:
                 # sets self._will_interact
                 self.randomize(data)
             else:
@@ -806,12 +738,10 @@ class AddGuidance(Randomizable, MapTransform):
             if self._will_interact:
                 for key_label in data[LABELS_KEY].keys():
                     tmp_gui = get_guidance_tensor_for_key_label(data, key_label, self.device)
-                    
+
                     # Add guidance based on discrepancy
                     data[key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label)
-        elif (
-            click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE
-        ):
+        elif click_generation_strategy == ClickGenerationStrategy.PATCH_BASED_CORRECTIVE:
             assert data[CommonKeys.LABEL].shape == data[CommonKeys.PRED].shape
 
             t = [
@@ -827,9 +757,7 @@ class AddGuidance(Randomizable, MapTransform):
 
             # Split the data into patches of size self.patch_size
             # TODO not working for 2d data yet!
-            new_data = PatchIterd(
-                keys=[CommonKeys.PRED, CommonKeys.LABEL], patch_size=self.patch_size
-            )(t_data)
+            new_data = PatchIterd(keys=[CommonKeys.PRED, CommonKeys.LABEL], patch_size=self.patch_size)(t_data)
             pred_list = []
             label_list = []
             coordinate_list = []
@@ -845,9 +773,7 @@ class AddGuidance(Randomizable, MapTransform):
 
             dice_loss = DiceLoss(include_background=True, reduction="none")
             with torch.no_grad():
-                loss_per_label = dice_loss.forward(
-                    input=pred_stack, target=label_stack
-                ).squeeze()
+                loss_per_label = dice_loss.forward(input=pred_stack, target=label_stack).squeeze()
                 assert len(loss_per_label.shape) == 2
                 # 1. dim: patch number, 2. dim: number of labels, e.g. [27,2]
                 max_loss_position_per_label = torch.argmax(loss_per_label, dim=0)
@@ -864,9 +790,7 @@ class AddGuidance(Randomizable, MapTransform):
 
                 tmp_gui = get_guidance_tensor_for_key_label(data, key_label, self.device)
                 # Add guidance based on discrepancy
-                data[key_label] = self.add_guidance_based_on_discrepancy(
-                    data, tmp_gui, key_label, coordinates
-                )
+                data[key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label, coordinates)
 
             # del tmp_gui, pred_list, label_list, coordinate_list, loss_per_label, max_loss_position_per_label, new_data
             gc.collect()
@@ -882,9 +806,7 @@ class SplitPredsLabeld(MapTransform):
     """
 
     @timeit
-    def __call__(
-        self, data: Mapping[Hashable, torch.Tensor]
-    ) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             if key == "pred":
                 for idx, (key_label, _) in enumerate(data[LABELS_KEY].items()):

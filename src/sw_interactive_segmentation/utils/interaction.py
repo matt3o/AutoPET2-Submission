@@ -75,9 +75,7 @@ class Interaction:
         loss_stopping_threshold: float = 0.1,
     ) -> None:
         self.deepgrow_probability = deepgrow_probability
-        self.transforms = (
-            Compose(transforms) if not isinstance(transforms, Compose) else transforms
-        )  # click transforms
+        self.transforms = Compose(transforms) if not isinstance(transforms, Compose) else transforms  # click transforms
 
         self.train = train
         self.label_names = label_names
@@ -91,9 +89,7 @@ class Interaction:
         self.iteration_probability = iteration_probability
         self.loss_stopping_threshold = loss_stopping_threshold
         self.click_generation_strategy_key = click_generation_strategy_key
-        self.dice_loss_function = DiceLoss(
-            include_background=False, to_onehot_y=True, softmax=True
-        )
+        self.dice_loss_function = DiceLoss(include_background=False, to_onehot_y=True, softmax=True)
 
     @timeit
     def __call__(
@@ -112,9 +108,13 @@ class Interaction:
                     f"/{engine.state.epoch_length}"
                 )
             )
-        logger.info(get_gpu_usage(device=engine.state.device,
-            used_memory_only=True,
-            context="START interaction class",))
+        logger.info(
+            get_gpu_usage(
+                device=engine.state.device,
+                used_memory_only=True,
+                context="START interaction class",
+            )
+        )
 
         # -> Moved to AddEmptySignalChannels
         # # Set up the initial batch data
@@ -163,26 +163,17 @@ class Interaction:
             if self.stopping_criterion in [StoppingCriterion.MAX_ITER_AND_DICE]:
                 # Abort if dice / loss is good enough
                 if last_dice_loss < self.loss_stopping_threshold:
-                    logger.info(
-                        f"DICE stop, since {last_dice_loss} < {self.loss_stopping_threshold}"
-                    )
+                    logger.info(f"DICE stop, since {last_dice_loss} < {self.loss_stopping_threshold}")
                     break
 
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER_PROBABILITY_AND_DICE,
             ]:
-                if np.random.choice(
-                    [True, False], p=[1 - last_dice_loss, last_dice_loss]
-                ):
-                    logger.info(
-                        f"DICE_PROBABILITY stop, since dice loss is already {last_dice_loss}"
-                    )
+                if np.random.choice([True, False], p=[1 - last_dice_loss, last_dice_loss]):
+                    logger.info(f"DICE_PROBABILITY stop, since dice loss is already {last_dice_loss}")
                     break
 
-            if (
-                iteration == 0
-                and self.stopping_criterion == StoppingCriterion.DEEPGROW_PROBABILITY
-            ):
+            if iteration == 0 and self.stopping_criterion == StoppingCriterion.DEEPGROW_PROBABILITY:
                 # Abort before the first iteration if deepgrow_probability yields False
                 if not np.random.choice(
                     [True, False],
@@ -200,18 +191,12 @@ class Interaction:
                 logger.info("inputs.shape is {}".format(inputs.shape))
                 # Make sure the signal is empty in the first iteration assertion holds
                 assert torch.sum(inputs[:, 1:, ...]) == 0
-                logger.info(
-                    f"image file name: {batchdata['image_meta_dict']['filename_or_obj']}"
-                )
-                logger.info(
-                    f"label file name: {batchdata['label_meta_dict']['filename_or_obj']}"
-                )
+                logger.info(f"image file name: {batchdata['image_meta_dict']['filename_or_obj']}")
+                logger.info(f"label file name: {batchdata['label_meta_dict']['filename_or_obj']}")
 
                 for i in range(len(batchdata["label"][0])):
                     if torch.sum(batchdata["label"][i, 0]) < 0.1:
-                        logger.warning(
-                            "No valid labels for this sample (probably due to crop)"
-                        )
+                        logger.warning("No valid labels for this sample (probably due to crop)")
 
             engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
             engine.network.eval()
@@ -234,9 +219,7 @@ class Interaction:
             # logger.info(
             #     f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
             # )
-            last_dice_loss = self.dice_loss_function(
-                batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
-            ).item()
+            last_dice_loss = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]).item()
             logger.info(
                 f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice_loss:.4f} Epoch: {engine.state.epoch}"
             )
@@ -252,22 +235,14 @@ class Interaction:
                     tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
                 tmp_batchdata = list_data_collate(tmp_batchdata_list)
 
-                self.debug_viz(
-                    inputs, labels, tmp_batchdata[CommonKeys.PRED], iteration
-                )
+                self.debug_viz(inputs, labels, tmp_batchdata[CommonKeys.PRED], iteration)
 
             # decollate/collate batchdata to execute click transforms
             batchdata_list = decollate_batch(batchdata)
             for i in range(len(batchdata_list)):
-                batchdata_list[i][
-                    self.click_probability_key
-                ] = self.deepgrow_probability
-                batchdata_list[i][
-                    self.click_generation_strategy_key
-                ] = self.click_generation_strategy.value
-                batchdata_list[i] = self.transforms(
-                    batchdata_list[i]
-                )  # Apply click transform
+                batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
+                batchdata_list[i][self.click_generation_strategy_key] = self.click_generation_strategy.value
+                batchdata_list[i] = self.transforms(batchdata_list[i])  # Apply click transform
 
             batchdata = list_data_collate(batchdata_list)
 
@@ -279,22 +254,14 @@ class Interaction:
         # Might be needed for sw_roi_size smaller than 128
         # torch.cuda.empty_cache()
         engine.state.batch = batchdata
-        return engine._iteration(
-            engine, batchdata
-        )  # train network with the final iteration cycle
+        return engine._iteration(engine, batchdata)  # train network with the final iteration cycle
 
     def debug_viz(self, inputs, labels, preds, j):
         self.save_nifti(f"{self.args.data_dir}/im", inputs[0, 0].cpu().detach().numpy())
-        self.save_nifti(
-            f"{self.args.data_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy()
-        )
-        self.save_nifti(
-            f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy()
-        )
+        self.save_nifti(f"{self.args.data_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy())
+        self.save_nifti(f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy())
         self.save_nifti(f"{self.args.data_dir}/labels", labels[0, 0].cpu().detach().numpy())
-        self.save_nifti(
-            f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy()
-        )
+        self.save_nifti(f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy())
         if j == self.max_interactions:
             exit()
 

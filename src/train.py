@@ -27,14 +27,9 @@ from monai.engines.utils import IterationEvents
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
 from sw_interactive_segmentation.api import get_trainer, oom_observer
-from sw_interactive_segmentation.argparser import (
-    parse_args, setup_environment_and_adapt_args)
-from sw_interactive_segmentation.tensorboard_logger import \
-    init_tensorboard_logger
-from sw_interactive_segmentation.utils.helper import (GPU_Thread,
-                                                      TerminationHandler,
-                                                      get_gpu_usage,
-                                                      handle_exception)
+from sw_interactive_segmentation.argparser import parse_args, setup_environment_and_adapt_args
+from sw_interactive_segmentation.tensorboard_logger import init_tensorboard_logger
+from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception
 
 # Various settings #
 
@@ -104,41 +99,35 @@ def run(args):
                         evaluator.run()
                 except torch.cuda.OutOfMemoryError:
                     oom_observer(device, None, None, None)
-                    logger.critical(
-                        get_gpu_usage(device, used_memory_only=False, context="ERROR")
-                    )
+                    logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
 
                 except RuntimeError as e:
                     if "cuDNN" in str(e):
                         # Got a cuDNN error
                         pass
                     oom_observer(device, None, None, None)
-                    logger.critical(
-                        get_gpu_usage(device, used_memory_only=False, context="ERROR")
-                    )
+                    logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
                 finally:
-                    logger.info(
-                        "Total Training Time {}".format(time.time() - start_time)
-                    )
+                    logger.info("Total Training Time {}".format(time.time() - start_time))
 
         # if not args.eval_only:
         #     logger.info("{}:: Saving Final PT Model".format(args.gpu))
 
-            # torch.save(
-            #     trainer.network.state_dict(),
-            #     os.path.join(
-            #         args.output_dir, "pretrained_deepedit_" + args.network + "-final.pt"
-            #     ),
-            # )
+        # torch.save(
+        #     trainer.network.state_dict(),
+        #     os.path.join(
+        #         args.output_dir, "pretrained_deepedit_" + args.network + "-final.pt"
+        #     ),
+        # )
 
-            # logger.info("{}:: Saving TorchScript Model".format(args.gpu))
-            # model_ts = torch.jit.script(trainer.network)
-            # torch.jit.save(
-            #     model_ts,
-            #     os.path.join(
-            #         args.output_dir, "pretrained_deepedit_" + args.network + "-final.ts"
-            #     ),
-            # )
+        # logger.info("{}:: Saving TorchScript Model".format(args.gpu))
+        # model_ts = torch.jit.script(trainer.network)
+        # torch.jit.save(
+        #     model_ts,
+        #     os.path.join(
+        #         args.output_dir, "pretrained_deepedit_" + args.network + "-final.ts"
+        #     ),
+        # )
     finally:
         terminator.cleanup()
         terminator.join_threads()
@@ -164,9 +153,7 @@ def main():
 
     sys.excepthook = handle_exception
 
-    torch.set_num_threads(
-        int(os.cpu_count() / 3)
-    )  # Limit number of threads to 1/3 of resources
+    torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
 
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)

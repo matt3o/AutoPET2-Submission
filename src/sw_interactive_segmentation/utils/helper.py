@@ -29,8 +29,9 @@ from pynvml import (
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
-gb_divisor = (1024**3)
+gb_divisor = 1024**3
 memory_unit = "GB"
+
 
 def get_actual_cuda_index_of_device(device: torch.device):
     try:
@@ -41,7 +42,6 @@ def get_actual_cuda_index_of_device(device: torch.device):
 
 
 def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
-    
     # empty the cache first
     shutdown = False
     cuda_index = get_actual_cuda_index_of_device(device)
@@ -77,17 +77,7 @@ def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
             nvmlShutdown()
 
     if not used_memory_only:
-        return (
-            cuda_index,
-            util_gpu,
-            util_memory,
-            nv_total,
-            nv_free,
-            nv_used,
-            torch_reserved,
-            cupy_total,
-            cupy_used
-        )
+        return (cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_total, cupy_used)
     else:
         return nv_used
 
@@ -131,17 +121,9 @@ def get_gpu_usage(
     csv_format=False,
     nvml_handle=None,
 ):
-    (
-        cuda_index,
-        util_gpu,
-        util_memory,
-        nv_total,
-        nv_free,
-        nv_used,
-        torch_reserved,
-        cupy_total,
-        cupy_used
-    ) = gpu_usage(device=device, nvml_handle=nvml_handle)
+    (cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_total, cupy_used) = gpu_usage(
+        device=device, nvml_handle=nvml_handle
+    )
     usage = ""
 
     if csv_format and used_memory_only:
@@ -168,9 +150,7 @@ def get_gpu_usage(
         return (header, usage)
     else:
         if used_memory_only:
-            usage += "{} Device: {} --- used:  {:.0f} {}".format(
-                context, cuda_index, nv_used, memory_unit
-            )
+            usage += "{} Device: {} --- used:  {:.0f} {}".format(context, cuda_index, nv_used, memory_unit)
         else:
             usage += "\ndevice: {} context: {}\ngpu util (%):{:.2f} memory util (%): {:.2f}\n".format(
                 cuda_index, context, util_gpu, util_memory
@@ -192,9 +172,7 @@ def get_gpu_usage(
 
 def print_tensor_gpu_usage(a: torch.Tensor):
     if a.cuda:
-        logger.info(
-            "Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2))
-        )
+        logger.info("Tensor GPU memory: {} MB".format(a.element_size() * a.nelement() / (1024**2)))
     else:
         logger.info("Tensor is not on the GPU.")
 
@@ -202,9 +180,7 @@ def print_tensor_gpu_usage(a: torch.Tensor):
 def print_all_tensor_gpu_memory_usage():
     for obj in gc.get_objects():
         try:
-            if torch.is_tensor(obj) or (
-                hasattr(obj, "data") and torch.is_tensor(obj.data)
-            ):
+            if torch.is_tensor(obj) or (hasattr(obj, "data") and torch.is_tensor(obj.data)):
                 logger.info(type(obj), obj.size())
         except Exception:
             pass
@@ -214,9 +190,7 @@ def print_amount_of_tensors():
     counter = 0
     for obj in gc.get_objects():
         try:
-            if torch.is_tensor(obj) or (
-                hasattr(obj, "data") and torch.is_tensor(obj.data)
-            ):
+            if torch.is_tensor(obj) or (hasattr(obj, "data") and torch.is_tensor(obj.data)):
                 counter += 1
             # if torch.is_tensor(obj) and torch.is_cuda(obj):
             #     counter += 1
@@ -251,7 +225,9 @@ def describe(t: torch.Tensor):
 def describe_batch_data(batchdata: dict, total_size_only=False):
     batch_data_string = ""
     if total_size_only:
-        batch_data_string += f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB\n"
+        batch_data_string += (
+            f"Total size of all tensors in batch data: {get_total_size_of_all_tensors(batchdata)/ (1024**2)} MB\n"
+        )
     else:
         batch_data_string += f"Type of batch data: {type(batchdata)}\n"
         for key in batchdata:
@@ -275,10 +251,7 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
             elif type(batchdata[key]) == dict:
                 batch_data_string += f"- {key}(dict)\n"
                 for key2 in batchdata[key]:
-                    if (
-                        type(batchdata[key][key2]) == torch.Tensor
-                        or type(batchdata[key][key2]) == MetaTensor
-                    ):
+                    if type(batchdata[key][key2]) == torch.Tensor or type(batchdata[key][key2]) == MetaTensor:
                         batch_data_string += (
                             f"    - {key}/{key2}(Tensor/MetaTensor) "
                             f"size: {batchdata[key][key2].size()} "
@@ -287,9 +260,7 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                             f"dtype: {batchdata[key][key2].dtype}\n"
                         )
                     else:
-                        batch_data_string += (
-                            f"    - {key}/{key2}: {batchdata[key][key2]} \n"
-                        )
+                        batch_data_string += f"    - {key}/{key2}: {batchdata[key][key2]} \n"
             elif type(batchdata[key]) == list:
                 batch_data_string += f"- {key}(list)\n"
                 for item in batchdata[key]:
@@ -323,9 +294,7 @@ def timeit(func):
             try:
                 name = func.__class__.__qualname__
             except AttributeError:
-                logger.error(
-                    "Timeit Wrapper got unexpected element (not func, class or object). Please fix!"
-                )
+                logger.error("Timeit Wrapper got unexpected element (not func, class or object). Please fix!")
             pass
         # if device is not None:
         #     logger.info(f'Function {name}() took {total_time:.3f} seconds and reserved {(gpu2 - gpu1) / 1024**2:.1f} MB GPU memory')
@@ -390,17 +359,13 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 
 class GPU_Thread(threading.Thread):
-    def __init__(
-        self, thread_id: int, name: str, output_file: str, device: torch.device
-    ):
+    def __init__(self, thread_id: int, name: str, output_file: str, device: torch.device):
         super().__init__(daemon=True)
         self.thread_id = thread_id
         self.name = name
         self.device = device
         self.csv_file = open(f"{output_file}", "w")
-        header, usage = get_gpu_usage(
-            self.device, used_memory_only=False, context="", csv_format=True
-        )
+        header, usage = get_gpu_usage(self.device, used_memory_only=False, context="", csv_format=True)
         self.csv_file.write(header)
         self.csv_file.write("\n")
         self.csv_file.flush()
@@ -429,9 +394,7 @@ class GPU_Thread(threading.Thread):
             # print_gpu_usage_per_process(self.device, nvml_handle=self.nvml_handle)
 
 
-def get_tensor_at_coordinates(
-    t: torch.Tensor, coordinates: torch.Tensor
-) -> torch.Tensor:
+def get_tensor_at_coordinates(t: torch.Tensor, coordinates: torch.Tensor) -> torch.Tensor:
     assert len(coordinates) == len(t.shape)
     if len(coordinates) == 4:
         assert coordinates.shape == (4, 2)
@@ -471,6 +434,7 @@ def run_once(f):
 
     wrapper.has_run = False
     return wrapper
+
 
 class AttributeDict(dict):
     __getattr__ = dict.__getitem__

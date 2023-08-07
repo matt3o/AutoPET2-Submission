@@ -46,8 +46,7 @@ location = "/cvhci/data/AutoPET/AutoPET/"
 all_images = sorted(glob.glob(os.path.join(location, "imagesTr", "*.nii.gz")))
 all_labels = sorted(glob.glob(os.path.join(location, "labelsTr", "*.nii.gz")))
 datalist = [
-    {"image": image_name, "label": label_name}
-    for image_name, label_name in zip(all_images, all_labels)
+    {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
 ]  # if image_name not in bad_images]
 
 datalist = datalist[0:9]
@@ -122,9 +121,7 @@ elif chosen_model == "DynUNet":
 
 batch_size_list = [1, 10, 100, 1000, 10000, 20000]
 batch_size_list = [100]
-eval_inferer = SlidingWindowInferer(
-    roi_size=sw_roi_size, sw_batch_size=500, mode="gaussian", progress=True
-)
+eval_inferer = SlidingWindowInferer(roi_size=sw_roi_size, sw_batch_size=500, mode="gaussian", progress=True)
 garbage_collector = GarbageCollector()
 engine = {}
 # engine["logger"] = logging.getLogger(__name__)
@@ -133,9 +130,7 @@ selected_model = model
 MAX_EPOCHS = 10
 
 optimizer = torch.optim.Adam(selected_model.parameters(), 0.001)
-lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(
-    optimizer, total_iters=MAX_EPOCHS, power=2
-)
+lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=MAX_EPOCHS, power=2)
 loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
 
 trainer = SupervisedTrainer(

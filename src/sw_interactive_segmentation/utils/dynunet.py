@@ -39,9 +39,7 @@ class DynUNetSkipLayer(nn.Module):
 
     heads: Optional[List[torch.Tensor]]
 
-    def __init__(
-        self, index, downsample, upsample, next_layer, heads=None, super_head=None
-    ):
+    def __init__(self, index, downsample, upsample, next_layer, heads=None, super_head=None):
         super().__init__()
         self.downsample = downsample
         self.next_layer = next_layer
@@ -171,10 +169,7 @@ class DynUNet(nn.Module):
             self.filters = filters
             self.check_filters()
         else:
-            self.filters = [
-                min(2 ** (5 + i), 320 if spatial_dims == 3 else 512)
-                for i in range(len(strides))
-            ]
+            self.filters = [min(2 ** (5 + i), 320 if spatial_dims == 3 else 512) for i in range(len(strides))]
         self.input_block = self.get_input_block()
         self.downsamples = self.get_downsamples()
         self.bottleneck = self.get_bottleneck()
@@ -205,15 +200,11 @@ class DynUNet(nn.Module):
             if len(downsamples) != len(upsamples):
                 raise ValueError(f"{len(downsamples)} != {len(upsamples)}")
 
-            if (
-                len(downsamples) == 0
-            ):  # bottom of the network, pass the bottleneck block
+            if len(downsamples) == 0:  # bottom of the network, pass the bottleneck block
                 return bottleneck
 
             if superheads is None:
-                next_layer = create_skips(
-                    1 + index, downsamples[1:], upsamples[1:], bottleneck
-                )
+                next_layer = create_skips(1 + index, downsamples[1:], upsamples[1:], bottleneck)
                 return DynUNetSkipLayer(
                     index,
                     downsample=downsamples[0],
@@ -307,9 +298,7 @@ class DynUNet(nn.Module):
 
     def check_kernel_stride(self):
         kernels, strides = self.kernel_size, self.strides
-        error_msg = (
-            "length of kernel_size and strides should be the same, and no less than 3."
-        )
+        error_msg = "length of kernel_size and strides should be the same, and no less than 3."
         if len(kernels) != len(strides) or len(kernels) < 3:
             raise ValueError(error_msg)
 
@@ -328,18 +317,14 @@ class DynUNet(nn.Module):
         deep_supr_num, strides = self.deep_supr_num, self.strides
         num_up_layers = len(strides) - 1
         if deep_supr_num >= num_up_layers:
-            raise ValueError(
-                "deep_supr_num should be less than the number of up sample layers."
-            )
+            raise ValueError("deep_supr_num should be less than the number of up sample layers.")
         if deep_supr_num < 1:
             raise ValueError("deep_supr_num should be larger than 0.")
 
     def check_filters(self):
         filters = self.filters
         if len(filters) < len(self.strides):
-            raise ValueError(
-                "length of filters should be no less than the length of strides."
-            )
+            raise ValueError("length of filters should be no less than the length of strides.")
         else:
             self.filters = filters[: len(self.strides)]
 
@@ -447,9 +432,7 @@ class DynUNet(nn.Module):
                 layer = conv_block(**params)
                 layers.append(layer)
         else:
-            for in_c, out_c, kernel, stride in zip(
-                in_channels, out_channels, kernel_size, strides
-            ):
+            for in_c, out_c, kernel, stride in zip(in_channels, out_channels, kernel_size, strides):
                 params = {
                     "spatial_dims": self.spatial_dims,
                     "in_channels": in_c,
@@ -465,15 +448,11 @@ class DynUNet(nn.Module):
         return nn.ModuleList(layers)
 
     def get_deep_supervision_heads(self):
-        return nn.ModuleList(
-            [self.get_output_block(i + 1) for i in range(self.deep_supr_num)]
-        )
+        return nn.ModuleList([self.get_output_block(i + 1) for i in range(self.deep_supr_num)])
 
     @staticmethod
     def initialize_weights(module):
-        if isinstance(
-            module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)
-        ):
+        if isinstance(module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)):
             module.weight = nn.init.kaiming_normal_(module.weight, a=0.01)
             if module.bias is not None:
                 module.bias = nn.init.constant_(module.bias, 0)

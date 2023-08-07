@@ -22,9 +22,7 @@ def parse_args():
     parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
     parser.add_argument("-d", "--data_dir", default="None")
     # a subdirectory is created below cache_dir for every run
-    parser.add_argument(
-        "-c", "--cache_dir", type=str, default="/cvhci/temp/mhadlich/cache"
-    )
+    parser.add_argument("-c", "--cache_dir", type=str, default="/cvhci/temp/mhadlich/cache")
     parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true")
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument(
@@ -44,9 +42,7 @@ def parse_args():
     parser.add_argument("--debug", default=False, action="store_true")
 
     # Model
-    parser.add_argument(
-        "-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"]
-    )
+    parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"])
     parser.add_argument(
         "-in",
         "--inferer",
@@ -101,12 +97,8 @@ def parse_args():
     parser.add_argument("--adaptive_sigma", default=False, action="store_true")
 
     # Guidance Signal Click Generation - for details see the mappings below
-    parser.add_argument(
-        "-tcg", "--train_click_generation", type=int, default=2, choices=[1, 2]
-    )
-    parser.add_argument(
-        "-vcg", "--val_click_generation", type=int, default=1, choices=[1, 2]
-    )
+    parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1, 2])
+    parser.add_argument("-vcg", "--val_click_generation", type=int, default=1, choices=[1, 2])
     parser.add_argument(
         "-tcgsc",
         "--train_click_generation_stopping_criterion",
@@ -122,7 +114,7 @@ def parse_args():
         default=1,
         choices=[1, 2, 3, 4, 5],
     )
-    # only needed for training 
+    # only needed for training
     parser.add_argument("--train_loss_stopping_threshold", type=float, default=0.1)
     parser.add_argument("--train_iteration_probability", type=float, default=0.5)
 
@@ -148,9 +140,7 @@ def setup_environment_and_adapt_args(args):
     args.labels = {"spleen": 1, "background": 0}
 
     if not args.dont_check_output_dir and os.path.isdir(args.output_dir):
-        raise UserWarning(
-            f"output path {args.output_dir} already exists. Please choose another path.."
-        )
+        raise UserWarning(f"output path {args.output_dir} already exists. Please choose another path..")
     if not os.path.exists(args.output_dir):
         pathlib.Path(args.output_dir).mkdir(parents=True)
 
@@ -168,7 +158,7 @@ def setup_environment_and_adapt_args(args):
     if args.eval_only:
         # Avoid a loading error from the training where it complains the number of epochs is too low
         args.epochs = 100000
-    
+
     if args.throw_away_cache:
         args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
     else:
@@ -189,9 +179,7 @@ def setup_environment_and_adapt_args(args):
         1: ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE,  # "non-corrective",
         2: ClickGenerationStrategy.GLOBAL_CORRECTIVE,  # "corrective",
     }
-    args.train_click_generation = train_click_generation_mapping[
-        args.train_click_generation
-    ]
+    args.train_click_generation = train_click_generation_mapping[args.train_click_generation]
     # Validation, so everything is done on the full volume
     val_click_generation_mapping = {
         1: ClickGenerationStrategy.GLOBAL_CORRECTIVE,  # "patch-based corrective",
@@ -200,12 +188,8 @@ def setup_environment_and_adapt_args(args):
     }
     args.val_click_generation = val_click_generation_mapping[args.val_click_generation]
 
-    args.train_click_generation_stopping_criterion = StoppingCriterion(
-        args.train_click_generation_stopping_criterion
-    )
-    args.val_click_generation_stopping_criterion = StoppingCriterion(
-        args.val_click_generation_stopping_criterion
-    )
+    args.train_click_generation_stopping_criterion = StoppingCriterion(args.train_click_generation_stopping_criterion)
+    args.val_click_generation_stopping_criterion = StoppingCriterion(args.val_click_generation_stopping_criterion)
 
     # NOTE Added for backwards compatibility with DeepGrow. Manual override of some settings, thus need to accept it
     if args.deepgrow_probability_val != 1 or args.deepgrow_probability_val != 1:
@@ -222,18 +206,12 @@ def setup_environment_and_adapt_args(args):
         #     logger.warning("Not accepted. Now leaving the program")
         #     exit(0)
         # else:
-        args.train_click_generation_stopping_criterion = (
-            StoppingCriterion.DEEPGROW_PROBABILITY
-        )
-        args.val_click_generation_stopping_criterion = (
-            StoppingCriterion.DEEPGROW_PROBABILITY
-        )
+        args.train_click_generation_stopping_criterion = StoppingCriterion.DEEPGROW_PROBABILITY
+        args.val_click_generation_stopping_criterion = StoppingCriterion.DEEPGROW_PROBABILITY
         args.train_click_generation = ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
         args.val_click_generation = ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE
 
-    args.real_cuda_device = get_actual_cuda_index_of_device(
-        torch.device(f"cuda:{args.gpu}")
-    )
+    args.real_cuda_device = get_actual_cuda_index_of_device(torch.device(f"cuda:{args.gpu}"))
 
     logger.info(f"CPU Count: {os.cpu_count()}")
     logger.info(f"Num threads: {torch.get_num_threads()}")

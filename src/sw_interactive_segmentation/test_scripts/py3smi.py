@@ -13,14 +13,10 @@ from time import sleep
 import py3nvml.py3nvml as nvml
 
 parser = argparse.ArgumentParser(description="Print GPU stats")
-parser.add_argument(
-    "-l", "--loop", action="store", type=int, default=0, help="Loop period"
-)
+parser.add_argument("-l", "--loop", action="store", type=int, default=0, help="Loop period")
 parser.add_argument("-f", "--full", action="store_true", help="Print extended version")
 parser.add_argument("-w", "--width", type=int, default=77, help="Print width")
-parser.add_argument(
-    "--left", action="store_true", help="Prints left part of process name"
-)
+parser.add_argument("--left", action="store_true", help="Prints left part of process name")
 
 COL1_WIDTH = 33
 COL2_WIDTH = 21
@@ -44,24 +40,13 @@ def print_header(driver_version, long_format=False):
     n = 0
     print(datetime.now().strftime("%a %b %d %H:%M:%S %Y"))
     print("+" + "-" * WIDTH + "+")
-    print(
-        "| "
-        + "{:<34}".format("NVIDIA-SMI")
-        + "Driver Version: {:<26}".format(driver_version)
-        + "|"
-    )
-    print(
-        "+" + "-" * COL1_WIDTH + "+" + "-" * COL2_WIDTH + "+" + "-" * COL3_WIDTH + "+"
-    )
+    print("| " + "{:<34}".format("NVIDIA-SMI") + "Driver Version: {:<26}".format(driver_version) + "|")
+    print("+" + "-" * COL1_WIDTH + "+" + "-" * COL2_WIDTH + "+" + "-" * COL3_WIDTH + "+")
     n += 4
 
     if long_format:
-        print(
-            "| GPU  Name          Persistence-M| Bus-Id       Disp.A | Volatile Uncorr. ECC|"
-        )
-        print(
-            "| Fan  Temp  Perf    Pwr:Usage/Cap|        Memory-Usage | GPU-Util  Compute M.|"
-        )
+        print("| GPU  Name          Persistence-M| Bus-Id       Disp.A | Volatile Uncorr. ECC|")
+        print("| Fan  Temp  Perf    Pwr:Usage/Cap|        Memory-Usage | GPU-Util  Compute M.|")
         n += 2
     else:
         print(
@@ -71,9 +56,7 @@ def print_header(driver_version, long_format=False):
         print(gpu_format_col2.format("Memory-Usage"), end="")
         print(gpu_format_col3.format("GPU-Util", "Compute M."))
         n += 1
-    print(
-        "+" + "=" * COL1_WIDTH + "+" + "=" * COL2_WIDTH + "+" + "=" * COL3_WIDTH + "+"
-    )
+    print("+" + "=" * COL1_WIDTH + "+" + "=" * COL2_WIDTH + "+" + "=" * COL3_WIDTH + "+")
     n += 1
     return n
 
@@ -82,11 +65,7 @@ def print_proc_header():
     print(" " * (args.width + 2))
     print("+" + "-" * args.width + "+")
     print("| Processes:" + " " * (args.width - 22) + "GPU Memory |")
-    print(
-        proc_format.format(
-            "GPU", "Owner", "PID", "Uptime", "Process Name", "   Usage", ""
-        )
-    )
+    print(proc_format.format("GPU", "Owner", "PID", "Uptime", "Process Name", "   Usage", ""))
     print("+" + "=" * args.width + "+")
     return 6
 
@@ -156,16 +135,12 @@ def print_gpu_info(index, long_format=False):
     else:
         disp_active = "On"
     ecc_error = try_get_info(
-        lambda h: nvml.nvmlDeviceGetTotalEccErrors(
-            h, nvml.NVML_MEMORY_ERROR_TYPE_UNCORRECTED, nvml.NVML_VOLATILE_ECC
-        ),
+        lambda h: nvml.nvmlDeviceGetTotalEccErrors(h, nvml.NVML_MEMORY_ERROR_TYPE_UNCORRECTED, nvml.NVML_VOLATILE_ECC),
         h,
     )
     fan_speed = try_get_info(nvml.nvmlDeviceGetFanSpeed, h)
     perf_state = try_get_info(nvml.nvmlDeviceGetPerformanceState, h)
-    temp = try_get_info(
-        lambda h: nvml.nvmlDeviceGetTemperature(h, nvml.NVML_TEMPERATURE_GPU), h, -1
-    )
+    temp = try_get_info(lambda h: nvml.nvmlDeviceGetTemperature(h, nvml.NVML_TEMPERATURE_GPU), h, -1)
     power_draw = try_get_info(nvml.nvmlDeviceGetPowerUsage, h, -1000) // 1000
     power_lim = try_get_info(nvml.nvmlDeviceGetPowerManagementLimit, h, -1000) // 1000
     mem_info = try_get_info(nvml.nvmlDeviceGetMemoryInfo, h)
@@ -285,15 +260,7 @@ def main(full=False, left=False):
 
     # Print the bottom info - Process stats
     if not full:
-        print(
-            "+"
-            + "-" * COL1_WIDTH
-            + "+"
-            + "-" * COL2_WIDTH
-            + "+"
-            + "-" * COL3_WIDTH
-            + "+"
-        )
+        print("+" + "-" * COL1_WIDTH + "+" + "-" * COL2_WIDTH + "+" + "-" * COL3_WIDTH + "+")
     proc_header_lines = print_proc_header()
 
     proc_lines = 0
@@ -335,11 +302,7 @@ def main(full=False, left=False):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    proc_format = (
-        "| {:>3}  {:>11}  {:>7}  {:>10}  {: <"
-        + str(args.width - LEN_PROCESS_LESS_NAME)
-        + "}  {:>5}{:3<} |"
-    )
+    proc_format = "| {:>3}  {:>11}  {:>7}  {:>10}  {: <" + str(args.width - LEN_PROCESS_LESS_NAME) + "}  {:>5}{:3<} |"
     nvml.nvmlInit()
     print_lines = main(args.full, args.left)
 
@@ -350,10 +313,7 @@ if __name__ == "__main__":
                 sys.stdout.write("\033[F" * print_lines)
                 print_lines_new = main(args.full, args.left)
                 if print_lines_new < print_lines:
-                    sys.stdout.write(
-                        (" " * (args.width + 2) + "\n")
-                        * (print_lines - print_lines_new)
-                    )
+                    sys.stdout.write((" " * (args.width + 2) + "\n") * (print_lines - print_lines_new))
                     sys.stdout.write("\033[F" * (print_lines - print_lines_new))
                 print_lines = print_lines_new
         except KeyboardInterrupt:

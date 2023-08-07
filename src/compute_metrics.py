@@ -18,48 +18,23 @@ import os
 import pathlib
 from pathlib import Path
 import resource
-import sys
-import time
 import argparse
 import logging
 
-import pandas as pd
 import torch
-from ignite.engine import Events
-from monai.engines.utils import IterationEvents
-from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
-from sw_interactive_segmentation.api import get_trainer, oom_observer
-from sw_interactive_segmentation.argparser import (
-    setup_environment_and_adapt_args)
-from sw_interactive_segmentation.tensorboard_logger import \
-    init_tensorboard_logger
-from sw_interactive_segmentation.utils.helper import (GPU_Thread,
-                                                      TerminationHandler,
-                                                      get_gpu_usage,
-                                                      handle_exception)
 from sw_interactive_segmentation.utils.utils import get_test_loader, get_test_transforms
 
-from monai.transforms import (
-    AsDiscreted,
-    EnsureChannelFirstd,
-    Compose,
-    KeepLargestConnectedComponentd,
-    LoadImaged,
-    ScaleIntensityd,
-    ToDeviced,
-)
 from monai.metrics import DiceMetric
 from monai.utils import string_list_all_gather
 from monai.handlers import write_metrics_reports
-from monai.data import set_track_meta
 
 logger = logging.getLogger(__name__)
 
 
 def run(args):
     device = torch.device(f"cuda:{args.gpu}")
-    args.device = device 
+    args.device = device
     torch.cuda.set_device(device)
 
     data_list = get_test_loader(args)
@@ -72,7 +47,7 @@ def run(args):
     metric = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
     filenames = []
     for i in data_list:
-        pred_file_name = Path(i["pred"]).stem.split('.')[0]
+        pred_file_name = Path(i["pred"]).stem.split(".")[0]
         batchdata = transforms(i)
         print(f"{pred_file_name}:: pred.shape: {batchdata['pred'].shape}")
         metric(y_pred=batchdata["pred"].unsqueeze(0), y=batchdata["label"].unsqueeze(0))
@@ -98,7 +73,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
-    #parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
+    # parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
     parser.add_argument("-l", "--labels_dir", default="None")
     parser.add_argument("-p", "--predictions_dir", default="None")
     parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
@@ -121,7 +96,7 @@ def parse_args():
 def main():
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    #set_track_meta(False)
+    # set_track_meta(False)
 
     tmpdir = "/local/work/mhadlich/tmp"
     if os.environ.get("SLURM_JOB_ID") is not None:
@@ -132,11 +107,7 @@ def main():
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
 
-    sys.excepthook = handle_exception
-
-    torch.set_num_threads(
-        int(os.cpu_count() / 3)
-    )  # Limit number of threads to 1/3 of resources
+    torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
 
     args = parse_args()
     args.num_workers = 1

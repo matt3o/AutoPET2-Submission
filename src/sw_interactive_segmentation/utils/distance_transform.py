@@ -49,14 +49,10 @@ def find_discrepancy(
                 )
             )
         if raise_warning:
-            raise UserWarning(
-                "find_discrepancy has found discrepancies! Please fix your code.."
-            )
+            raise UserWarning("find_discrepancy has found discrepancies! Please fix your code..")
 
 
-def get_distance_transform(
-    tensor: torch.Tensor, device: torch.device = None, verify_correctness=False
-) -> torch.Tensor:
+def get_distance_transform(tensor: torch.Tensor, device: torch.device = None, verify_correctness=False) -> torch.Tensor:
     # The distance transform provides a metric or measure of the separation of points in the image.
     # This function calculates the distance between each pixel that is set to off (0) and
     # the nearest nonzero pixel for binary images
@@ -67,9 +63,9 @@ def get_distance_transform(
     # Check is necessary since the edt transform only accepts certain dimensions
     if dimension == 4:
         tensor = tensor.squeeze(0)
-    assert (
-        len(tensor.shape) == 3 and tensor.is_cuda
-    ), "tensor.shape: {}, tensor.is_cuda: {}".format(tensor.shape, tensor.is_cuda)
+    assert len(tensor.shape) == 3 and tensor.is_cuda, "tensor.shape: {}, tensor.is_cuda: {}".format(
+        tensor.shape, tensor.is_cuda
+    )
     special_case = False
     if torch.equal(tensor, torch.ones_like(tensor, device=device)):
         # special case of the distance, this code shall behave like distance_transform_cdt from scipy
@@ -80,14 +76,10 @@ def get_distance_transform(
     else:
         with cp.cuda.Device(device.index):
             tensor_cp = cp.asarray(tensor)
-            distance = torch.as_tensor(
-                distance_transform_edt_cupy(tensor_cp), device=device
-            )
+            distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
 
     if verify_correctness and not special_case:
-        distance = torch.as_tensor(
-            distance_transform_edt_cupy(tensor_cp), device=device
-        )
+        distance = torch.as_tensor(distance_transform_edt_cupy(tensor_cp), device=device)
         find_discrepancy(distance_np, distance.cpu().numpy(), tensor)
 
     if dimension == 4:
@@ -106,9 +98,7 @@ def get_choice_from_distance_transform_cp(
     with cp.cuda.Device(device.index):
         if max_threshold is None:
             # divide by the maximum number of elements in a volume, otherwise we will get integer overflows..
-            max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (
-                800 * 800 * 800
-            )
+            max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800 * 800 * 800)
 
         # Clip the distance transform to avoid overflows and negative probabilities
         clipped_distance = distance.clip(min=0, max=max_threshold)
@@ -148,7 +138,5 @@ def get_choice_from_tensor(
 
         g = cp.asarray(cp.unravel_index(seed, t_cp.shape)).transpose().tolist()[0]
         g[0] = dst.item()
-    assert len(g) == len(
-        t_cp.shape
-    ), f"g has wrong dimensions! {len(g)} != {len(t_cp.shape)}"
+    assert len(g) == len(t_cp.shape), f"g has wrong dimensions! {len(g)} != {len(t_cp.shape)}"
     return g

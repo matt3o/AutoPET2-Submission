@@ -17,8 +17,7 @@ location = "/projects/mhadlich_segmentation/AutoPET/AutoPET"
 all_images = sorted(glob.glob(os.path.join(location, "imagesTr", "*.nii.gz")))
 all_labels = sorted(glob.glob(os.path.join(location, "labelsTr", "*.nii.gz")))
 datalist = [
-    {"image": image_name, "label": label_name}
-    for image_name, label_name in zip(all_images, all_labels)
+    {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
 ]  # if image_name not in bad_images]
 
 datalist = datalist[0:1]
@@ -87,6 +86,4 @@ for item in train_loader:
                     progress=True,
                 )
                 ret = eval_inferer(item["image"], model)
-                print(
-                    f"{chosen_model}: {sw_batch_size=}, time={(time.time()-start):.3f}"
-                )
+                print(f"{chosen_model}: {sw_batch_size=}, time={(time.time()-start):.3f}")

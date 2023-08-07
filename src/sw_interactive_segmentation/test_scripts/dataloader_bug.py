@@ -35,13 +35,13 @@ logger.addHandler(stream_handler)
 
 if __name__ == "__main__":
     #    location = "/projects/mhadlich_segmentation/AutoPET/AutoPET"
-#    all_images = sorted(glob.glob(os.path.join(location, "imagesTr", "*.nii.gz")))
-#    all_labels = sorted(glob.glob(os.path.join(location, "labelsTr", "*.nii.gz")))
-#    datalist = [
-#        {"image": image_name, "label": label_name}
-#        for image_name, label_name in zip(all_images, all_labels)
-#    ]  # if image_name not in bad_images]
-#
+    #    all_images = sorted(glob.glob(os.path.join(location, "imagesTr", "*.nii.gz")))
+    #    all_labels = sorted(glob.glob(os.path.join(location, "labelsTr", "*.nii.gz")))
+    #    datalist = [
+    #        {"image": image_name, "label": label_name}
+    #        for image_name, label_name in zip(all_images, all_labels)
+    #    ]  # if image_name not in bad_images]
+    #
 
     # if have multiple nodes, set random seed to generate same random data for every node
     np.random.seed(seed=0)
@@ -58,7 +58,7 @@ if __name__ == "__main__":
         labels = sorted(glob.glob(os.path.join(str(tmpdirname), "label*.nii.gz")))
         datalist = [{"image": image, "label": label} for image, label in zip(images, labels)]
 
-#        datalist = datalist[0:1]
+        #        datalist = datalist[0:1]
 
         device = "cuda"
 
@@ -75,31 +75,30 @@ if __name__ == "__main__":
 
         # train_ds = Dataset(datalist, transform)
 
-        train_ds = Dataset(
-                datalist, transform#, cache_dir='/tmp/cache/'
-            )
-        
-        train_ds2 = Dataset(
-            datalist, transform#, cache_dir='/tmp/cache/'
-        )
+        train_ds = Dataset(datalist, transform)  # , cache_dir='/tmp/cache/'
 
+        train_ds2 = Dataset(datalist, transform)  # , cache_dir='/tmp/cache/'
 
         train_loader = DataLoader(
             train_ds,
-            shuffle=True,  num_workers=1, batch_size=1, multiprocessing_context='spawn', #persistent_workers=True,
+            shuffle=True,
+            num_workers=1,
+            batch_size=1,
+            multiprocessing_context="spawn",  # persistent_workers=True,
         )
-
 
         train_loader2 = DataLoader(
             train_ds2,
-            shuffle=True,  num_workers=1, batch_size=1#, multiprocessing_context='spawn', #persistent_workers=True,
+            shuffle=True,
+            num_workers=1,
+            batch_size=1,  # , multiprocessing_context='spawn', #persistent_workers=True,
         )
         set_track_meta(False)
-        
+
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         for x in train_loader:
             print(type(x["image"]))
-        
+
         for x in train_loader2:
             print(type(x["image"]))
 

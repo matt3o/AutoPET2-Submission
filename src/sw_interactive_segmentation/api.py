@@ -39,12 +39,11 @@ from sw_interactive_segmentation.utils.utils import (
     get_pre_transforms_val_as_list_monailabel,
     #    get_validation_loader,
 )
-#from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
+
+# from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
-
-
 
 
 def get_optimizer(optimizer: str, lr: float, network):
@@ -100,8 +99,8 @@ def get_network(network_str: str, labels: Iterable):
             upsample_kernel_size=[2, 2, 2, 2, 2, 2, [2, 2, 1]],
             norm_name="instance",
             deep_supervision=False,
-            res_block=True,        
-    )
+            res_block=True,
+        )
 
     logger.info(f"Selected network {network_str.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
@@ -116,7 +115,7 @@ def get_inferers(
     val_crop_size,
     train_sw_batch_size,
     val_sw_batch_size,
-    cache_roi_weight_map: bool=True,
+    cache_roi_weight_map: bool = True,
 ):
     if inferer == "SimpleInferer":
         train_inferer = SimpleInferer()
@@ -129,10 +128,7 @@ def get_inferers(
             min(
                 reduce(
                     lambda x, y: x * y,
-                    [
-                        round(train_crop_size[i] / sw_roi_size[i])
-                        for i in range(len(sw_roi_size))
-                    ],
+                    [round(train_crop_size[i] / sw_roi_size[i]) for i in range(len(sw_roi_size))],
                 ),
                 train_sw_batch_size,
             ),
@@ -147,10 +143,7 @@ def get_inferers(
             min(
                 reduce(
                     lambda x, y: x * y,
-                    [
-                        round(average_sample_shape[i] / sw_roi_size[i])
-                        for i in range(len(sw_roi_size))
-                    ],
+                    [round(average_sample_shape[i] / sw_roi_size[i]) for i in range(len(sw_roi_size))],
                 ),
                 val_sw_batch_size,
             ),
@@ -180,37 +173,23 @@ def get_scheduler(optimizer, scheduler_str: str, epochs_to_run: int):
             logger.error(f"Chosen number of epochs {epochs_to_run}/{steps} < 0")
             milestones = range(0, epochs_to_run)
         else:
-            milestones = [
-                num
-                for num in range(0, epochs_to_run)
-                if num % round(steps_per_epoch) == 0
-            ][1:]
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            optimizer, milestones=milestones, gamma=0.333
-        )
+            milestones = [num for num in range(0, epochs_to_run) if num % round(steps_per_epoch) == 0][1:]
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.333)
     elif scheduler_str == "PolynomialLR":
-        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(
-            optimizer, total_iters=epochs_to_run, power=2
-        )
+        lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer, total_iters=epochs_to_run, power=2)
     elif scheduler_str == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=epochs_to_run, eta_min=1e-8
-        )
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs_to_run, eta_min=1e-8)
     return lr_scheduler
 
 
 def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
     if sw_roi_size[0] < 128:
         val_trigger_event = (
-            Events.ITERATION_COMPLETED(every=2)
-            if gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
         )
     else:
         val_trigger_event = (
-            Events.ITERATION_COMPLETED(every=2)
-            if gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
         )
 
     # define event-handlers for engine
@@ -238,15 +217,11 @@ def get_train_handlers(
 ):
     if sw_roi_size[0] < 128:
         train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=10)
-            if gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=10) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
         )
     else:
         train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=10)
-            if gpu_size == "large"
-            else Events.ITERATION_COMPLETED(every=5)
+            Events.ITERATION_COMPLETED(every=10) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
         )
 
     train_handlers = [
@@ -256,9 +231,7 @@ def get_train_handlers(
             interval=val_freq,
             epoch_level=(not eval_only),
         ),
-        StatsHandler(
-            tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
-        ),
+        StatsHandler(tag_name="train_loss", output_transform=from_engine(["loss"], first=True)),
         # End of epoch GarbageCollection
         GarbageCollector(log_level=10),
     ]
@@ -272,9 +245,7 @@ def get_train_handlers(
 
 def get_key_val_metrics(include_background=False):
     loss_function_metric = DiceCELoss(softmax=True, squared_pred=True, include_background=include_background)
-    metric_fn = LossMetric(
-        loss_fn=loss_function_metric, reduction="mean", get_not_nans=False
-    )
+    metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
     ignite_metric = IgniteMetric(
         metric_fn=metric_fn,
         output_transform=from_engine(["pred", "label"]),
@@ -300,9 +271,7 @@ def get_key_val_metrics(include_background=False):
 def get_key_train_metrics(include_background=False):
     all_train_metrics = get_key_val_metrics(include_background=include_background)
     all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
-    all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop(
-        "val_mean_dice_ce_loss"
-    )
+    all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_mean_dice_ce_loss")
     return all_train_metrics
 
 
@@ -357,9 +326,7 @@ def get_evaluator(
         postprocessing=post_transform,
         amp=args.amp,
         key_val_metric=key_val_metric,
-        val_handlers=get_val_handlers(
-            sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size
-        ),
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
     )
     return evaluator
 
@@ -368,14 +335,10 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
     device = torch.device(f"cuda:{args.gpu}")
 
-    pre_transforms_train, pre_transforms_val = get_pre_transforms(
-        args.labels, device, args
-    )
+    pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
     click_transforms = get_click_transforms(device, args)
     post_transform = get_post_transforms(args.labels, device)
-    train_loader, val_loader = get_loaders(
-        args, pre_transforms_train, pre_transforms_val
-    )
+    train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
 
     network = get_network(args.network, args.labels).to(device)
     train_inferer, eval_inferer = get_inferers(
@@ -430,7 +393,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
             click_generation_strategy=args.train_click_generation,
             stopping_criterion=args.train_click_generation_stopping_criterion,
             iteration_probability=args.train_iteration_probability,
-            loss_stopping_threshold=args.train_loss_stopping_threshold
+            loss_stopping_threshold=args.train_loss_stopping_threshold,
         ),
         optimizer=optimizer,
         loss_function=loss_function,
@@ -467,14 +430,10 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
 
         for key in save_dict:
             # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
-            assert (
-                key in checkpoint
-            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys}"
+            assert key in checkpoint, f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys}"
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        handler = CheckpointLoader(
-            load_path=args.resume_from, load_dict=save_dict, map_location=map_location
-        )
+        handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
 
     return trainer, evaluator, train_metrics, val_metrics
@@ -488,6 +447,7 @@ def get_save_dict(trainer, network, optimizer, lr_scheduler):
         "lr": lr_scheduler,
     }
     return save_dict
+
 
 # def get_tester(args) -> List[SupervisedValidator, List]:
 #     init(args)
@@ -545,9 +505,5 @@ def oom_observer(device, alloc, device_alloc, device_free):
     snapshot = torch.cuda.memory._snapshot()
     dump(snapshot, open(f"{output_dir}/oom_snapshot.pickle", "wb"))
     # logger.critical(snapshot)
-    torch.cuda.memory._save_memory_usage(
-        filename=f"{output_dir}/memory.svg", snapshot=snapshot
-    )
-    torch.cuda.memory._save_segment_usage(
-        filename=f"{output_dir}/segments.svg", snapshot=snapshot
-    )
+    torch.cuda.memory._save_memory_usage(filename=f"{output_dir}/memory.svg", snapshot=snapshot)
+    torch.cuda.memory._save_segment_usage(filename=f"{output_dir}/segments.svg", snapshot=snapshot)

@@ -21,9 +21,7 @@ dice_loss = DiceLoss(include_background=False)
 loss = dice_loss.forward(input=actual_patch_y_pred, target=actual_patch_y)
 print(f"DiceLoss: {loss}")
 
-score = compute_dice(
-    y_pred=actual_patch_y_pred, y=actual_patch_y, include_background=True
-)
+score = compute_dice(y_pred=actual_patch_y_pred, y=actual_patch_y, include_background=True)
 print(f"compute_dice score: {score}")
 
 # actual_patch_y[1,0,0,0] = 1

@@ -194,7 +194,7 @@ def get_scheduler(optimizer, scheduler_str: str, epochs_to_run: int):
         )
     elif scheduler_str == "CosineAnnealingLR":
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=epochs_to_run, eta_min=1e-6
+            optimizer, T_max=epochs_to_run, eta_min=1e-8
         )
     return lr_scheduler
 

@@ -16,7 +16,7 @@ from sw_interactive_segmentation.api import (
     get_evaluator,
     # SupervisedTester,
     # get_validation_loader,
-    get_pre_transforms_val_as_list_monailabel,
+    # get_pre_transforms_val_as_list_monailabel,
     # get_tester
 )
 

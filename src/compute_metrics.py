@@ -74,10 +74,10 @@ def parse_args():
 
     # Data
     # parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
-    parser.add_argument("-l", "--labels_dir", default="None")
-    parser.add_argument("-p", "--predictions_dir", default="None")
-    parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
-    parser.add_argument("--dataset", default="AutoPET")
+    parser.add_argument("-l", "--labels_dir")
+    parser.add_argument("-p", "--predictions_dir")
+    parser.add_argument("-o", "--output_dir")
+    # parser.add_argument("--dataset", default="AutoPET")
     parser.add_argument(
         "-t",
         "--limit",

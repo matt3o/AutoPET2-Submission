@@ -7,8 +7,8 @@ from typing import Dict
 
 import torch
 from monai.data import ThreadDataLoader, partition_dataset
-from monai.data.dataloader import DataLoader
-from monai.data.dataset import PersistentDataset, Dataset
+# from monai.data.dataloader import DataLoader
+from monai.data.dataset import PersistentDataset  # , Dataset
 from monai.transforms import (  # RandShiftIntensityd,; Resized,
     Activationsd,
     AsDiscreted,
@@ -23,7 +23,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     RandCropByPosNegLabeld,
     RandFlipd,
     RandRotate90d,
-    ScaleIntensityRanged,
+    # ScaleIntensityRanged,
     ScaleIntensityRangePercentilesd,
     Spacingd,
     ToTensord,
@@ -38,11 +38,11 @@ from sw_interactive_segmentation.utils.transforms import (
     InitLoggerd,
     NoOpd,
     NormalizeLabelsInDatasetd,
-    PrintGPUUsaged,
+    # PrintGPUUsaged,
     SplitPredsLabeld,
     threshold_foreground,
     AddEmptySignalChannels,
-    PrintDatad,
+    # PrintDatad,
 )
 from monai.data import set_track_meta
 from monai.utils.enums import CommonKeys
@@ -410,52 +410,21 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
 
 def get_test_loader(args, file_glob="*.nii.gz"):
-    # input_dir = args.input_dir
-    # image_dir = args.input_dir
     labels_dir = args.labels_dir
     predictions_dir = args.predictions_dir
+    predictions_glob = os.path.join(predictions_dir, file_glob)
+    labels_glob = os.path.join(labels_dir, file_glob)
 
-    if args.dataset == "AutoPET":
-        # image_glob = os.path.join(input_dir, "imagesTs", file_glob)
-        if labels_dir == "None":
-            labels_glob = os.path.join(input_dir, "labelsTs", file_glob)
-        else:
-            labels_glob = os.path.join(labels_dir, file_glob)
-        if predictions_dir == "None":
-            predictions_glob = os.path.join(input_dir, "imagesTs", "labels", "final", file_glob)
-        else:
-            predictions_glob = os.path.join(predictions_dir, file_glob)
+    test_labels = sorted(glob.glob(labels_glob))
+    test_predictions = sorted(glob.glob(predictions_glob))
 
-    else:
-        raise NotImplementedError
-
-    if args.dataset == "AutoPET":
-        # test_images = sorted(
-        #    glob.glob(image_glob)
-        # )
-        test_labels = sorted(glob.glob(labels_glob))
-        test_predictions = sorted(glob.glob(predictions_glob))
-
-        test_datalist = [
-            {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
-            for label_name, pred_name in zip(test_labels, test_predictions)
-        ]
-        test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
-        total_l = len(test_datalist)
-        assert total_l > 0
-
-    #    test_ds = Dataset(
-    #        test_datalist, get_test_transforms(device=args.device),
-    #    )
-    #    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
-    #    test_loader = DataLoader(
-    #        test_ds,
-    #        # shuffle=True,
-    #        num_workers=args.num_workers,
-    #        batch_size=1,
-    #        multiprocessing_context="spawn",
-    #        # persistent_workers=True,
-    #    )
+    test_datalist = [
+        {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
+        for label_name, pred_name in zip(test_labels, test_predictions)
+    ]
+    test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
+    total_l = len(test_datalist)
+    assert total_l > 0
 
     logger.info("{} :: Total Records used for Dataloader is: {}".format(args.gpu, total_l))
 

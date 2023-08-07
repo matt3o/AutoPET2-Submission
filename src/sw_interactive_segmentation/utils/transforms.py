@@ -14,7 +14,6 @@ from __future__ import annotations
 import gc
 import logging
 from enum import IntEnum
-from socketserver import UnixStreamServer
 from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
 
 import numpy as np
@@ -155,6 +154,8 @@ class PrintDatad(MapTransform):
         super().__init__(keys)
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        global logger
+
         try:
             logger.info(describe_batch_data(data))
         except UnboundLocalError:
@@ -474,7 +475,7 @@ class AddGuidanceSignal(MapTransform):
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]',
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
-                for _, (label_key, label_value) in enumerate(data[LABELS_KEY].items()):
+                for _, (label_key, _) in enumerate(data[LABELS_KEY].items()):
                     # label_guidance = data[label_key]
                     label_guidance = get_guidance_tensor_for_key_label(data, label_key, self.device)
                     logger.debug(f"Converting guidance for label {label_key}:{label_guidance} into a guidance signal..")

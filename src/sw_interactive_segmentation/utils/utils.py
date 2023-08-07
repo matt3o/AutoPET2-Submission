@@ -24,6 +24,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     RandFlipd,
     RandRotate90d,
     ScaleIntensityRanged,
+    ScaleIntensityRangePercentilesd,
     Spacingd,
     ToTensord,
     ToDeviced,
@@ -87,8 +88,8 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 source_key="image",
                 select_fn=threshold_foreground,
             ),
-            ScaleIntensityRanged(
-                keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
+            ScaleIntensityRangePercentilesd(
+                keys="image", lower=5, upper=95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
             # Random Transforms #
             # allow_smaller=True not necessary for the default AUTOPET split, just there for safety so that training does not get interrupted
@@ -151,8 +152,8 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else NoOpd(),
-            ScaleIntensityRanged(
-                keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
+            ScaleIntensityRangePercentilesd(
+                keys="image", lower=5, upper=95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
             DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
@@ -181,8 +182,8 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             NormalizeLabelsInDatasetd(
                 keys="label", labels=labels, device=cpu_device
             ),
-            ScaleIntensityRanged(
-                keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True
+            ScaleIntensityRangePercentilesd(
+                keys="image", lower=5, upper=95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),  # 0.05 and 99.95 percentiles of the spleen HUs
             EnsureTyped(keys=input_keys, device=device, data_type='tensor'),
         ]

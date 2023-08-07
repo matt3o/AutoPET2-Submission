@@ -484,6 +484,7 @@ def get_test_loader(args, file_glob="*.nii.gz"):
         ] 
         test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
         total_l = len(test_datalist)
+        assert total_l > 0
 
     test_ds = Dataset(
         test_datalist, []

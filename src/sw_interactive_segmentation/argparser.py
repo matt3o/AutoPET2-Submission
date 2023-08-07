@@ -179,7 +179,7 @@ def setup_environment_and_adapt_args(args):
 
     if args.data_dir == "None":
         args.data_dir = f"{args.output_dir}/data"
-        logger.info(f"--data was None, so that {args.data_dir} was selected instead")
+        logger.info(f"--data was None, so that {args.data_dir}/data was selected instead")
 
     if not os.path.exists(args.data_dir):
         pathlib.Path(args.data_dir).mkdir(parents=True)

@@ -445,9 +445,9 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
             del save_dict["opt"]
             del save_dict["lr"]
 
-        logger.info("{}:: Loading Network...".format(args.gpu))
-        logger.info("{save_dict.keys()=}")
-        map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
+        logger.info(f"{args.gpu}:: Loading Network...")
+        logger.info(f"{save_dict.keys()=}")
+        map_location = {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
         checkpoint = torch.load(args.resume_from)
 
         for key in save_dict:

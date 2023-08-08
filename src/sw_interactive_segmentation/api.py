@@ -439,7 +439,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     ).attach(evaluator)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
-    return trainer, evaluator, train_metrics, val_metrics
+    return trainer, evaluator, train_metrics, val_metrics, network, optimizer, lr_scheduler
 
 
 def get_save_dict(trainer, network, optimizer, lr_scheduler):

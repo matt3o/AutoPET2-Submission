@@ -51,9 +51,9 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        trainer, evaluator, all_train_metrics, all_val_metrics = get_trainer(args)
+        trainer, evaluator, train_metrics, val_metrics, network, optimizer, lr_scheduler = get_trainer(args)
 
-        save_dict = get_save_dict(trainer, None, None, None)
+        save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
         if args.resume_from != "None":
             if args.resume_override_scheduler:
                 # Remove those parts

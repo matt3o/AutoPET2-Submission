@@ -54,6 +54,7 @@ from sw_interactive_segmentation.utils.utils import (
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
 )
+#from sw_interactive_segmentation.utils.dynunet import DynUNet
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
@@ -110,19 +111,8 @@ def get_network(network_str: str, labels: Iterable):
             kernel_size=[3, 3, 3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, 2, 2, [2, 2, 1]],
             upsample_kernel_size=[2, 2, 2, 2, 2, 2, [2, 2, 1]],
-            norm_name="instance",
-            deep_supervision=False,
-            res_block=True,
-        )
-    elif network_str == "ultradynunet":
-        network = DynUNet(
-            spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
-            out_channels=len(labels),
-            kernel_size=[3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
-            strides=[1, 2, 2, 2, 2, 2, 2, 2, 2 [2, 2, 1]],
-            upsample_kernel_size=[2, 2, 2, 2, 2, 2, 2, 2, [2, 2, 1]],
+            filters=[64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048],
+            dropout=0.1,
             norm_name="instance",
             deep_supervision=False,
             res_block=True,

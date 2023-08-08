@@ -59,7 +59,7 @@ def parse_args():
 
     # Model
     parser.add_argument(
-        "-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet", "bigdynunet", "ultradynunet"]
+        "-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet", "bigdynunet"]
     )
     parser.add_argument(
         "-in",

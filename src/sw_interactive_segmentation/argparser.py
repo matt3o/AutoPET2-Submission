@@ -42,7 +42,9 @@ def parse_args():
     parser.add_argument("--debug", default=False, action="store_true")
 
     # Model
-    parser.add_argument("-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet"])
+    parser.add_argument(
+        "-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet", "bigdynunet", "ultradynunet"]
+    )
     parser.add_argument(
         "-in",
         "--inferer",

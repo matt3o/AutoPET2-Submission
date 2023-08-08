@@ -114,8 +114,21 @@ def get_network(network_str: str, labels: Iterable):
             deep_supervision=False,
             res_block=True,
         )
+    elif network_str == "ultradynunet":
+        network = DynUNet(
+            spatial_dims=3,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+            strides=[1, 2, 2, 2, 2, 2, 2, 2, 2 [2, 2, 1]],
+            upsample_kernel_size=[2, 2, 2, 2, 2, 2, 2, 2, [2, 2, 1]],
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,
+        )
 
-    logger.info(f"Selected network {network_str.__class__.__qualname__}")
+    logger.info(f"Selected network {network.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
 
     return network

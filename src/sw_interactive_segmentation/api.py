@@ -439,27 +439,6 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     ).attach(evaluator)
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
-    if args.resume_from != "None":
-        if args.resume_override_scheduler:
-            # Remove those parts
-            del save_dict["opt"]
-            del save_dict["lr"]
-
-        logger.info(f"{args.gpu}:: Loading Network...")
-        logger.info(f"{save_dict.keys()=}")
-        map_location = {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
-        checkpoint = torch.load(args.resume_from)
-
-        for key in save_dict:
-            # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
-            assert (
-                key in checkpoint
-            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
-
-        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
-        handler(trainer)
-
     return trainer, evaluator, train_metrics, val_metrics
 
 

@@ -32,7 +32,9 @@ from sw_interactive_segmentation.api import get_trainer, oom_observer
 from sw_interactive_segmentation.argparser import parse_args, setup_environment_and_adapt_args
 from sw_interactive_segmentation.tensorboard_logger import init_tensorboard_logger
 from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception
-
+from monai.handlers import (
+    CheckpointLoader,
+)
 # Various settings #
 
 logger = None
@@ -50,6 +52,28 @@ def run(args):
     try:
         wp = WorkflowProfiler()
         trainer, evaluator, all_train_metrics, all_val_metrics = get_trainer(args)
+
+
+        if args.resume_from != "None":
+            if args.resume_override_scheduler:
+                # Remove those parts
+                del save_dict["opt"]
+                del save_dict["lr"]
+
+            logger.info(f"{args.gpu}:: Loading Network...")
+            logger.info(f"{save_dict.keys()=}")
+            map_location = {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
+            checkpoint = torch.load(args.resume_from)
+
+            for key in save_dict:
+                # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
+                assert (
+                    key in checkpoint
+                ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
+
+            logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+            handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
+            handler(trainer)
 
         tb_logger = init_tensorboard_logger(
             trainer,

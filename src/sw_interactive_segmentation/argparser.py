@@ -64,7 +64,7 @@ def parse_args():
     parser.add_argument(
         "-in",
         "--inferer",
-        default="SimpleInferer",
+        default="SlidingWindowInferer",
         choices=["SimpleInferer", "SlidingWindowInferer"],
     )
     parser.add_argument("--sw_roi_size", default="(128,128,128)", action="store")
@@ -89,6 +89,8 @@ def parse_args():
     )
     parser.add_argument("--loss_dont_include_background", default=False, action="store_true")
     parser.add_argument("--resume_from", type=str, default="None")
+    # Use this parameter to change the scheduler..
+    parser.add_argument("--resume_override_scheduler", default=False, action="store_true")
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1)  # Epoch Level

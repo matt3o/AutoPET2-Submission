@@ -450,7 +450,13 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
     if args.resume_from != "None":
+        if args.resume_override_scheduler:
+            # Remove those parts
+            del save_dict["opt"]
+            del save_dict["lr"]
+
         logger.info("{}:: Loading Network...".format(args.gpu))
+        logger.info("{save_dict.keys()=}")
         map_location = {f"cuda:{args.gpu}": "cuda:{}".format(args.gpu)}
         checkpoint = torch.load(args.resume_from)
 

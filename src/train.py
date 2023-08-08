@@ -79,8 +79,8 @@ def run(args):
             trainer,
             evaluator,
             trainer.optimizer,
-            all_train_metrics,
-            all_val_metrics,
+            train_metrics,
+            val_metrics,
             network=trainer.network,
             output_dir=args.output_dir,
         )

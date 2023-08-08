@@ -8,9 +8,7 @@ import numpy as np
 import torch
 
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
-from cucim.core.operations.morphology import (
-    distance_transform_edt as distance_transform_edt_cupy,
-)
+from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
 from numpy.typing import ArrayLike
 from scipy.ndimage.morphology import distance_transform_edt
 

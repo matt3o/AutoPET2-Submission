@@ -1,3 +1,19 @@
+# Copyright (c) MONAI Consortium
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Code extension and modification by M.Sc. Zdravko Marinov, Karlsuhe Institute of Techonology #
+# zdravko.marinov@kit.edu #
+# Further code extension and modification by B.Sc. Matthias Hadlich, Karlsuhe Institute of Techonology #
+# matthiashadlich@posteo.de #
+
 from __future__ import annotations
 
 import logging
@@ -37,10 +53,7 @@ from sw_interactive_segmentation.utils.utils import (
     get_post_transforms,
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
-    #    get_validation_loader,
 )
-
-# from sw_interactive_segmentation.utils.supervised_tester import SupervisedTester
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None
@@ -55,9 +68,9 @@ def get_optimizer(optimizer: str, lr: float, network):
     return optimizer
 
 
-def get_loss_function():
+def get_loss_function(squared_pred=True):
     # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=True)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=squared_pred)
     return loss_function
 
 
@@ -430,7 +443,9 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
 
         for key in save_dict:
             # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
-            assert key in checkpoint, f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys}"
+            assert (
+                key in checkpoint
+            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
         handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)

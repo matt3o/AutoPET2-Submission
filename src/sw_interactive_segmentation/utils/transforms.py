@@ -22,13 +22,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
-from monai.transforms import (
-    Activationsd,
-    AsDiscreted,
-    CenterSpatialCropd,
-    Compose,
-    CropForegroundd,
-)
+from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd
 from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 

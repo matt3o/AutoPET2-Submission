@@ -6,10 +6,11 @@ import os
 from typing import Dict
 
 import torch
-from monai.data import ThreadDataLoader, partition_dataset
+from monai.data import ThreadDataLoader, partition_dataset, set_track_meta
+
 # from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset  # , Dataset
-from monai.transforms import (  # RandShiftIntensityd,; Resized,
+from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensityRanged,
     Activationsd,
     AsDiscreted,
     CenterSpatialCropd,
@@ -23,30 +24,25 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,
     RandCropByPosNegLabeld,
     RandFlipd,
     RandRotate90d,
-    # ScaleIntensityRanged,
     ScaleIntensityRangePercentilesd,
     Spacingd,
-    ToTensord,
     ToDeviced,
+    ToTensord,
 )
+from monai.utils.enums import CommonKeys
 
-from sw_interactive_segmentation.utils.transforms import (
-    AddGuidanceSignal,
+from sw_interactive_segmentation.utils.transforms import (  # PrintGPUUsaged,; PrintDatad,
+    AddEmptySignalChannels,
     AddGuidance,
+    AddGuidanceSignal,
     CheckTheAmountOfInformationLossByCropd,
     FindDiscrepancyRegions,
     InitLoggerd,
     NoOpd,
     NormalizeLabelsInDatasetd,
-    # PrintGPUUsaged,
     SplitPredsLabeld,
     threshold_foreground,
-    AddEmptySignalChannels,
-    # PrintDatad,
 )
-from monai.data import set_track_meta
-from monai.utils.enums import CommonKeys
-
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
@@ -78,7 +74,6 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
-            # PrintDatad(),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),
             CropForegroundd(
@@ -115,7 +110,6 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             # So my recommendation after months of fiddling is to leave this off
             # Until MONAI has fixed the underlying issues
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
-            # ClearGPUMemoryd(device=device, garbage_collection=True) if args.gpu_size == "small" else ClearGPUMemoryd(device=device),
         ]
     return t_train
 
@@ -151,7 +145,6 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
         ]
     return t_val
 
@@ -166,7 +159,6 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-            # ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             ScaleIntensityRangePercentilesd(
@@ -188,8 +180,6 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             if args.val_crop_size is not None
             else NoOpd(),
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
-            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-            # PrintGPUUsaged(device=device, name="pre"),
         ]
     return t_val_1, t_val_2
 
@@ -287,14 +277,12 @@ def get_click_transforms(device, args):
         FindDiscrepancyRegions(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         AddGuidance(
             keys="NA",
-            # guidance_key="guidance",
             discrepancy_key="discrepancy",
             probability_key="probability",
             device=device,
         ),
         AddGuidanceSignal(
             keys="image",
-            # guidance_key="guidance",
             sigma=args.sigma,
             disks=args.disks,
             edt=args.edt,
@@ -305,8 +293,6 @@ def get_click_transforms(device, args):
             device=device,
             spacing=spacing,
         ),  # Overwrites the image entry
-        # ClearGPUMemoryd(device=device) if args.gpu_size == "small" else NoOpd(),
-        # PrintGPUUsaged(device=device, name="click"),
     ]
 
     return Compose(t)
@@ -322,7 +308,6 @@ def get_post_transforms(labels, device):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
-        # PrintGPUUsaged(device=device, name="post"),
     ]
     return Compose(t)
 
@@ -337,7 +322,6 @@ def get_val_post_transforms(labels, device):
         ),
         # This transform is to check dice score per segment/label
         SplitPredsLabeld(keys="pred"),
-        # PrintGPUUsaged(device=device, name="post"),
     ]
     return Compose(t)
 
@@ -354,16 +338,12 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
         test_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz")))
         test_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz")))
 
-        # TODO try if this impacts training?!?
-        # with open('utils/zero_autopet.txt', 'r') as f:
-        #    bad_images = [el.rstrip() for el in f.readlines()] # Filter out crops without any labels
-
         datalist = [
             {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
-        ]  # if image_name not in bad_images]
+        ]
         val_datalist = [
             {"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)
-        ]  # if image_name not in bad_images]
+        ]
         train_datalist = datalist
         # For debugging with small dataset size
         train_datalist = train_datalist[0 : args.limit] if args.limit else train_datalist
@@ -384,12 +364,12 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     total_l = len(train_datalist) + len(val_datalist)
 
     train_ds = PersistentDataset(train_datalist, pre_transforms_train, cache_dir=args.cache_dir)
-    # Need persistens workers to fix Cuda worker error: "[W CUDAGuardImpl.h:46] Warning: CUDA warning: driver shutting down (function uncheckedGetDevice"
     train_loader = ThreadDataLoader(
         train_ds,
         shuffle=True,
         num_workers=args.num_workers,
         batch_size=1,
+        # The two options below are needed if ToDeviced('cuda' ,..) is activated..
         # multiprocessing_context="spawn",
         # persistent_workers=True,
     )

@@ -11,23 +11,24 @@
 
 # Code extension and modification by M.Sc. Zdravko Marinov, Karlsuhe Institute of Techonology #
 # zdravko.marinov@kit.edu #
+# Further code extension and modification by B.Sc. Matthias Hadlich, Karlsuhe Institute of Techonology #
+# matthiashadlich@posteo.de #
 
 from __future__ import annotations
 
-import os
-import pathlib
-from pathlib import Path
-import resource
 import argparse
 import logging
+import os
+import pathlib
+import resource
+from pathlib import Path
 
 import torch
-
-from sw_interactive_segmentation.utils.utils import get_test_loader, get_test_transforms
-
+from monai.handlers import write_metrics_reports
 from monai.metrics import DiceMetric
 from monai.utils import string_list_all_gather
-from monai.handlers import write_metrics_reports
+
+from sw_interactive_segmentation.utils.utils import get_test_loader, get_test_transforms
 
 logger = logging.getLogger(__name__)
 

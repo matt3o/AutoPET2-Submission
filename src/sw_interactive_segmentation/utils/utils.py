@@ -24,6 +24,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     RandCropByPosNegLabeld,
     RandFlipd,
     RandRotate90d,
+    ScaleIntensityRanged,
     ScaleIntensityRangePercentilesd,
     Spacingd,
     ToDeviced,
@@ -81,9 +82,11 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 source_key="image",
                 select_fn=threshold_foreground,
             ),
+            # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True) if not args.use_scale_intensity_range_percentiled else 
             ScaleIntensityRangePercentilesd(
-                keys="image", lower=5, upper=95, b_min=0.0, b_max=1.0, clip=True, relative=False
-            ),  # 0.05 and 99.95 percentiles of the spleen HUs
+                keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
+            ), 
             # Random Transforms #
             # allow_smaller=True not necessary for the default AUTOPET split, just there for safety so that training does not get interrupted
             RandCropByPosNegLabeld(
@@ -139,9 +142,11 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else NoOpd(),
+            # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True) if not args.use_scale_intensity_range_percentiled else 
             ScaleIntensityRangePercentilesd(
-                keys="image", lower=5, upper=95, b_min=0.0, b_max=1.0, clip=True, relative=False
-            ),  # 0.05 and 99.95 percentiles of the spleen HUs
+                keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
+            ), 
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),

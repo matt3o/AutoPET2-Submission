@@ -28,7 +28,7 @@ from ignite.engine import Events
 from monai.engines.utils import IterationEvents
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
-#from sw_interactive_segmentation.api import get_trainer, oom_observer, get_save_dict
+from sw_interactive_segmentation.api import get_trainer, oom_observer, get_save_dict
 from sw_interactive_segmentation.argparser import parse_args, setup_environment_and_adapt_args
 from sw_interactive_segmentation.tensorboard_logger import init_tensorboard_logger
 from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception

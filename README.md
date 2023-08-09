@@ -1,7 +1,13 @@
 # Sliding Window Based Interactive Segmentation of Volumetric Medical Images
 
-## Common ways to call the script 
+An extension / rework of the DeepEdit code. Most work has been put into moving the transform to torch and thus on the GPU while preventing the common OOMs with MONAI. Also cupy based distance transforms have been integrated to remove the old scipy based ones. More specifically the scipy cdt distance transform has been replaced by an edt one.
 
+This code was exracted from MONAI, reworked by M.Sc. Zdravko Marinov, Karlsuhe Institute of Techonology (zdravko.marinov@kit.edu) to make it's way into my master thesis, which is this repository.
+B.Sc. Matthias Hadlich, Karlsuhe Institute of Techonology (matthiashadlich@posteo.de)
+
+
+
+## Common ways to call the script 
 
 ### For Training
 

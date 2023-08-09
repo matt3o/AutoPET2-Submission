@@ -303,25 +303,7 @@ def get_evaluator(
     key_val_metric,
 ) -> SupervisedEvaluator:
     init(args)
-
-    # if network is None:
-    #     network = get_network(args.network, args.labels).to(device)
-    # if inferer is None:
-    #     inferer = get_inferer(args.inferer)
-
-    # val_handlers = get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size)
-
-    # if loss_function is None:
-    #     loss_function = get_loss_function()
-
-    # if val_loader is None:
-    #     pre_transforms_train, pre_transforms_val = get_pre_transforms(
-    #     args.labels, device, args
-    #     )
-    #     _, val_loader = get_loaders(
-    #     args, pre_transforms_train, pre_transforms_val
-    #     )
-
+    
     evaluator = SupervisedEvaluator(
         device=device,
         val_data_loader=val_loader,
@@ -471,40 +453,6 @@ def get_save_dict(trainer, network, optimizer, lr_scheduler):
         "lr": lr_scheduler,
     }
     return save_dict
-
-
-# def get_tester(args) -> List[SupervisedValidator, List]:
-#     init(args)
-#     test_loader = get_test_loader(args)
-
-#     key_test_metric = get_key_val_metrics()
-
-#     tester = SupervisedTester(
-#         # device=device,
-#         val_data_loader=test_loader,
-#         # network=network,
-#         # iteration_update=Interaction(
-#         #     deepgrow_probability=args.deepgrow_probability_val,
-#         #     transforms=click_transforms,
-#         #     train=False,
-#         #     label_names=args.labels,
-#         #     max_interactions=args.max_val_interactions,
-#         #     args=args,
-#         #     loss_function=loss_function,
-#         #     post_transform=post_transform,
-#         #     click_generation_strategy=args.val_click_generation,
-#         #     stopping_criterion=args.val_click_generation_stopping_criterion,
-#         # ),
-#         # inferer=inferer,
-#         # postprocessing=post_transform,
-#         # amp=args.amp,
-#         key_val_metric=key_test_metric,
-#         val_handlers=get_val_handlers(
-#             sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size
-#         ),
-#     )
-
-#     return tester, key_test_metric
 
 
 @run_once

@@ -32,7 +32,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
 )
 from monai.utils.enums import CommonKeys
 
-from sw_interactive_segmentation.utils.transforms import (  # PrintGPUUsaged,; PrintDatad,
+from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDatad,
     AddEmptySignalChannels,
     AddGuidance,
     AddGuidanceSignal,

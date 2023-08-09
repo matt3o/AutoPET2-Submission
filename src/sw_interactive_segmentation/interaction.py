@@ -26,7 +26,7 @@ from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
 
 from sw_interactive_segmentation.utils.helper import get_gpu_usage, timeit
-from sw_interactive_segmentation.utils.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_interactive_segmentation.transforms import ClickGenerationStrategy, StoppingCriterion
 
 logger = logging.getLogger("sw_interactive_segmentation")
 np.seterr(all="raise")

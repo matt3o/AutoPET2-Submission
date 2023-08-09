@@ -28,7 +28,7 @@ from monai.handlers import write_metrics_reports
 from monai.metrics import DiceMetric
 from monai.utils import string_list_all_gather
 
-from sw_interactive_segmentation.utils.utils import get_test_loader, get_test_transforms
+from sw_interactive_segmentation.data import get_test_loader, get_test_transforms
 
 logger = logging.getLogger(__name__)
 

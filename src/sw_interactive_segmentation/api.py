@@ -46,15 +46,15 @@ from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
 
 from sw_interactive_segmentation.utils.helper import count_parameters, run_once
-from sw_interactive_segmentation.utils.interaction import Interaction
-from sw_interactive_segmentation.utils.utils import (
+from sw_interactive_segmentation.interaction import Interaction
+from sw_interactive_segmentation.data import (
     get_click_transforms,
     get_loaders,
     get_post_transforms,
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
 )
-#from sw_interactive_segmentation.utils.dynunet import DynUNet
+
 
 logger = logging.getLogger("sw_interactive_segmentation")
 output_dir = None

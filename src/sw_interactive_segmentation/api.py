@@ -468,7 +468,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         handler(trainer)
 
     # first train, then validation metrics
-    return trainer, evaluator, key_metrics, additional_metrics, key_metrics, additional_metrics
+    return trainer, evaluator, key_metric, additional_metrics, key_metric, additional_metrics
 
 
 def get_save_dict(trainer, network, optimizer, lr_scheduler):

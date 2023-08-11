@@ -267,20 +267,27 @@ def get_key_metric(loss_function):
     return all_val_metrics
 
 def get_additional_metrics(loss_function):
-    loss_function_metric = loss_function
+    # loss_function_metric = loss_function
     #DiceCELoss(softmax=True, squared_pred=True, include_background=True)
-    metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
-    ignite_metric = IgniteMetric(
-        metric_fn=metric_fn,
+    loss_function_metric = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
+    loss_function_metric_ignite = IgniteMetric(
+        metric_fn=loss_function_metric,
         output_transform=from_engine(["pred", "label"]),
         save_details=False,
     )
 
     all_val_metrics = OrderedDict()
     all_val_metrics["dice_ce_loss"] = ignite_metric
-    all_val_metrics["surfaced_dice"] = SurfaceDiceMetric(
-        output_transform=from_engine(["pred", "label"]), include_background=False, save_details=False
+    all_val_metrics["surfaced_dice"] = None
+    surface_dice_metric = SurfaceDiceMetric(
+        include_background=False, reduction="mean", get_not_nans=False
     )
+    surface_dice_metric_ignite = IgniteMetric(
+        metric_fn=surface_dice_metric,
+        output_transform=from_engine(["pred", "label"]),
+        save_details=False,
+    )
+
     
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:

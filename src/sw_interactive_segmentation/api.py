@@ -260,11 +260,11 @@ def get_train_handlers(
 
 
 def get_key_metric(loss_function):
-    all_val_metrics = OrderedDict()
-    all_val_metrics["dice"] = MeanDice(
+    key_metrics = OrderedDict()
+    key_metrics["dice"] = MeanDice(
         output_transform=from_engine(["pred", "label"]), include_background=False, save_details=False
     )
-    return all_val_metrics
+    return key_metrics
 
 def get_additional_metrics(loss_function):
     # loss_function_metric = loss_function
@@ -276,9 +276,6 @@ def get_additional_metrics(loss_function):
         save_details=False,
     )
 
-    all_val_metrics = OrderedDict()
-    all_val_metrics["dice_ce_loss"] = ignite_metric
-    all_val_metrics["surfaced_dice"] = None
     surface_dice_metric = SurfaceDiceMetric(
         include_background=False, reduction="mean", get_not_nans=False
     )
@@ -288,6 +285,10 @@ def get_additional_metrics(loss_function):
         save_details=False,
     )
 
+    additional_metrics = OrderedDict()
+    additional_metrics[loss_function.__class__.__name__.lower()] = loss_function_metric_ignite
+    additional_metrics["surfaced_dice"] = surface_dice_metric_ignite
+
     
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
@@ -296,7 +297,7 @@ def get_additional_metrics(loss_function):
     #             output_transform=from_engine(["pred_" + key_label, "label_" + key_label]), include_background=False
     #         )
 
-    return all_val_metrics
+    return additional_metrics
 
 
 # def get_key_train_metrics(loss_function):

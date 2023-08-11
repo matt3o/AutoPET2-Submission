@@ -467,7 +467,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
 
-    return trainer, evaluator, train_metrics, val_metrics
+    # first train, then validation metrics
+    return trainer, evaluator, key_metrics, additional_metrics, key_metrics, additional_metrics
 
 
 def get_save_dict(trainer, network, optimizer, lr_scheduler):

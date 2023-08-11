@@ -49,7 +49,9 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        trainer, evaluator, train_metrics, val_metrics = get_trainer(args)
+        trainer, evaluator, key_train_metrics, additional_train_metrics, key_val_metrics, additional_val_metrics = get_trainer(args)
+        train_metrics = key_train_metrics.update(additional_train_metrics)
+        val_metrics = key_val_metrics.update(additional_val_metrics)
 
         tb_logger = init_tensorboard_logger(
             trainer,

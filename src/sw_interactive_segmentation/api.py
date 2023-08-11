@@ -40,7 +40,7 @@ from monai.handlers import (
 )
 from monai.inferers import SimpleInferer, SlidingWindowInferer
 from monai.losses import DiceCELoss
-from monai.metrics import LossMetric
+from monai.metrics import LossMetric, SurfaceDiceMetric
 from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
@@ -259,7 +259,14 @@ def get_train_handlers(
     return train_handlers
 
 
-def get_key_val_metrics(loss_function):
+def get_key_metric(loss_function):
+    all_val_metrics = OrderedDict()
+    all_val_metrics["dice"] = MeanDice(
+        output_transform=from_engine(["pred", "label"]), include_background=False, save_details=False
+    )
+    return all_val_metrics
+
+def get_additional_metrics(loss_function):
     loss_function_metric = loss_function
     #DiceCELoss(softmax=True, squared_pred=True, include_background=True)
     metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
@@ -270,11 +277,11 @@ def get_key_val_metrics(loss_function):
     )
 
     all_val_metrics = OrderedDict()
-    all_val_metrics["val_mean_dice"] = MeanDice(
+    all_val_metrics["dice_ce_loss"] = ignite_metric
+    all_val_metrics["surfaced_dice"] = SurfaceDiceMetric(
         output_transform=from_engine(["pred", "label"]), include_background=False, save_details=False
     )
-    all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
-
+    
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
     #     if key_label != "background":
@@ -285,11 +292,12 @@ def get_key_val_metrics(loss_function):
     return all_val_metrics
 
 
-def get_key_train_metrics(loss_function):
-    all_train_metrics = get_key_val_metrics(loss_function)
-    all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
-    all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_mean_dice_ce_loss")
-    return all_train_metrics
+# def get_key_train_metrics(loss_function):
+#     all_train_metrics = get_key_val_metrics(loss_function)
+#     all_train_metrics["train_dice"] = all_train_metrics.pop("val_dice")
+#     all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_dice_ce_loss")
+#     all_train_metrics["train_surfaced_dice"] = all_train_metrics.pop("val_surfaced_dice")
+#     return all_train_metrics
 
 
 def get_evaluator(
@@ -302,6 +310,7 @@ def get_evaluator(
     click_transforms,
     post_transform,
     key_val_metric,
+    additional_metrics,
 ) -> SupervisedEvaluator:
     init(args)
     
@@ -325,6 +334,7 @@ def get_evaluator(
         postprocessing=post_transform,
         amp=args.amp,
         key_val_metric=key_val_metric,
+        additional_metrics=additional_metrics,
         val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
     )
     return evaluator
@@ -352,8 +362,11 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     loss_function = get_loss_function(squared_pred=True, include_background=(not args.loss_dont_include_background))
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    train_metrics = get_key_train_metrics(loss_function)
-    val_metrics = get_key_val_metrics(loss_function)
+    key_metric = get_key_metric(loss_function)
+    additional_metrics = get_additional_metrics(loss_function=loss_function)
+    # key_val_metric = get_key_val_metrics(loss_function)
+
+    # additional_train_metrics
 
     evaluator = get_evaluator(
         args,
@@ -364,7 +377,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         loss_function=loss_function,
         click_transforms=click_transforms,
         post_transform=post_transform,
-        key_val_metric=val_metrics,
+        key_val_metric=key_metric,
+        additional_metrics=additional_metrics
     )
 
     train_handlers = get_train_handlers(
@@ -400,7 +414,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         inferer=train_inferer,
         postprocessing=post_transform,
         amp=args.amp,
-        key_train_metric=train_metrics,
+        key_train_metric=key_metric,
+        additional_metrics=additional_metrics,
         train_handlers=train_handlers,
     )
 

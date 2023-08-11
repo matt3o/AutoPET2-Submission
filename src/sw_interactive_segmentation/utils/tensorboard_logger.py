@@ -42,7 +42,7 @@ def init_tensorboard_logger(
         evaluator,
         event_name=Events.EPOCH_COMPLETED,
         tag="1_validation",
-        metric_names=list(all_val_metrics.keys()),
+        metric_names=all_val_metrics_names,
         global_step_transform=global_step_from_engine(trainer),
     )
 
@@ -50,7 +50,7 @@ def init_tensorboard_logger(
         trainer,
         event_name=Events.EPOCH_COMPLETED,
         tag="2_training",
-        metric_names=list(all_train_metrics.keys()),
+        metric_names=all_train_metrics_names,
         global_step_transform=global_step_from_engine(trainer),
     )
 

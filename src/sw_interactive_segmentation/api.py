@@ -269,7 +269,7 @@ def get_key_metric(loss_function):
 def get_additional_metrics(loss_function):
     # loss_function_metric = loss_function
     #DiceCELoss(softmax=True, squared_pred=True, include_background=True)
-    loss_function_metric = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
+    loss_function_metric = LossMetric(loss_fn=loss_function, reduction="mean", get_not_nans=False)
     loss_function_metric_ignite = IgniteMetric(
         metric_fn=loss_function_metric,
         output_transform=from_engine(["pred", "label"]),

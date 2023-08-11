@@ -69,9 +69,9 @@ def get_optimizer(optimizer: str, lr: float, network):
     return optimizer
 
 
-def get_loss_function(squared_pred=True):
+def get_loss_function(squared_pred=True, include_background=True):
     # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=squared_pred)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=squared_pred, include_background=include_background)
     return loss_function
 
 
@@ -259,8 +259,9 @@ def get_train_handlers(
     return train_handlers
 
 
-def get_key_val_metrics(include_background=False):
-    loss_function_metric = DiceCELoss(softmax=True, squared_pred=True, include_background=include_background)
+def get_key_val_metrics(loss_function):
+    loss_function_metric = loss_function
+    #DiceCELoss(softmax=True, squared_pred=True, include_background=True)
     metric_fn = LossMetric(loss_fn=loss_function_metric, reduction="mean", get_not_nans=False)
     ignite_metric = IgniteMetric(
         metric_fn=metric_fn,
@@ -270,7 +271,7 @@ def get_key_val_metrics(include_background=False):
 
     all_val_metrics = OrderedDict()
     all_val_metrics["val_mean_dice"] = MeanDice(
-        output_transform=from_engine(["pred", "label"]), include_background=False
+        output_transform=from_engine(["pred", "label"]), include_background=False, save_details=False
     )
     all_val_metrics["val_mean_dice_ce_loss"] = ignite_metric
 
@@ -284,8 +285,8 @@ def get_key_val_metrics(include_background=False):
     return all_val_metrics
 
 
-def get_key_train_metrics(include_background=False):
-    all_train_metrics = get_key_val_metrics(include_background=include_background)
+def get_key_train_metrics(loss_function):
+    all_train_metrics = get_key_val_metrics(loss_function)
     all_train_metrics["train_dice"] = all_train_metrics.pop("val_mean_dice")
     all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_mean_dice_ce_loss")
     return all_train_metrics
@@ -347,11 +348,12 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         args.train_sw_batch_size,
         args.val_sw_batch_size,
     )
-    loss_function = get_loss_function()
+    
+    loss_function = get_loss_function(squared_pred=True, include_background=(not args.loss_dont_include_background))
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    train_metrics = get_key_train_metrics(include_background=args.loss_dont_include_background)
-    val_metrics = get_key_val_metrics(include_background=args.loss_dont_include_background)
+    train_metrics = get_key_train_metrics(loss_function)
+    val_metrics = get_key_val_metrics(loss_function)
 
     evaluator = get_evaluator(
         args,

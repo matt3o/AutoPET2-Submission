@@ -50,15 +50,15 @@ def run(args):
     try:
         wp = WorkflowProfiler()
         trainer, evaluator, key_train_metric, additional_train_metrics, key_val_metric, additional_val_metrics = get_trainer(args)
-        train_metrics = key_train_metric.update(additional_train_metrics)
-        val_metrics = key_val_metric.update(additional_val_metrics)
+        train_metric_names = key_train_metric.keys() + additional_train_metrics.keys()
+        val_metric_names = key_val_metric.keys() + additional_val_metrics.keys()
 
         tb_logger = init_tensorboard_logger(
             trainer,
             evaluator,
             trainer.optimizer,
-            train_metrics,
-            val_metrics,
+            train_metric_names,
+            val_metric_names,
             network=trainer.network,
             output_dir=args.output_dir,
         )

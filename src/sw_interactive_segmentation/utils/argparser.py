@@ -92,6 +92,7 @@ def parse_args():
     # Use this parameter to change the scheduler..
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")
     parser.add_argument("--use_scale_intensity_range_percentiled", default=False, action="store_true")
+    parser.add_argument("--additional_metrics", default=False, action="store_true")
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1)  # Epoch Level
@@ -240,13 +241,13 @@ def setup_environment_and_adapt_args(args):
     args.cwd = os.getcwd()
 
     nv_total = gpu_usage(device, used_memory_only=False)[3]
-    if nv_total < 25000:
+    if nv_total < 25:
         args.gpu_size = "small"
-    elif nv_total < 55000:
+    elif nv_total < 55:
         args.gpu_size = "medium"
     else:
         args.gpu_size = "large"
-    logger.info(f"Selected GPU size: {args.gpu_size}, since GPU Memory: {nv_total} MB")
+    logger.info(f"Selected GPU size: {args.gpu_size}, since GPU Memory: {nv_total} GB")
 
     # Init the Inferer
     args.sw_roi_size = eval(args.sw_roi_size)

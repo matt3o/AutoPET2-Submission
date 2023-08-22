@@ -20,7 +20,7 @@ import logging
 from collections import OrderedDict
 from functools import reduce
 from pickle import dump
-from typing import Iterable, List
+from typing import Iterable, List, Dict
 
 import cupy as cp
 import torch
@@ -108,10 +108,10 @@ def get_network(network_str: str, labels: Iterable):
             # 1 dim for the image, the other ones for the signal per label with is the size of image
             in_channels=1 + len(labels),
             out_channels=len(labels),
-            kernel_size=[3, 3, 3, 3, 3, 3, 3, 3],
-            strides=[1, 2, 2, 2, 2, 2, 2, [2, 2, 1]],
-            upsample_kernel_size=[2, 2, 2, 2, 2, 2, [2, 2, 1]],
-            filters=[64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048],
+            kernel_size=[3, 3, 3, 3, 3, 3, 3],
+            strides=[1, 2, 2, 2, 2, 2, [2, 2, 1]],
+            upsample_kernel_size=[2, 2, 2, 2, 2, [2, 2, 1]],
+            filters=[64, 96, 128, 192, 256, 384, 512],#, 768, 1024, 2048],
             dropout=0.1,
             norm_name="instance",
             deep_supervision=False,
@@ -259,16 +259,23 @@ def get_train_handlers(
     return train_handlers
 
 
-def get_key_metric(loss_function):
+def get_key_metric(str_to_prepend = "") -> OrderedDict:
     key_metrics = OrderedDict()
-    key_metrics["dice"] = MeanDice(
+    key_metrics[f"{str_to_prepend}dice"] = MeanDice(
         output_transform=from_engine(["pred", "label"]), include_background=False, save_details=False
     )
     return key_metrics
 
-def get_additional_metrics(loss_function):
+def prepend_str_to_all_keys(input_dict: Dict, str_to_prepend: str) -> Dict:
+    for k, v in input_dict.items():
+        del input_dict[k]
+        key_metric[f"{str_to_prepend}_{k}"] = v
+    return input_dict
+    
+
+def get_additional_metrics(amount_of_classes_incl_background, squared_pred=True, include_background=True, str_to_prepend = ""):
     # loss_function_metric = loss_function
-    #DiceCELoss(softmax=True, squared_pred=True, include_background=True)
+    loss_function = DiceCELoss(softmax=True, squared_pred=squared_pred, include_background=include_background)
     loss_function_metric = LossMetric(loss_fn=loss_function, reduction="mean", get_not_nans=False)
     loss_function_metric_ignite = IgniteMetric(
         metric_fn=loss_function_metric,
@@ -276,8 +283,11 @@ def get_additional_metrics(loss_function):
         save_details=False,
     )
 
+    class_thresholds=(2,)*amount_of_classes_incl_background
+    if not include_background:
+        class_thresholds = class_thresholds[:-1]
     surface_dice_metric = SurfaceDiceMetric(
-        include_background=False, reduction="mean", get_not_nans=False
+        include_background=include_background, class_thresholds=class_thresholds, reduction="mean", get_not_nans=False#, use_subvoxels=True
     )
     surface_dice_metric_ignite = IgniteMetric(
         metric_fn=surface_dice_metric,
@@ -286,9 +296,8 @@ def get_additional_metrics(loss_function):
     )
 
     additional_metrics = OrderedDict()
-    additional_metrics[loss_function.__class__.__name__.lower()] = loss_function_metric_ignite
-    additional_metrics["surfaced_dice"] = surface_dice_metric_ignite
-
+    additional_metrics[f"{str_to_prepend}{loss_function.__class__.__name__.lower()}"] = loss_function_metric_ignite
+    additional_metrics[f"{str_to_prepend}surface_dice"] = surface_dice_metric_ignite
     
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
@@ -370,9 +379,14 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     loss_function = get_loss_function(squared_pred=True, include_background=(not args.loss_dont_include_background))
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    key_metric = get_key_metric(loss_function)
-    additional_metrics = get_additional_metrics(loss_function=loss_function)
-    # key_val_metric = get_key_val_metrics(loss_function)
+    train_key_metric = get_key_metric(str_to_prepend="train_")
+    val_key_metric = get_key_metric(str_to_prepend="val_")
+    train_additional_metrics = {}
+    val_additional_metrics = {}
+    if args.additional_metrics:
+        train_additional_metrics = get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=(not args.loss_dont_include_background), str_to_prepend="train_")
+        val_additional_metrics =  get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=(not args.loss_dont_include_background), str_to_prepend="train_")
+   # key_val_metric = get_key_val_metrics(loss_function)
 
     # additional_train_metrics
 
@@ -385,8 +399,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         loss_function=loss_function,
         click_transforms=click_transforms,
         post_transform=post_transform,
-        key_val_metric=key_metric,
-        additional_metrics=additional_metrics
+        key_val_metric=val_key_metric,
+        additional_metrics=val_additional_metrics
     )
 
     train_handlers = get_train_handlers(
@@ -422,8 +436,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         inferer=train_inferer,
         postprocessing=post_transform,
         amp=args.amp,
-        key_train_metric=key_metric,
-        additional_metrics=additional_metrics,
+        key_train_metric=train_key_metric,
+        additional_metrics=train_additional_metrics,
         train_handlers=train_handlers,
     )
 
@@ -449,12 +463,14 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     if args.resume_from != "None":
         if args.resume_override_scheduler:
             # Remove those parts
+            saved_opt = save_dict["opt"]
+            saved_lr = save_dict["lr"]
             del save_dict["opt"]
             del save_dict["lr"]
 
         logger.info(f"{args.gpu}:: Loading Network...")
         logger.info(f"{save_dict.keys()=}")
-        map_location = {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
+        map_location = device #{f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
         checkpoint = torch.load(args.resume_from)
 
         for key in save_dict:
@@ -467,8 +483,13 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
 
+        if args.resume_override_scheduler:
+            # Restore params
+            save_dict["opt"] = saved_opt
+            save_dict["lr"] = saved_lr
+
     # first train, then validation metrics
-    return trainer, evaluator, key_metric, additional_metrics, key_metric, additional_metrics
+    return trainer, evaluator, train_key_metric, train_additional_metrics, val_key_metric, val_additional_metrics
 
 
 def get_save_dict(trainer, network, optimizer, lr_scheduler):

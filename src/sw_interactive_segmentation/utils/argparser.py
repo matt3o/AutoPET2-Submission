@@ -34,11 +34,11 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
-    parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
-    parser.add_argument("-o", "--output_dir", default="/cvhci/temp/mhadlich/output")
+    parser.add_argument("-i", "--input_dir")
+    parser.add_argument("-o", "--output_dir")
     parser.add_argument("-d", "--data_dir", default="None")
     # a subdirectory is created below cache_dir for every run
-    parser.add_argument("-c", "--cache_dir", type=str, default="/cvhci/temp/mhadlich/cache")
+    parser.add_argument("-c", "--cache_dir", type=str, default="None")
     parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true")
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument(
@@ -88,6 +88,7 @@ def parse_args():
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
     parser.add_argument("--loss_dont_include_background", default=False, action="store_true")
+    parser.add_argument("--loss_no_squared_pred", action="store_true") 
     parser.add_argument("--resume_from", type=str, default="None")
     # Use this parameter to change the scheduler..
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")
@@ -181,10 +182,19 @@ def setup_environment_and_adapt_args(args):
         # Avoid a loading error from the training where it complains the number of epochs is too low
         args.epochs = 100000
 
-    if args.throw_away_cache:
-        args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
+    if args.cache_dir is "None":
+        if not args.throw_away_cache:
+            raise UserWarning("Cache directory (-c) has to be set if args.throw_away_cache is not True")
+        else:
+            args.cache_dir = tempfile.TemporaryDirectory()
     else:
-        args.cache_dir = f"{args.cache_dir}"
+        if args.throw_away_cache:
+            args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"
+        else:
+            logger.warning("Reusing the cache_dir between different network runs may lead to cache inconsistencies.")
+            logger.warning("Most importantly the crops may not be updated if you set them differently")
+            logger.warning("PersistentDataset does not detect this automatically but only checks if the hash matches")
+            args.cache_dir = f"{args.cache_dir}"
 
     if not os.path.exists(args.cache_dir):
         pathlib.Path(args.cache_dir).mkdir(parents=True)

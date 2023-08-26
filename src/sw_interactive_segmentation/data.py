@@ -88,7 +88,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ), 
             # Random Transforms #
-            # allow_smaller=True not necessary for the default AUTOPET split, just there for safety so that training does not get interrupted
+            # allow_smaller=True not necessary for the default AUTOPET split of (224,)**3, just there for safety so that training does not get interrupted
             RandCropByPosNegLabeld(
                 keys=input_keys,
                 label_key="label",

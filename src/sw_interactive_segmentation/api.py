@@ -117,6 +117,22 @@ def get_network(network_str: str, labels: Iterable):
             deep_supervision=False,
             res_block=True,
         )
+    elif network_str == "bigdynunet2":
+        network = DynUNet(
+            spatial_dims=3,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=1 + len(labels),
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3, 3, 3, 3],
+            strides=[1, 2, 2, 2, 2, [2, 2, 1]],
+            upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
+            filters=[32, 64, 128, 192, 256, 512],#, 768, 1024, 2048],
+            dropout=0.1,
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,
+        )
+
 
     logger.info(f"Selected network {network.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
@@ -376,7 +392,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         args.val_sw_batch_size,
     )
     
-    loss_function = get_loss_function(squared_pred=True, include_background=(not args.loss_dont_include_background))
+    loss_function = get_loss_function(squared_pred=(not args.loss_no_squared_pred), include_background=(not args.loss_dont_include_background))
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
     train_key_metric = get_key_metric(str_to_prepend="train_")
@@ -384,8 +400,8 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     train_additional_metrics = {}
     val_additional_metrics = {}
     if args.additional_metrics:
-        train_additional_metrics = get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=(not args.loss_dont_include_background), str_to_prepend="train_")
-        val_additional_metrics =  get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=(not args.loss_dont_include_background), str_to_prepend="train_")
+        train_additional_metrics = get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=True, str_to_prepend="train_") #(not args.loss_dont_include_background)
+        val_additional_metrics =  get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=True, str_to_prepend="val_") #(not args.loss_dont_include_background)
    # key_val_metric = get_key_val_metrics(loss_function)
 
     # additional_train_metrics

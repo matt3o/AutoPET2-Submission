@@ -126,6 +126,9 @@ def main():
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+    #torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+
 
     tmpdir = "/local/work/mhadlich/tmp"
     if os.environ.get("SLURM_JOB_ID") is not None:

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import torch
 from monai.handlers import write_metrics_reports
-from monai.metrics import DiceMetric
+from monai.metrics import DiceMetric, SurfaceDiceMetric
 from monai.utils import string_list_all_gather
 
 from sw_interactive_segmentation.data import get_test_loader, get_test_transforms
@@ -45,29 +45,40 @@ def run(args):
     assert len(data_list) > 0
 
     # compute metrics for current process
-    metric = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    dice_metric = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    include_background = False
+    amount_of_classes = len(args.labels)
+    if include_background is False:
+        amount_of_classes -= 1
+    class_thresholds=(2,)*amount_of_classes
+    surface_dice_metric = SurfaceDiceMetric(include_background=False, class_thresholds=class_thresholds, reduction="mean", get_not_nans=False)
     filenames = []
     for i in data_list:
         pred_file_name = Path(i["pred"]).stem.split(".")[0]
         batchdata = transforms(i)
         print(f"{pred_file_name}:: pred.shape: {batchdata['pred'].shape}")
-        metric(y_pred=batchdata["pred"].unsqueeze(0), y=batchdata["label"].unsqueeze(0))
+        dice_metric(y_pred=batchdata["pred"].unsqueeze(0), y=batchdata["label"].unsqueeze(0))
+        surface_dice_metric(y_pred=batchdata["pred"].unsqueeze(0), y=batchdata["label"].unsqueeze(0))
         filenames.append(pred_file_name)
     # all-gather results from all the processes and reduce for final result
-    result = metric.aggregate().item()
+    dice_results = dice_metric.aggregate().item()
+    surface_dice_results = surface_dice_metric.aggregate().item()
     filenames = string_list_all_gather(strings=filenames)
 
-    print("mean dice: ", result)
+    print(f"dice: {dice_results}")
+    print(f"surface_dice: {surface_dice_results}")
+
     # generate metrics reports at: output/mean_dice_raw.csv, output/mean_dice_summary.csv, output/metrics.csv
     write_metrics_reports(
         save_dir=f"{args.output_dir}",
         images=filenames,
-        metrics={"mean_dice": result},
-        metric_details={"mean_dice": metric.get_buffer()},
+        metrics={"dice": dice_results, "surface_dice": surface_dice_results},
+        metric_details={"dice": dice_metric.get_buffer(), "surface_dice": surface_dice_metric.get_buffer()},
         summary_ops="*",
     )
 
-    metric.reset()
+    dice_metric.reset()
+    surface_dice_metric.reset()
 
 
 def parse_args():
@@ -75,9 +86,9 @@ def parse_args():
 
     # Data
     # parser.add_argument("-i", "--input_dir", default="/cvhci/data/AutoPET/AutoPET/")
-    parser.add_argument("-l", "--labels_dir")
-    parser.add_argument("-p", "--predictions_dir")
-    parser.add_argument("-o", "--output_dir")
+    parser.add_argument("-l", "--labels_dir", required=True)
+    parser.add_argument("-p", "--predictions_dir", required=True)
+    parser.add_argument("-o", "--output_dir", required=True)
     # parser.add_argument("--dataset", default="AutoPET")
     parser.add_argument(
         "-t",

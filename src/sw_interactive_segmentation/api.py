@@ -69,9 +69,9 @@ def get_optimizer(optimizer: str, lr: float, network):
     return optimizer
 
 
-def get_loss_function(squared_pred=True, include_background=True):
+def get_loss_function(loss_kwargs={}):#squared_pred=True, include_background=True):
     # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=squared_pred, include_background=include_background)
+    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, **loss_kwargs)
     return loss_function
 
 
@@ -111,8 +111,8 @@ def get_network(network_str: str, labels: Iterable):
             kernel_size=[3, 3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, 2, [2, 2, 1]],
             upsample_kernel_size=[2, 2, 2, 2, 2, [2, 2, 1]],
-            filters=[64, 96, 128, 192, 256, 384, 512],#, 768, 1024, 2048],
-            dropout=0.1,
+            #filters=[64, 96, 128, 192, 256, 384, 512],#, 768, 1024, 2048],
+            #dropout=0.1,
             norm_name="instance",
             deep_supervision=False,
             res_block=True,
@@ -247,9 +247,9 @@ def get_train_handlers(
     inferer: str,
     gpu_size: str,
 ):
-    if sw_roi_size[0] < 128:
+    if sw_roi_size[0] <= 128:
         train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=10) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=4) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
         )
     else:
         train_trigger_event = (
@@ -289,19 +289,18 @@ def prepend_str_to_all_keys(input_dict: Dict, str_to_prepend: str) -> Dict:
     return input_dict
     
 
-def get_additional_metrics(amount_of_classes_incl_background, squared_pred=True, include_background=True, str_to_prepend = ""):
+def get_additional_metrics(labels, include_background=False, loss_kwargs={}, str_to_prepend = ""):
     # loss_function_metric = loss_function
-    loss_function = DiceCELoss(softmax=True, squared_pred=squared_pred, include_background=include_background)
+    mid = "with_bg_" if include_background else "without_bg_"
+    loss_function = DiceCELoss(softmax=True, **loss_kwargs)
     loss_function_metric = LossMetric(loss_fn=loss_function, reduction="mean", get_not_nans=False)
     loss_function_metric_ignite = IgniteMetric(
         metric_fn=loss_function_metric,
         output_transform=from_engine(["pred", "label"]),
         save_details=False,
     )
-
-    class_thresholds=(2,)*amount_of_classes_incl_background
-    if not include_background:
-        class_thresholds = class_thresholds[:-1]
+    amount_of_classes = len(labels) if include_background else (len(labels)-1)
+    class_thresholds=(2,)*amount_of_classes
     surface_dice_metric = SurfaceDiceMetric(
         include_background=include_background, class_thresholds=class_thresholds, reduction="mean", get_not_nans=False#, use_subvoxels=True
     )
@@ -313,7 +312,7 @@ def get_additional_metrics(amount_of_classes_incl_background, squared_pred=True,
 
     additional_metrics = OrderedDict()
     additional_metrics[f"{str_to_prepend}{loss_function.__class__.__name__.lower()}"] = loss_function_metric_ignite
-    additional_metrics[f"{str_to_prepend}surface_dice"] = surface_dice_metric_ignite
+    additional_metrics[f"{str_to_prepend}{mid}surface_dice"] = surface_dice_metric_ignite
     
     # Disabled since it led to weird artefacts in the Tensorboard diagram
     # for key_label in args.labels:
@@ -392,16 +391,18 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
         args.val_sw_batch_size,
     )
     
-    loss_function = get_loss_function(squared_pred=(not args.loss_no_squared_pred), include_background=(not args.loss_dont_include_background))
+    loss_kwargs = {"squared_pred": (not args.loss_no_squared_pred), "include_background": (not args.loss_dont_include_background)}
+    loss_function = get_loss_function(loss_kwargs=loss_kwargs)
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
     train_key_metric = get_key_metric(str_to_prepend="train_")
     val_key_metric = get_key_metric(str_to_prepend="val_")
     train_additional_metrics = {}
     val_additional_metrics = {}
+
     if args.additional_metrics:
-        train_additional_metrics = get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=True, str_to_prepend="train_") #(not args.loss_dont_include_background)
-        val_additional_metrics =  get_additional_metrics(amount_of_classes_incl_background=len(args.labels), include_background=True, str_to_prepend="val_") #(not args.loss_dont_include_background)
+        train_additional_metrics = get_additional_metrics(args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="train_") #(not args.loss_dont_include_background)
+        val_additional_metrics =  get_additional_metrics(args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_") #(not args.loss_dont_include_background)
    # key_val_metric = get_key_val_metrics(loss_function)
 
     # additional_train_metrics

@@ -39,7 +39,7 @@ from monai.handlers import (
     from_engine,
 )
 from monai.inferers import SimpleInferer, SlidingWindowInferer
-from monai.losses import DiceCELoss
+from monai.losses import DiceCELoss, DiceLoss
 from monai.metrics import LossMetric, SurfaceDiceMetric
 from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
@@ -69,9 +69,12 @@ def get_optimizer(optimizer: str, lr: float, network):
     return optimizer
 
 
-def get_loss_function(loss_kwargs={}):#squared_pred=True, include_background=True):
-    # squared_pred enables much faster convergence, possibly even better results in the long run
-    loss_function = DiceCELoss(to_onehot_y=True, softmax=True, **loss_kwargs)
+def get_loss_function(loss_args, loss_kwargs={}):#squared_pred=True, include_background=True):
+    if loss_args == "DiceCELoss":
+        # squared_pred enables much faster convergence, possibly even better results in the long run
+        loss_function = DiceCELoss(to_onehot_y=True, softmax=True, **loss_kwargs)
+    elif loss_args == "DiceLoss":
+        loss_function = DiceLoss(to_onehot_y=True, softmax=True, **loss_kwargs)
     return loss_function
 
 
@@ -392,7 +395,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     )
     
     loss_kwargs = {"squared_pred": (not args.loss_no_squared_pred), "include_background": (not args.loss_dont_include_background)}
-    loss_function = get_loss_function(loss_kwargs=loss_kwargs)
+    loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
     train_key_metric = get_key_metric(str_to_prepend="train_")

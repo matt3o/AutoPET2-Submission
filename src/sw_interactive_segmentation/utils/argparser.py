@@ -82,6 +82,7 @@ def parse_args():
     # If learning rate is set to 0.001, the DiceCELoss will produce Nans very quickly
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
+    parser.add_argument("--loss", default="DiceCELoss", choices=["DiceCELoss", "DiceLoss"])
     parser.add_argument(
         "--scheduler",
         default="MultiStepLR",

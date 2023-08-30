@@ -131,10 +131,14 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
                         sum_cropped_label = torch.sum(cropped_label == idx).item()
                         # then check how much of the labels is lost
                         lost_pixels = sum_label - sum_cropped_label
-                        lost_pixels_ratio = lost_pixels / sum_label * 100
-                        logger.info(
-                            f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping"
-                        )
+                        if sum_label != 0:
+                            lost_pixels_ratio = lost_pixels / sum_label * 100
+                            logger.info(
+                                f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping"
+                            )
+                        else:
+                            logger.info("No labeled pixels found for current image")
+                            logger.debug(f"image {data['image_meta_dict']['filename_or_obj']}")
             else:
                 raise UserWarning("This transform only applies to key 'label'")
         return data

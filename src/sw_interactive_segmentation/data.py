@@ -4,9 +4,10 @@ import glob
 import logging
 import os
 from typing import Dict
+from collections import OrderedDict
 
 import torch
-from monai.data import ThreadDataLoader, partition_dataset, set_track_meta
+from monai.data import ThreadDataLoader, partition_dataset
 
 # from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset  # , Dataset
@@ -31,6 +32,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     ToTensord,
 )
 from monai.utils.enums import CommonKeys
+from monai.apps import CrossValidation
 
 from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDatad,
     AddEmptySignalChannels,
@@ -49,6 +51,7 @@ logger = logging.getLogger("sw_interactive_segmentation")
 
 AUTOPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
+HECKTOR_SPACING = [4, 4, 4]
 
 
 def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
@@ -58,11 +61,18 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
 
 
 def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
-    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
-
-    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
-    if args.dataset == "AutoPET":
+    if args.dataset == "AutoPET" or args.dataset == "AutoPET2":
+        spacing = AUTOPET_SPACING
+    elif args.dataset == "HECKTOR":
+        spacing = HECKTOR_SPACING
+    elif args.dataset == "MSD_Spleen":
+        spacing = MSD_SPLEEN_SPACING
+    
+    
+    PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR"]
+    # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
+    if args.dataset in PET_dataset_names:
         t_train = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
@@ -106,7 +116,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -118,11 +128,18 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
 
 
 def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label")):
-    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
     cpu_device = torch.device("cpu")
-
-    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
-    if args.dataset == "AutoPET":
+    if args.dataset == "AutoPET" or args.dataset == "AutoPET2":
+        spacing = AUTOPET_SPACING
+    elif args.dataset == "HECKTOR":
+        spacing = HECKTOR_SPACING
+    elif args.dataset == "MSD_Spleen":
+        spacing = MSD_SPLEEN_SPACING
+    
+    
+    PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR"]
+    # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
+    if args.dataset in PET_dataset_names:
         t_val = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
@@ -148,7 +165,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ), 
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
         ]
     return t_val
@@ -330,45 +347,110 @@ def get_val_post_transforms(labels, device):
     ]
     return Compose(t)
 
+def get_AutoPET_file_list(args):
+    train_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
+    train_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
+    
+    test_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz")))
+    test_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz")))
 
-def get_loaders(args, pre_transforms_train, pre_transforms_val):
-    # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..
-    set_track_meta(True)
-    # I WARNED YOU..
 
+    train_data = [
+        {"image": image_name, "label": label_name} for image_name, label_name in zip(train_images, train_labels)
+    ]
+    val_data = [
+        {"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)
+    ]
+
+    return train_data, val_data
+
+def get_MSD_Spleen_file_list(args):
     all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
     all_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
+    
+    data = [
+        {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
+    ]
+    
+    train_data, val_data = partition_dataset(
+        data,
+        ratios=[args.split, (1 - args.split)],
+        shuffle=True,
+        seed=args.seed,
+    )
+    return train_data, val_data
 
+
+def get_AutoPET2_file_list(args):
+    all_images = glob.glob(os.path.join(args.input, "**", "**", "SUV*.nii.gz"))
+    all_labels = glob.glob(os.path.join(args.input, "**", "**", "SEG*.nii.gz"))
+    
+    data = [
+        {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
+    ]
+    
+    train_data, val_data = partition_dataset(
+        data,
+        ratios=[args.split, (1 - args.split)],
+        shuffle=True,
+        seed=args.seed,
+    )
+
+    return train_data, val_data
+
+
+def get_HECKTOR_file_list(args):
+    # Assuming this is the folder /lsdf/data/medical/HECKTOR/hecktor2022_training/
+    train_images = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training","imagesTr", "*PT*.nii.gz")))
+    train_labels = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training", "labelsTr", "*.nii.gz")))
+
+    test_images = sorted(glob.glob(os.path.join(args.input_dir,"hecktor2022_testing", "imagesTs", "*.nii.gz")))
+
+    data = [
+        {"image": image_name, "label": label_name} for image_name, label_name in zip(train_images, train_labels)
+    ]
+
+    logger.info(f"{data[-5:]=}")
+
+    train_data, val_data = partition_dataset(
+        data,
+        ratios=[args.split, (1 - args.split)],
+        shuffle=True,
+        seed=args.seed,
+    )
+
+    test_data = [
+        {"image": image_name} for image_name in test_images
+    ]
+    return train_data, val_data, test_data
+
+
+
+def get_data(args):
+    logger.info(f"{args.dataset=}")
+    
+    test_data = []
     if args.dataset == "AutoPET":
-        test_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz")))
-        test_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz")))
+        train_data, val_data = get_AutoPET_file_list(args)
+    elif args.dataset == "MSD_Spleen":
+        train_data, val_data = get_MSD_Spleen_file_list(args)
+    elif args.dataset == "AutoPET2":
+        train_data, val_data = get_AutoPET2_file_list(args)
+    elif args.dataset == "HECKTOR":
+        train_data, val_data, test_data = get_HECKTOR_file_list(args)
 
-        datalist = [
-            {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
-        ]
-        val_datalist = [
-            {"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)
-        ]
-        train_datalist = datalist
-        # For debugging with small dataset size
-        train_datalist = train_datalist[0 : args.limit] if args.limit else train_datalist
-        val_datalist = val_datalist[0 : args.limit] if args.limit else val_datalist
-    else:  # MSD_Spleen
-        datalist = [
-            {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
-        ]
-        # For debugging with small dataset size
-        datalist = datalist[0 : args.limit] if args.limit else datalist
-        train_datalist, val_datalist = partition_dataset(
-            datalist,
-            ratios=[args.split, (1 - args.split)],
-            shuffle=True,
-            seed=args.seed,
-        )
+    # For debugging with small dataset size
+    train_data = train_data[0 : args.limit] if args.limit else train_data
+    val_data = val_data[0 : args.limit] if args.limit else val_data
+    
+    return train_data, val_data, test_data
+    
 
-    total_l = len(train_datalist) + len(val_datalist)
+def get_loaders(args, pre_transforms_train, pre_transforms_val):
+    train_data, val_data, test_data = get_data(args)
 
-    train_ds = PersistentDataset(train_datalist, pre_transforms_train, cache_dir=args.cache_dir)
+    total_l = len(train_data) + len(val_data)
+    train_ds = PersistentDataset(train_data, pre_transforms_train, cache_dir=args.cache_dir)
     train_loader = ThreadDataLoader(
         train_ds,
         shuffle=True,
@@ -380,7 +462,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
     logger.info("{} :: Total Records used for Training is: {}/{}".format(args.gpu, len(train_ds), total_l))
 
-    val_ds = PersistentDataset(val_datalist, pre_transforms_val, cache_dir=args.cache_dir)
+    val_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
 
     val_loader = ThreadDataLoader(
         val_ds,
@@ -392,6 +474,46 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     logger.info("{} :: Total Records used for Validation is: {}/{}".format(args.gpu, len(val_ds), total_l))
 
     return train_loader, val_loader
+
+def get_cross_validation(nfolds, pre_transforms_train, pre_transforms_val):
+    folds = list(range(num))
+
+    train_data, val_data, test_data = get_data(args)
+
+    cvdataset = CrossValidation(
+        dataset_cls=PersistentDataset,
+        data=train_data,
+        nfolds=nfolds,
+        seed=args.seed,
+        transformpre_transforms_train=pre_transforms_train,
+        cache_dir=args.cache_dir,
+    )
+    
+    train_dss = [cvdataset.get_dataset(folds=folds[0:i] + folds[(i + 1) :]) for i in folds]
+    val_dss = [cvdataset.get_dataset(folds=i, transform=val_transforms) for i in range(num)]
+    
+    train_loaders = [ThreadDataLoader(
+        train_dss[i],
+        shuffle=True,
+        num_workers=args.num_workers,
+        batch_size=1,
+    ) for i in folds]
+
+    val_loaders = [ThreadDataLoader(
+        val_dss[i],
+        num_workers=args.num_workers,
+        batch_size=1,
+    ) for i in folds]
+
+    test_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
+
+    test_loader = ThreadDataLoader(
+        val_ds,
+        num_workers=args.num_workers,
+        batch_size=1,
+    )
+
+    return train_loaders, val_loaders, test_loader
 
 
 def get_test_loader(args, file_glob="*.nii.gz"):

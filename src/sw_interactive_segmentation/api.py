@@ -21,11 +21,14 @@ from collections import OrderedDict
 from functools import reduce
 from pickle import dump
 from typing import Iterable, List, Dict
+import random
 
 import cupy as cp
 import torch
 from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
+
+from monai.data import set_track_meta
 from monai.engines import SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
     CheckpointLoader,
@@ -53,6 +56,7 @@ from sw_interactive_segmentation.data import (
     get_post_transforms,
     get_pre_transforms,
     get_pre_transforms_val_as_list_monailabel,
+    get_cross_validation
 )
 
 
@@ -78,12 +82,14 @@ def get_loss_function(loss_args, loss_kwargs={}):#squared_pred=True, include_bac
     return loss_function
 
 
-def get_network(network_str: str, labels: Iterable):
+def get_network(network_str: str, labels: Iterable, non_interactive: bool):
+    in_channels = 1 if non_interactive else 1 + len(labels)
+
     if network_str == "dynunet":
         network = DynUNet(
             spatial_dims=3,
             # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
+            in_channels=in_channels,
             out_channels=len(labels),
             kernel_size=[3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, [2, 2, 1]],
@@ -96,7 +102,7 @@ def get_network(network_str: str, labels: Iterable):
         network = DynUNet(
             spatial_dims=3,
             # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
+            in_channels=in_channels,
             out_channels=len(labels),
             kernel_size=[3, 3, 3],
             strides=[1, 2, [2, 2, 1]],
@@ -109,7 +115,7 @@ def get_network(network_str: str, labels: Iterable):
         network = DynUNet(
             spatial_dims=3,
             # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
+            in_channels=in_channels,
             out_channels=len(labels),
             kernel_size=[3, 3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, 2, [2, 2, 1]],
@@ -124,7 +130,7 @@ def get_network(network_str: str, labels: Iterable):
         network = DynUNet(
             spatial_dims=3,
             # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=1 + len(labels),
+            in_channels=in_channels,
             out_channels=len(labels),
             kernel_size=[3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, [2, 2, 1]],
@@ -364,6 +370,7 @@ def get_evaluator(
             post_transform=post_transform,
             click_generation_strategy=args.val_click_generation,
             stopping_criterion=args.val_click_generation_stopping_criterion,
+            non_interactive=args.non_interactive,
         ),
         inferer=inferer,
         postprocessing=post_transform,
@@ -374,17 +381,32 @@ def get_evaluator(
     )
     return evaluator
 
+def get_cross_validation_trainers_generator(args, nfolds=5):
+    pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
+
+    train_loaders, val_loaders, test_loader = get_cross_validation(nfolds, pre_transforms_train, pre_transforms_val)
+
+    for i in range(5):
+        yield get_trainer_with_loaders(args, train_loaders[i], val_loaders[i], file_prefix=f"{i}_")
+
 
 def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
     device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
-    click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device)
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
 
-    network = get_network(args.network, args.labels).to(device)
+    return get_trainer_with_loaders(args, train_loader, val_loader)
+
+def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="")-> List[SupervisedTrainer, SupervisedEvaluator, List]:
+    init(args)
+    device = torch.device(f"cuda:{args.gpu}")
+    
+    click_transforms = get_click_transforms(device, args)
+    post_transform = get_post_transforms(args.labels, device)
+
+    network = get_network(args.network, args.labels, args.non_interactive).to(device)
     train_inferer, eval_inferer = get_inferers(
         args.inferer,
         args.sw_roi_size,
@@ -450,6 +472,7 @@ def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
             stopping_criterion=args.train_click_generation_stopping_criterion,
             iteration_probability=args.train_iteration_probability,
             loss_stopping_threshold=args.train_loss_stopping_threshold,
+            non_interactive=args.non_interactive,
         ),
         optimizer=optimizer,
         loss_function=loss_function,
@@ -527,7 +550,20 @@ def init(args):
     global output_dir
     # for OOM debugging
     output_dir = args.output_dir
+  
+ 
+    if args.limit_gpu_memory_to != -1:
+        limit = args.limit_gpu_memory_to
+        assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
+        torch.cuda.set_per_process_memory_fraction(limit, args.gpu)
 
+    # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..
+    # I WARNED YOU..
+    set_track_meta(True)
+
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    
     set_determinism(seed=args.seed)
     with cp.cuda.Device(args.gpu):
         # mempool = cp.get_default_memory_pool()

@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument("-c", "--cache_dir", type=str, default="None")
     parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true")
     parser.add_argument("-x", "--split", type=float, default=0.8)
+    parser.add_argument("--gpu_size", default="None", choices=["None", "small", "medium", "large"])
+    parser.add_argument("--limit_gpu_memory_to", type=float, default=-1, help="Set it to the fraction of the GPU memory that shall be used, e.g. 0.5")
     parser.add_argument(
         "-t",
         "--limit",
@@ -48,7 +50,7 @@ def parse_args():
         default=0,
         help="Limit the amount of training/validation samples",
     )
-    parser.add_argument("--dataset", default="AutoPET")  # MSD_Spleen
+    parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen"])
 
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)
@@ -104,6 +106,7 @@ def parse_args():
     parser.add_argument("--save_nifti", default=False, action="store_true")
 
     # Interactions
+    parser.add_argument("--non_interactive", action="store_true")
     parser.add_argument("-it", "--max_train_interactions", type=int, default=10)
     parser.add_argument("-iv", "--max_val_interactions", type=int, default=10)
     parser.add_argument("-dpt", "--deepgrow_probability_train", type=float, default=1.0)
@@ -251,14 +254,15 @@ def setup_environment_and_adapt_args(args):
 
     args.cwd = os.getcwd()
 
-    nv_total = gpu_usage(device, used_memory_only=False)[3]
-    if nv_total < 25:
-        args.gpu_size = "small"
-    elif nv_total < 55:
-        args.gpu_size = "medium"
-    else:
-        args.gpu_size = "large"
-    logger.info(f"Selected GPU size: {args.gpu_size}, since GPU Memory: {nv_total} GB")
+    if args.gpu_size == "None":
+        nv_total = gpu_usage(device, used_memory_only=False)[3]
+        if nv_total < 25:
+            args.gpu_size = "small"
+        elif nv_total < 55:
+            args.gpu_size = "medium"
+        else:
+            args.gpu_size = "large"
+        logger.info(f"Selected GPU size: {args.gpu_size}, since GPU Memory: {nv_total} GB")
 
     # Init the Inferer
     args.sw_roi_size = eval(args.sw_roi_size)

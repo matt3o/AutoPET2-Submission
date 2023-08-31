@@ -43,7 +43,7 @@ def run(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
     device = torch.device(f"cuda:{args.gpu}")
-
+    
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", os.path.join(args.output_dir, "usage.csv"), device)
     logger.info(f"Logging GPU usage to {args.output_dir}/usage.csv")
 

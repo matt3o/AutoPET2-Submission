@@ -142,15 +142,12 @@ class Interaction:
         while True:
             assert iteration < 1000
 
-            if self.non_interactive:
-                break
-            
             # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
             inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
             batchdata[CommonKeys.IMAGE] = inputs
             batchdata[CommonKeys.LABEL] = labels
             # BCHW[D] ?
-
+            
             if iteration == 0:
                 logger.info("inputs.shape is {}".format(inputs.shape))
                 # Make sure the signal is empty in the first iteration assertion holds
@@ -161,7 +158,10 @@ class Interaction:
                 for i in range(len(batchdata["label"][0])):
                     if torch.sum(batchdata["label"][i, 0]) < 0.1:
                         logger.warning("No valid labels for this sample (probably due to crop)")
-
+            
+            if self.non_interactive:
+                break
+            
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER,
                 StoppingCriterion.MAX_ITER_AND_PROBABILITY,

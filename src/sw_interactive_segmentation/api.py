@@ -537,7 +537,9 @@ def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="", ens
             save_interval=args.save_interval,
             save_final=True,
             final_filename="checkpoint.pt",
+            save_key_metric=True,
             n_saved=2,
+            file_prefix='train',
         ).attach(trainer)
         CheckpointSaver(
             save_dir=args.output_dir,

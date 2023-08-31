@@ -391,7 +391,7 @@ def get_cross_validation_trainers_generator(args, nfolds=5):
     train_loaders, val_loaders = get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
 
     # Parse args.resume_from and split it into the different parts, assert len is nfolds
-    if args.resume_from is not "None":
+    if args.resume_from != "None":
         assert os.path.isdir(args.resume_from), "For the ensemble resume_from has to be a dictionary containing the weights starting with 0_, 1_, ..."
         filenames = []
         for i in range(nfolds):

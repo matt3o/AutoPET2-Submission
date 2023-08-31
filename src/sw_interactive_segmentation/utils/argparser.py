@@ -22,6 +22,7 @@ import os
 import pathlib
 import sys
 import uuid
+import tempfile
 
 import torch
 
@@ -187,7 +188,7 @@ def setup_environment_and_adapt_args(args):
         # Avoid a loading error from the training where it complains the number of epochs is too low
         args.epochs = 100000
 
-    if args.cache_dir is "None":
+    if args.cache_dir == "None":
         if not args.throw_away_cache:
             raise UserWarning("Cache directory (-c) has to be set if args.throw_away_cache is not True")
         else:

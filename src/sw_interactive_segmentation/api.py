@@ -84,7 +84,7 @@ def get_loss_function(loss_args, loss_kwargs={}):#squared_pred=True, include_bac
     return loss_function
 
 
-def get_network(network_str: str, labels: Iterable, non_interactive: bool):
+def get_network(network_str: str, labels: Iterable, non_interactive: bool = False):
     in_channels = 1 if non_interactive else 1 + len(labels)
 
     if network_str == "dynunet":

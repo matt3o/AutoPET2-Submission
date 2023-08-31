@@ -385,14 +385,6 @@ def get_AutoPET_file_list(args):
 
     return train_data, val_data
 
-def get_AutoPET_file_list_all_train(args):
-    
-    train_data, val_data = get_AutoPET_file_list(args)
-    train_data.update(val_data)
-
-    return train_data, val_data
-
-
 def get_MSD_Spleen_file_list(args):
     all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
     all_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
@@ -461,8 +453,6 @@ def get_data(args):
     test_data = []
     if args.dataset == "AutoPET":
         train_data, val_data = get_AutoPET_file_list(args)
-    if args.dataset == "AutoPET_train":
-        train_data, val_data = get_AutoPET_file_list_all_train(args)
     elif args.dataset == "MSD_Spleen":
         train_data, val_data = get_MSD_Spleen_file_list(args)
     elif args.dataset == "AutoPET2":
@@ -473,6 +463,10 @@ def get_data(args):
     # For debugging with small dataset size
     train_data = train_data[0 : args.limit] if args.limit else train_data
     val_data = val_data[0 : args.limit] if args.limit else val_data
+
+    if args.train_on_all_samples:
+        train_data += val_data
+        logger.warning("All validation data has been added to the training. Validation on them no longer makes sense.")
     
     return train_data, val_data, test_data
     

@@ -52,7 +52,8 @@ def parse_args():
         help="Limit the amount of training/validation samples",
     )
     parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen"])
-
+    parser.add_argument("--train_on_all_samples", action="store_true")
+    
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)

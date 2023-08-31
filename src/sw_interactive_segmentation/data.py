@@ -30,6 +30,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     Spacingd,
     ToDeviced,
     ToTensord,
+    MeanEnsembled,
 )
 from monai.utils.enums import CommonKeys
 from monai.apps import CrossValidation
@@ -91,7 +92,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
-            ),
+            ) if not args.dont_crop_foreground else NoOpd(),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True) if not args.use_scale_intensity_range_percentiled else 
             ScaleIntensityRangePercentilesd(
@@ -148,17 +149,17 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size)
+            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground))
             if "label" in input_keys
             else NoOpd(),
-            CropForegroundd(
-                keys=input_keys,
-                source_key="image",
-                select_fn=threshold_foreground,
-            ),
-            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
-            if args.val_crop_size is not None
-            else NoOpd(),
+            # CropForegroundd(
+            #     keys=input_keys,
+            #     source_key="image",
+            #     select_fn=threshold_foreground,
+            # ) if not args.dont_crop_foreground else NoOpd(),
+            # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
+            # if args.val_crop_size is not None
+            # else NoOpd(),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True) if not args.use_scale_intensity_range_percentiled else 
             ScaleIntensityRangePercentilesd(
@@ -333,6 +334,26 @@ def get_post_transforms(labels, device):
     ]
     return Compose(t)
 
+def get_ensemble_transforms(labels, device, nfolds=5, weights=None):
+    prediction_keys = [f"pred_{i}" for i in range(nfolds)]
+
+    t = [
+        EnsureTyped(keys=prediction_keys),
+        MeanEnsembled(
+            keys=prediction_keys,
+            output_key="pred",
+            #weights=[0.95, 0.94, 0.95, 0.94, 0.90],
+        ),
+        Activationsd(keys="pred", softmax=True),
+        AsDiscreted(
+            keys=("pred", "label"),
+            argmax=(True, False),
+            to_onehot=(len(labels), len(labels)),
+        ),
+    ]
+    return Compose(t)
+
+
 
 def get_val_post_transforms(labels, device):
     t = [
@@ -363,6 +384,14 @@ def get_AutoPET_file_list(args):
     ]
 
     return train_data, val_data
+
+def get_AutoPET_file_list_all_train(args):
+    
+    train_data, val_data = get_AutoPET_file_list(args)
+    train_data.update(val_data)
+
+    return train_data, val_data
+
 
 def get_MSD_Spleen_file_list(args):
     all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
@@ -432,6 +461,8 @@ def get_data(args):
     test_data = []
     if args.dataset == "AutoPET":
         train_data, val_data = get_AutoPET_file_list(args)
+    if args.dataset == "AutoPET_train":
+        train_data, val_data = get_AutoPET_file_list_all_train(args)
     elif args.dataset == "MSD_Spleen":
         train_data, val_data = get_MSD_Spleen_file_list(args)
     elif args.dataset == "AutoPET2":
@@ -475,8 +506,8 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     return train_loader, val_loader
 
-def get_cross_validation(nfolds, pre_transforms_train, pre_transforms_val):
-    folds = list(range(num))
+def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val):
+    folds = list(range(nfolds))
 
     train_data, val_data, test_data = get_data(args)
 
@@ -485,12 +516,12 @@ def get_cross_validation(nfolds, pre_transforms_train, pre_transforms_val):
         data=train_data,
         nfolds=nfolds,
         seed=args.seed,
-        transformpre_transforms_train=pre_transforms_train,
+        transform=pre_transforms_train,
         cache_dir=args.cache_dir,
     )
     
     train_dss = [cvdataset.get_dataset(folds=folds[0:i] + folds[(i + 1) :]) for i in folds]
-    val_dss = [cvdataset.get_dataset(folds=i, transform=val_transforms) for i in range(num)]
+    val_dss = [cvdataset.get_dataset(folds=i, transform=pre_transforms_val) for i in range(nfolds)]
     
     train_loaders = [ThreadDataLoader(
         train_dss[i],
@@ -505,15 +536,15 @@ def get_cross_validation(nfolds, pre_transforms_train, pre_transforms_val):
         batch_size=1,
     ) for i in folds]
 
-    test_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
+    # test_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
 
-    test_loader = ThreadDataLoader(
-        val_ds,
-        num_workers=args.num_workers,
-        batch_size=1,
-    )
+    # test_loader = ThreadDataLoader(
+    #     val_ds,
+    #     num_workers=args.num_workers,
+    #     batch_size=1,
+    # )
 
-    return train_loaders, val_loaders, test_loader
+    return train_loaders, val_loaders#, test_loader
 
 
 def get_test_loader(args, file_glob="*.nii.gz"):

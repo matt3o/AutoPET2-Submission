@@ -22,6 +22,8 @@ from functools import reduce
 from pickle import dump
 from typing import Iterable, List, Dict
 import random
+import os
+import glob
 
 import cupy as cp
 import torch
@@ -29,7 +31,7 @@ from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
 
 from monai.data import set_track_meta
-from monai.engines import SupervisedEvaluator, SupervisedTrainer
+from monai.engines import SupervisedEvaluator, SupervisedTrainer, EnsembleEvaluator
 from monai.handlers import (
     CheckpointLoader,
     CheckpointSaver,
@@ -226,11 +228,11 @@ def get_scheduler(optimizer, scheduler_str: str, epochs_to_run: int):
 def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
     if sw_roi_size[0] < 128:
         val_trigger_event = (
-            Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED
         )
     else:
         val_trigger_event = (
-            Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED
         )
 
     # define event-handlers for engine
@@ -258,7 +260,7 @@ def get_train_handlers(
 ):
     if sw_roi_size[0] <= 128:
         train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=4) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=1)
+            Events.ITERATION_COMPLETED(every=4) if gpu_size == "large" else Events.ITERATION_COMPLETED
         )
     else:
         train_trigger_event = (
@@ -382,24 +384,60 @@ def get_evaluator(
     return evaluator
 
 def get_cross_validation_trainers_generator(args, nfolds=5):
+    device = torch.device(f"cuda:{args.gpu}")
+
     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
 
-    train_loaders, val_loaders, test_loader = get_cross_validation(nfolds, pre_transforms_train, pre_transforms_val)
+    train_loaders, val_loaders = get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
+
+    # Parse args.resume_from and split it into the different parts, assert len is nfolds
+    if args.resume_from is not "None":
+        assert os.path.isdir(args.resume_from), "For the ensemble resume_from has to be a dictionary containing the weights starting with 0_, 1_, ..."
+        filenames = []
+        for i in range(nfolds):
+            try:
+                file = glob.glob(os.path.join(args.resume, f"{i}_checkpoint_key_metric*"))[0]
+            except IndexError:
+                logger.error("File for the resuming the ensemble has not been found!")
+                raise
+            filenames.append(file)
+            print(f"{file=}")
+            exit(0)
 
     for i in range(5):
-        yield get_trainer_with_loaders(args, train_loaders[i], val_loaders[i], file_prefix=f"{i}_")
+        yield get_trainer_with_loaders(args, train_loaders[i], val_loaders[i], file_prefix=f"{i}_", resume_from=filenames[i])
+
+def ensemble_evaluate(args, post_transforms, models, nfolds=5):
+    device = torch.device(f"cuda:{args.gpu}")
+    
+    evaluator = EnsembleEvaluator(
+        device=device,
+        val_data_loader=test_loader,
+        pred_keys=["pred0", "pred1", "pred2", "pred3", "pred4"],
+        networks=models,
+        inferer=SlidingWindowInferer(roi_size=(96, 96, 96), sw_batch_size=4, overlap=0.5),
+        postprocessing=post_transforms,
+        key_val_metric={
+            "test_mean_dice": MeanDice(
+                include_background=True,
+                output_transform=from_engine(["pred", "label"]),
+            )
+        },
+    )
+    evaluator.run()
 
 
-def get_trainer(args) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
+
+def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
     device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
     train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
 
-    return get_trainer_with_loaders(args, train_loader, val_loader)
+    return get_trainer_with_loaders(args, train_loader, val_loader, resume_from=resume_from)
 
-def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="")-> List[SupervisedTrainer, SupervisedEvaluator, List]:
+def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="", ensemble_mode: bool = False, resume_from="None")-> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
     device = torch.device(f"cuda:{args.gpu}")
     
@@ -485,36 +523,53 @@ def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="")-> L
     )
 
     save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
-    CheckpointSaver(
-        save_dir=args.output_dir,
-        save_dict=save_dict,
-        save_interval=args.save_interval,
-        save_final=True,
-        final_filename="checkpoint.pt",
-        n_saved=2,
-    ).attach(trainer)
-    CheckpointSaver(
-        save_dir=args.output_dir,
-        save_dict=save_dict,
-        save_key_metric=True,
-        save_final=True,
-        save_interval=args.save_interval,
-        final_filename="pretrained_deepedit_" + args.network + "-final.pt",
-    ).attach(evaluator)
+    ensemble_save_dict = {
+            "net": network,
+    }
+    if ensemble_mode:
+        save_dict = ensemble_save_dict
+
+
+    if not ensemble_mode:
+        CheckpointSaver(
+            save_dir=args.output_dir,
+            save_dict=save_dict,
+            save_interval=args.save_interval,
+            save_final=True,
+            final_filename="checkpoint.pt",
+            n_saved=2,
+        ).attach(trainer)
+        CheckpointSaver(
+            save_dir=args.output_dir,
+            save_dict=save_dict,
+            save_key_metric=True,
+            save_final=True,
+            save_interval=args.save_interval,
+            final_filename="pretrained_deepedit_" + args.network + "-final.pt",
+        ).attach(evaluator)
+    else:
+        CheckpointSaver(
+            save_dir=args.output_dir,
+            save_dict=save_dict,
+            save_key_metric=True,
+            file_prefix=file_prefix,
+        ).attach(evaluator)
+
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
-    if args.resume_from != "None":
+    if resume_from != "None":
         if args.resume_override_scheduler:
             # Remove those parts
             saved_opt = save_dict["opt"]
             saved_lr = save_dict["lr"]
             del save_dict["opt"]
             del save_dict["lr"]
-
+        if ensemble_mode:
+            save_dict = ensemble_save_dict
         logger.info(f"{args.gpu}:: Loading Network...")
         logger.info(f"{save_dict.keys()=}")
         map_location = device #{f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
-        checkpoint = torch.load(args.resume_from)
+        checkpoint = torch.load(resume_from)
 
         for key in save_dict:
             # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
@@ -523,7 +578,7 @@ def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="")-> L
             ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        handler = CheckpointLoader(load_path=args.resume_from, load_dict=save_dict, map_location=map_location)
+        handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
         handler(trainer)
 
         if args.resume_override_scheduler:
@@ -531,7 +586,6 @@ def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="")-> L
             save_dict["opt"] = saved_opt
             save_dict["lr"] = saved_lr
 
-    # first train, then validation metrics
     return trainer, evaluator, train_key_metric, train_additional_metrics, val_key_metric, val_additional_metrics
 
 
@@ -550,12 +604,16 @@ def init(args):
     global output_dir
     # for OOM debugging
     output_dir = args.output_dir
-  
- 
+   
     if args.limit_gpu_memory_to != -1:
         limit = args.limit_gpu_memory_to
         assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
         torch.cuda.set_per_process_memory_fraction(limit, args.gpu)
+
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.deterministic = True
+
 
     # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..
     # I WARNED YOU..

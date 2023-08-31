@@ -97,6 +97,7 @@ def parse_args():
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")
     parser.add_argument("--use_scale_intensity_range_percentiled", default=False, action="store_true")
     parser.add_argument("--additional_metrics", default=False, action="store_true")
+    parser.add_argument("--dont_crop_foreground", default=False, action="store_true")
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1)  # Epoch Level

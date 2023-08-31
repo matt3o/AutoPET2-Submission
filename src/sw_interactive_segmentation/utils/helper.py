@@ -325,13 +325,15 @@ class TerminationHandler:
         logger.critical("#### RECEIVED TERM SIGNAL - ABORTING RUN ############")
         pd.set_option("display.max_columns", None)
         pd.set_option("display.max_rows", None)
-        logger.info(f"\n{self.wp.get_times_summary_pd()}")
+        if self.wp is not None:
+            logger.info(f"\n{self.wp.get_times_summary_pd()}")
         self.cleanup()
         self.join_threads()
         sys.exit(99)
 
     def join_threads(self):
-        self.tb_logger.close()
+        if self.tb_logger is not None:
+            self.tb_logger.close()
         self.gpu_thread.stopFlag.set()
         self.gpu_thread.join()
 

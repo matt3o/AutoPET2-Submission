@@ -96,49 +96,53 @@ class NoOpd(MapTransform):
 
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection, roi_size: Iterable):
+    def __init__(self, keys: KeysCollection, roi_size: Iterable, crop_foreground=True):
         """
         Prints how much information is lost due to the crop.
         """
         super().__init__(keys)
         self.roi_size = roi_size
+        self.crop_foreground = crop_foreground
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         labels = data[LABELS_KEY]
         for key in self.key_iterator(data):
             if key == "label":
-                label = data[key]
-                new_data = {"label": label.clone(), "image": data["image"].clone()}
-                # copy the label and crop it to the desired size
                 t = []
-                t.append(
-                    CropForegroundd(
-                        keys=("image", "label"),
-                        source_key="image",
-                        select_fn=threshold_foreground,
+                if self.crop_foreground:
+                    t.append(
+                        CropForegroundd(
+                            keys=("image", "label"),
+                            source_key="image",
+                            select_fn=threshold_foreground,
+                        )
                     )
-                )
                 if self.roi_size is not None:
                     t.append(CenterSpatialCropd(keys="label", roi_size=self.roi_size))
 
-                cropped_label = Compose(t)(new_data)["label"]
+                if len(t):
+                    # copy the label and crop it to the desired size
+                    label = data[key]
+                    new_data = {"label": label.clone(), "image": data["image"].clone()}
 
-                # label_num_el = torch.numel(label)
-                for idx, (key_label, _) in enumerate(labels.items(), start=1):
-                    # Only count non-background lost labels
-                    if key_label != "background":
-                        sum_label = torch.sum(label == idx).item()
-                        sum_cropped_label = torch.sum(cropped_label == idx).item()
-                        # then check how much of the labels is lost
-                        lost_pixels = sum_label - sum_cropped_label
-                        if sum_label != 0:
-                            lost_pixels_ratio = lost_pixels / sum_label * 100
-                            logger.info(
-                                f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping"
-                            )
-                        else:
-                            logger.info("No labeled pixels found for current image")
-                            logger.debug(f"image {data['image_meta_dict']['filename_or_obj']}")
+                    cropped_label = Compose(t)(new_data)["label"]
+
+                    # label_num_el = torch.numel(label)
+                    for idx, (key_label, _) in enumerate(labels.items(), start=1):
+                        # Only count non-background lost labels
+                        if key_label != "background":
+                            sum_label = torch.sum(label == idx).item()
+                            sum_cropped_label = torch.sum(cropped_label == idx).item()
+                            # then check how much of the labels is lost
+                            lost_pixels = sum_label - sum_cropped_label
+                            if sum_label != 0:
+                                lost_pixels_ratio = lost_pixels / sum_label * 100
+                                logger.info(
+                                    f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping"
+                                )
+                            else:
+                                logger.info("No labeled pixels found for current image")
+                                logger.debug(f"image {data['image_meta_dict']['filename_or_obj']}")
             else:
                 raise UserWarning("This transform only applies to key 'label'")
         return data

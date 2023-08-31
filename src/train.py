@@ -49,7 +49,7 @@ def run(args):
 
     try:
         wp = WorkflowProfiler()
-        trainer, evaluator, key_train_metric, additional_train_metrics, key_val_metric, additional_val_metrics = get_trainer(args)
+        trainer, evaluator, key_train_metric, additional_train_metrics, key_val_metric, additional_val_metrics = get_trainer(args, resume_from=args.resume_from)
         train_metric_names = list(key_train_metric.keys()) + list(additional_train_metrics.keys())
         val_metric_names = list(key_val_metric.keys()) + list(additional_val_metrics.keys())
 
@@ -124,14 +124,9 @@ def run(args):
 def main():
     global logger
 
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-    #torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.deterministic = True
-
-
-    tmpdir = "/local/work/mhadlich/tmp"
+    # Slurm only: Speed up the creation of temporary files
     if os.environ.get("SLURM_JOB_ID") is not None:
+        tmpdir = "/local/work/mhadlich/tmp"
         os.environ["TMPDIR"] = tmpdir
         if not os.path.exists(tmpdir):
             pathlib.Path(tmpdir).mkdir(parents=True)

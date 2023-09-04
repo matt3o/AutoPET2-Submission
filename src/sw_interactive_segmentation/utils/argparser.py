@@ -53,6 +53,7 @@ def parse_args():
     )
     parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen"])
     parser.add_argument("--train_on_all_samples", action="store_true")
+    parser.add_argument("--positive_crop_rate", type=float, default=0.6, help="The rate of positive samples for RandCropByPosNegLabeld")
     
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)

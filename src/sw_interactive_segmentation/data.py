@@ -104,8 +104,8 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 keys=input_keys,
                 label_key="label",
                 spatial_size=args.train_crop_size,
-                pos=0.6,
-                neg=0.4,
+                pos=args.positive_crop_rate,
+                neg=1-args.positive_crop_rate,
                 allow_smaller=True,
             )
             if args.train_crop_size is not None

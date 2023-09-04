@@ -158,6 +158,7 @@ def get_inferers(
     val_crop_size,
     train_sw_batch_size,
     val_sw_batch_size,
+    sw_overlap = 0.25,
     cache_roi_weight_map: bool = True,
 ):
     if inferer == "SimpleInferer":
@@ -198,12 +199,14 @@ def get_inferers(
             sw_batch_size=train_batch_size,
             mode="gaussian",
             cache_roi_weight_map=cache_roi_weight_map,
+            overlap=sw_overlap,
         )
         eval_inferer = SlidingWindowInferer(
             roi_size=sw_roi_size,
             sw_batch_size=val_batch_size,
             mode="gaussian",
             cache_roi_weight_map=cache_roi_weight_map,
+            overlap=sw_overlap,
         )
     return train_inferer, eval_inferer
 
@@ -452,6 +455,8 @@ def get_trainer_with_loaders(args, train_loader, val_loader, file_prefix="", ens
         args.val_crop_size,
         args.train_sw_batch_size,
         args.val_sw_batch_size,
+        args.sw_overlap,
+        True
     )
     
     loss_kwargs = {"squared_pred": (not args.loss_no_squared_pred), "include_background": (not args.loss_dont_include_background)}

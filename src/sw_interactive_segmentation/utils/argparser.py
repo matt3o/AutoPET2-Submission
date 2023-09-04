@@ -78,6 +78,7 @@ def parse_args():
     # 1 on 24 Gb, 8 on 50 Gb,
     parser.add_argument("--train_sw_batch_size", type=int, default=8)
     parser.add_argument("--val_sw_batch_size", type=int, default=1)
+    parser.add_argument("--sw_overlap", type=float, default=0.25)
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action="store_true")

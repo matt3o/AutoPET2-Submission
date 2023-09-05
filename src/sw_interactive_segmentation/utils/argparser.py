@@ -43,7 +43,12 @@ def parse_args():
     parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true")
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("--gpu_size", default="None", choices=["None", "small", "medium", "large"])
-    parser.add_argument("--limit_gpu_memory_to", type=float, default=-1, help="Set it to the fraction of the GPU memory that shall be used, e.g. 0.5")
+    parser.add_argument(
+        "--limit_gpu_memory_to",
+        type=float,
+        default=-1,
+        help="Set it to the fraction of the GPU memory that shall be used, e.g. 0.5",
+    )
     parser.add_argument(
         "-t",
         "--limit",
@@ -53,8 +58,10 @@ def parse_args():
     )
     parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen"])
     parser.add_argument("--train_on_all_samples", action="store_true")
-    parser.add_argument("--positive_crop_rate", type=float, default=0.6, help="The rate of positive samples for RandCropByPosNegLabeld")
-    
+    parser.add_argument(
+        "--positive_crop_rate", type=float, default=0.6, help="The rate of positive samples for RandCropByPosNegLabeld"
+    )
+
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)
@@ -95,7 +102,7 @@ def parse_args():
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
     parser.add_argument("--loss_dont_include_background", default=False, action="store_true")
-    parser.add_argument("--loss_no_squared_pred", action="store_true") 
+    parser.add_argument("--loss_no_squared_pred", action="store_true")
     parser.add_argument("--resume_from", type=str, default="None")
     # Use this parameter to change the scheduler..
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")

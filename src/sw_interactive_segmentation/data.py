@@ -69,8 +69,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
         spacing = HECKTOR_SPACING
     elif args.dataset == "MSD_Spleen":
         spacing = MSD_SPLEEN_SPACING
-    
-    
+
     PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR"]
     # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
@@ -92,12 +91,15 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
-            ) if not args.dont_crop_foreground else NoOpd(),
+            )
+            if not args.dont_crop_foreground
+            else NoOpd(),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
-            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True) if not args.use_scale_intensity_range_percentiled else 
-            ScaleIntensityRangePercentilesd(
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
+            if not args.use_scale_intensity_range_percentiled
+            else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
-            ), 
+            ),
             # Random Transforms #
             # allow_smaller=True not necessary for the default AUTOPET split of (224,)**3, just there for safety so that training does not get interrupted
             RandCropByPosNegLabeld(
@@ -105,7 +107,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 label_key="label",
                 spatial_size=args.train_crop_size,
                 pos=args.positive_crop_rate,
-                neg=1-args.positive_crop_rate,
+                neg=1 - args.positive_crop_rate,
                 allow_smaller=True,
             )
             if args.train_crop_size is not None
@@ -136,8 +138,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
         spacing = HECKTOR_SPACING
     elif args.dataset == "MSD_Spleen":
         spacing = MSD_SPLEEN_SPACING
-    
-    
+
     PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR"]
     # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
@@ -149,7 +150,9 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
-            CheckTheAmountOfInformationLossByCropd(keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground))
+            CheckTheAmountOfInformationLossByCropd(
+                keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground)
+            )
             if "label" in input_keys
             else NoOpd(),
             # CropForegroundd(
@@ -161,10 +164,11 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             # if args.val_crop_size is not None
             # else NoOpd(),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
-            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True) if not args.use_scale_intensity_range_percentiled else 
-            ScaleIntensityRangePercentilesd(
+            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
+            if not args.use_scale_intensity_range_percentiled
+            else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
-            ), 
+            ),
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
@@ -334,6 +338,7 @@ def get_post_transforms(labels, device):
     ]
     return Compose(t)
 
+
 def get_ensemble_transforms(labels, device, nfolds=5, weights=None):
     prediction_keys = [f"pred_{i}" for i in range(nfolds)]
 
@@ -342,7 +347,7 @@ def get_ensemble_transforms(labels, device, nfolds=5, weights=None):
         MeanEnsembled(
             keys=prediction_keys,
             output_key="pred",
-            #weights=[0.95, 0.94, 0.95, 0.94, 0.90],
+            # weights=[0.95, 0.94, 0.95, 0.94, 0.90],
         ),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
@@ -352,7 +357,6 @@ def get_ensemble_transforms(labels, device, nfolds=5, weights=None):
         ),
     ]
     return Compose(t)
-
 
 
 def get_val_post_transforms(labels, device):
@@ -368,31 +372,28 @@ def get_val_post_transforms(labels, device):
     ]
     return Compose(t)
 
+
 def get_AutoPET_file_list(args):
     train_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
     train_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
-    
+
     test_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz")))
     test_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz")))
-
 
     train_data = [
         {"image": image_name, "label": label_name} for image_name, label_name in zip(train_images, train_labels)
     ]
-    val_data = [
-        {"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)
-    ]
+    val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
 
     return train_data, val_data
+
 
 def get_MSD_Spleen_file_list(args):
     all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
     all_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
-    
-    data = [
-        {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
-    ]
-    
+
+    data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)]
+
     train_data, val_data = partition_dataset(
         data,
         ratios=[args.split, (1 - args.split)],
@@ -405,11 +406,9 @@ def get_MSD_Spleen_file_list(args):
 def get_AutoPET2_file_list(args):
     all_images = glob.glob(os.path.join(args.input, "**", "**", "SUV*.nii.gz"))
     all_labels = glob.glob(os.path.join(args.input, "**", "**", "SEG*.nii.gz"))
-    
-    data = [
-        {"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)
-    ]
-    
+
+    data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)]
+
     train_data, val_data = partition_dataset(
         data,
         ratios=[args.split, (1 - args.split)],
@@ -422,14 +421,12 @@ def get_AutoPET2_file_list(args):
 
 def get_HECKTOR_file_list(args):
     # Assuming this is the folder /lsdf/data/medical/HECKTOR/hecktor2022_training/
-    train_images = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training","imagesTr", "*PT*.nii.gz")))
+    train_images = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training", "imagesTr", "*PT*.nii.gz")))
     train_labels = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training", "labelsTr", "*.nii.gz")))
 
-    test_images = sorted(glob.glob(os.path.join(args.input_dir,"hecktor2022_testing", "imagesTs", "*.nii.gz")))
+    test_images = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_testing", "imagesTs", "*.nii.gz")))
 
-    data = [
-        {"image": image_name, "label": label_name} for image_name, label_name in zip(train_images, train_labels)
-    ]
+    data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(train_images, train_labels)]
 
     logger.info(f"{data[-5:]=}")
 
@@ -440,16 +437,13 @@ def get_HECKTOR_file_list(args):
         seed=args.seed,
     )
 
-    test_data = [
-        {"image": image_name} for image_name in test_images
-    ]
+    test_data = [{"image": image_name} for image_name in test_images]
     return train_data, val_data, test_data
-
 
 
 def get_data(args):
     logger.info(f"{args.dataset=}")
-    
+
     test_data = []
     if args.dataset == "AutoPET":
         train_data, val_data = get_AutoPET_file_list(args)
@@ -467,9 +461,9 @@ def get_data(args):
     if args.train_on_all_samples:
         train_data += val_data
         logger.warning("All validation data has been added to the training. Validation on them no longer makes sense.")
-    
+
     return train_data, val_data, test_data
-    
+
 
 def get_loaders(args, pre_transforms_train, pre_transforms_val):
     train_data, val_data, test_data = get_data(args)
@@ -500,6 +494,7 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
 
     return train_loader, val_loader
 
+
 def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val):
     folds = list(range(nfolds))
 
@@ -513,22 +508,28 @@ def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
         transform=pre_transforms_train,
         cache_dir=args.cache_dir,
     )
-    
+
     train_dss = [cvdataset.get_dataset(folds=folds[0:i] + folds[(i + 1) :]) for i in folds]
     val_dss = [cvdataset.get_dataset(folds=i, transform=pre_transforms_val) for i in range(nfolds)]
-    
-    train_loaders = [ThreadDataLoader(
-        train_dss[i],
-        shuffle=True,
-        num_workers=args.num_workers,
-        batch_size=1,
-    ) for i in folds]
 
-    val_loaders = [ThreadDataLoader(
-        val_dss[i],
-        num_workers=args.num_workers,
-        batch_size=1,
-    ) for i in folds]
+    train_loaders = [
+        ThreadDataLoader(
+            train_dss[i],
+            shuffle=True,
+            num_workers=args.num_workers,
+            batch_size=1,
+        )
+        for i in folds
+    ]
+
+    val_loaders = [
+        ThreadDataLoader(
+            val_dss[i],
+            num_workers=args.num_workers,
+            batch_size=1,
+        )
+        for i in folds
+    ]
 
     # test_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
 
@@ -538,7 +539,7 @@ def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
     #     batch_size=1,
     # )
 
-    return train_loaders, val_loaders#, test_loader
+    return train_loaders, val_loaders  # , test_loader
 
 
 def get_test_loader(args, file_glob="*.nii.gz"):

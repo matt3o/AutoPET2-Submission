@@ -73,7 +73,7 @@ class Interaction:
         stopping_criterion: StoppingCriterion = StoppingCriterion.MAX_ITER,
         iteration_probability: float = 0.5,
         loss_stopping_threshold: float = 0.1,
-        non_interactive = False,
+        non_interactive=False,
     ) -> None:
         self.deepgrow_probability = deepgrow_probability
         self.transforms = Compose(transforms) if not isinstance(transforms, Compose) else transforms  # click transforms
@@ -147,7 +147,7 @@ class Interaction:
             batchdata[CommonKeys.IMAGE] = inputs
             batchdata[CommonKeys.LABEL] = labels
             # BCHW[D] ?
-            
+
             if iteration == 0:
                 logger.info("inputs.shape is {}".format(inputs.shape))
                 # Make sure the signal is empty in the first iteration assertion holds
@@ -158,10 +158,10 @@ class Interaction:
                 for i in range(len(batchdata["label"][0])):
                     if torch.sum(batchdata["label"][i, 0]) < 0.1:
                         logger.warning("No valid labels for this sample (probably due to crop)")
-            
+
             if self.non_interactive:
                 break
-            
+
             if self.stopping_criterion in [
                 StoppingCriterion.MAX_ITER,
                 StoppingCriterion.MAX_ITER_AND_PROBABILITY,
@@ -201,7 +201,6 @@ class Interaction:
                     p=[self.deepgrow_probability, 1 - self.deepgrow_probability],
                 ):
                     break
-
 
             engine.fire_event(IterationEvents.INNER_ITERATION_STARTED)
             engine.network.eval()

@@ -38,18 +38,26 @@ from monai.handlers import (
 
 logger = None
 
+
 def run(args):
     for arg in vars(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
     device = torch.device(f"cuda:{args.gpu}")
-    
+
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", os.path.join(args.output_dir, "usage.csv"), device)
     logger.info(f"Logging GPU usage to {args.output_dir}/usage.csv")
 
     try:
         wp = WorkflowProfiler()
-        trainer, evaluator, key_train_metric, additional_train_metrics, key_val_metric, additional_val_metrics = get_trainer(args, resume_from=args.resume_from)
+        (
+            trainer,
+            evaluator,
+            key_train_metric,
+            additional_train_metrics,
+            key_val_metric,
+            additional_val_metrics,
+        ) = get_trainer(args, resume_from=args.resume_from)
         train_metric_names = list(key_train_metric.keys()) + list(additional_train_metrics.keys())
         val_metric_names = list(key_val_metric.keys()) + list(additional_val_metrics.keys())
 

@@ -50,8 +50,10 @@ def run(args):
     amount_of_classes = len(args.labels)
     if include_background is False:
         amount_of_classes -= 1
-    class_thresholds=(2,)*amount_of_classes
-    surface_dice_metric = SurfaceDiceMetric(include_background=False, class_thresholds=class_thresholds, reduction="mean", get_not_nans=False)
+    class_thresholds = (2,) * amount_of_classes
+    surface_dice_metric = SurfaceDiceMetric(
+        include_background=False, class_thresholds=class_thresholds, reduction="mean", get_not_nans=False
+    )
     filenames = []
     for i in data_list:
         pred_file_name = Path(i["pred"]).stem.split(".")[0]

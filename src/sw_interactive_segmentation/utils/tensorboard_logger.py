@@ -24,7 +24,6 @@ from ignite.contrib.handlers.tensorboard_logger import (
 from ignite.engine import Events
 
 
-
 def init_tensorboard_logger(
     trainer,
     evaluator,

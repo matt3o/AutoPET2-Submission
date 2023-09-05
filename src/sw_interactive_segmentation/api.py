@@ -57,7 +57,6 @@ from sw_interactive_segmentation.data import (
     get_loaders,
     get_post_transforms,
     get_pre_transforms,
-    get_pre_transforms_val_as_list_monailabel,
     get_cross_validation,
 )
 
@@ -75,7 +74,9 @@ def get_optimizer(optimizer: str, lr: float, network):
     return optimizer
 
 
-def get_loss_function(loss_args, loss_kwargs={}):  # squared_pred=True, include_background=True):
+def get_loss_function(loss_args, loss_kwargs=None):  # squared_pred=True, include_background=True):
+    if loss_kwargs is None:
+        loss_kwargs = {}
     if loss_args == "DiceCELoss":
         # squared_pred enables much faster convergence, possibly even better results in the long run
         loss_function = DiceCELoss(to_onehot_y=True, softmax=True, **loss_kwargs)
@@ -290,15 +291,17 @@ def get_key_metric(str_to_prepend="") -> OrderedDict:
     return key_metrics
 
 
-def prepend_str_to_all_keys(input_dict: Dict, str_to_prepend: str) -> Dict:
-    for k, v in input_dict.items():
-        del input_dict[k]
-        key_metric[f"{str_to_prepend}_{k}"] = v
-    return input_dict
+# def prepend_str_to_all_keys(input_dict: Dict, str_to_prepend: str) -> Dict:
+#     for k, v in input_dict.items():
+#         del input_dict[k]
+#         input_dict[f"{str_to_prepend}_{k}"] = v
+#     return input_dict
 
 
-def get_additional_metrics(labels, include_background=False, loss_kwargs={}, str_to_prepend=""):
+def get_additional_metrics(labels, include_background=False, loss_kwargs=None, str_to_prepend=""):
     # loss_function_metric = loss_function
+    if loss_kwargs is None:
+        loss_kwargs = {}
     mid = "with_bg_" if include_background else "without_bg_"
     loss_function = DiceCELoss(softmax=True, **loss_kwargs)
     loss_function_metric = LossMetric(loss_fn=loss_function, reduction="mean", get_not_nans=False)

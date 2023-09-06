@@ -61,3 +61,4 @@ cupy-cuda11x
 cucim
 monai>=1.2.0
 pynvml
+SimpleITK

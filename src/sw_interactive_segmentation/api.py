@@ -31,7 +31,7 @@ from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
 
 from monai.data import set_track_meta
-from monai.engines import SupervisedEvaluator, SupervisedTrainer, EnsembleEvaluator
+from monai.engines import SupervisedEvaluator, SupervisedTrainer, EnsembleEvaluator, Evaluator
 from monai.handlers import (
     CheckpointLoader,
     CheckpointSaver,
@@ -345,8 +345,73 @@ def get_additional_metrics(labels, include_background=False, loss_kwargs=None, s
 #     all_train_metrics["train_surfaced_dice"] = all_train_metrics.pop("val_surfaced_dice")
 #     return all_train_metrics
 
+def get_test_evaluator(
+    args,
+    network,
+    inferer,
+    device,
+    val_loader,
+    # loss_function,
+    # click_transforms,
+    post_transform,
+    # key_val_metric,
+    # additional_metrics,
+    resume_from="None",
+) -> SupervisedEvaluator:
+    init(args)
 
-def get_evaluator(
+    evaluator = SupervisedEvaluator(
+        device=device,
+        val_data_loader=val_loader,
+        network=network,
+        # iteration_update=Interaction(
+        #     deepgrow_probability=args.deepgrow_probability_val,
+        #     transforms=click_transforms,
+        #     train=False,
+        #     label_names=args.labels,
+        #     max_interactions=args.max_val_interactions,
+        #     args=args,
+        #     loss_function=loss_function,
+        #     post_transform=post_transform,
+        #     click_generation_strategy=args.val_click_generation,
+        #     stopping_criterion=args.val_click_generation_stopping_criterion,
+        #     non_interactive=args.non_interactive,
+        # ),
+        inferer=inferer,
+        postprocessing=post_transform,
+        amp=args.amp,
+        # key_val_metric=key_val_metric,
+        # additional_metrics=additional_metrics,
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+    )
+
+    save_dict = {
+        "net": network,
+    }
+    
+    if resume_from != "None":
+        logger.info(f"{args.gpu}:: Loading Network...")
+        logger.info(f"{save_dict.keys()=}")
+        logger.info(f"CWD: {os.getcwd()}")
+        map_location = device
+        checkpoint = torch.load(resume_from)
+        logger.info(f"{checkpoint.keys()=}")
+        network.load_state_dict(checkpoint['net'])
+
+        # for key in save_dict:
+        #     # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
+        #     assert (
+        #         key in checkpoint
+        #     ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
+
+        # logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+        handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
+        handler(evaluator)
+
+    return evaluator
+
+
+def get_supervised_evaluator(
     args,
     network,
     inferer,
@@ -490,7 +555,7 @@ def get_trainer_with_loaders(
 
     # additional_train_metrics
 
-    evaluator = get_evaluator(
+    evaluator = get_supervised_evaluator(
         args,
         network=network,
         inferer=eval_inferer,

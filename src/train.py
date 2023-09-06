@@ -31,7 +31,8 @@ from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 from sw_interactive_segmentation.api import get_trainer, oom_observer
 from sw_interactive_segmentation.utils.argparser import parse_args, setup_environment_and_adapt_args
 from sw_interactive_segmentation.utils.tensorboard_logger import init_tensorboard_logger
-from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception
+from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
+from sw_interactive_segmentation.data import post_process_AutoPET2_Challenge_file_list
 # from monai.handlers import (
 #     CheckpointLoader,
 # )
@@ -44,6 +45,9 @@ def run(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
     device = torch.device(f"cuda:{args.gpu}")
+
+    if args.dataset == "AutoPET2_Challenge":
+        raise UserWarning("Use test.py for the challenge runs..")
 
     gpu_thread = GPU_Thread(1, "Track_GPU_Usage", os.path.join(args.output_dir, "usage.csv"), device)
     logger.info(f"Logging GPU usage to {args.output_dir}/usage.csv")
@@ -128,7 +132,6 @@ def run(args):
         pd.set_option("display.max_rows", None)
         logger.info(f"\n{wp.get_times_summary_pd()}")
 
-
 def main():
     global logger
 
@@ -144,7 +147,8 @@ def main():
 
     sys.excepthook = handle_exception
 
-    torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
+    if not is_docker():
+        torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
 
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)

@@ -149,20 +149,24 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
 
 
 class PrintDatad(MapTransform):
-    def __init__(self, keys: KeysCollection = None):
+    def __init__(self, keys: KeysCollection = None, allow_missing_keys: bool = False,):
         """
         Prints all the information inside data
         """
-        super().__init__(keys)
+        super().__init__(keys, allow_missing_keys=allow_missing_keys)
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         global logger
+        if self.keys is not None:
+            data_sub_dict = {key: data[key] for key in self.key_iterator(data)}
+        else:
+            data_sub_dict = data
 
         try:
-            logger.info(describe_batch_data(data))
+            logger.info(describe_batch_data(data_sub_dict))
         except UnboundLocalError:
             logger = logging.getLogger("sw_interactive_segmentation")
-            logger.info(describe_batch_data(data))
+            logger.info(describe_batch_data(data_sub_dict))
 
         # exit(0)
         return data

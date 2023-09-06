@@ -12,6 +12,8 @@ from datetime import datetime
 from functools import wraps
 from typing import List
 
+import SimpleITK
+
 import cupy as cp
 import pandas as pd
 import psutil
@@ -442,3 +444,23 @@ class AttributeDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
+
+
+def convert_mha_to_nii(mha_input_path, nii_out_path):
+    img = SimpleITK.ReadImage(mha_input_path)
+    # reader = sitk.ImageFileReader()
+
+    SimpleITK.WriteImage(img, nii_out_path, True)
+
+
+def convert_nii_to_mha(nii_input_path, mha_out_path):
+    img = SimpleITK.ReadImage(nii_input_path)
+
+    SimpleITK.WriteImage(img, mha_out_path, True)
+
+def is_docker():
+    path = '/proc/self/cgroup'
+    return (
+        os.path.exists('/.dockerenv') or
+        os.path.isfile(path) and any('docker' in line for line in open(path))
+    )

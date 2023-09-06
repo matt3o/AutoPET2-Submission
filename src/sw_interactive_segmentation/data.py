@@ -3,11 +3,14 @@ from __future__ import annotations
 import glob
 import logging
 import os
-from typing import Dict
+from typing import Dict, List
+import shutil
 # from collections import OrderedDict
+from pathlib import Path
 
+import numpy as np
 import torch
-from monai.data import ThreadDataLoader, partition_dataset
+from monai.data import ThreadDataLoader, partition_dataset, Dataset, DataLoader
 
 # from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset  # , Dataset
@@ -31,6 +34,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     ToDeviced,
     ToTensord,
     MeanEnsembled,
+    SaveImaged,
 )
 from monai.utils.enums import CommonKeys
 from monai.apps import CrossValidation
@@ -46,7 +50,10 @@ from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDa
     NormalizeLabelsInDatasetd,
     SplitPredsLabeld,
     threshold_foreground,
+    PrintDatad,
 )
+
+from sw_interactive_segmentation.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
@@ -54,23 +61,27 @@ AUTOPET_SPACING = [2.03642011, 2.03642011, 3.0]
 MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
 HECKTOR_SPACING = [4, 4, 4]
 
+PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR", "AutoPET2_Challenge"]
 
 def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")):
     return Compose(get_pre_transforms_train_as_list(labels, device, args, input_keys)), Compose(
         get_pre_transforms_val_as_list(labels, device, args, input_keys)
     )
 
-
-def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
-    cpu_device = torch.device("cpu")
-    if args.dataset == "AutoPET" or args.dataset == "AutoPET2":
+def get_spacing(args):
+    if args.dataset == "AutoPET" or args.dataset == "AutoPET2" or args.dataset == "AutoPET2_Challenge":
         spacing = AUTOPET_SPACING
     elif args.dataset == "HECKTOR":
         spacing = HECKTOR_SPACING
     elif args.dataset == "MSD_Spleen":
         spacing = MSD_SPLEEN_SPACING
+    return spacing
 
-    PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR"]
+
+def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
+    cpu_device = torch.device("cpu")
+    spacing = get_spacing(args)
+
     # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
         t_train = [
@@ -132,22 +143,16 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
 
 def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label")):
     cpu_device = torch.device("cpu")
-    if args.dataset == "AutoPET" or args.dataset == "AutoPET2":
-        spacing = AUTOPET_SPACING
-    elif args.dataset == "HECKTOR":
-        spacing = HECKTOR_SPACING
-    elif args.dataset == "MSD_Spleen":
-        spacing = MSD_SPLEEN_SPACING
+    spacing = get_spacing(args)
 
-    PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR"]
-    # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
+    # data Input keys have to be at least ["image"] for val
     if args.dataset in PET_dataset_names:
         t_val = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
+            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else NoOpd(),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
@@ -177,7 +182,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
 
 
 def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image")):
-    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = get_spacing(args)
     cpu_device = torch.device("cpu")
 
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
@@ -210,93 +215,10 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
         ]
     return t_val_1, t_val_2
 
-    # TODO fix and reenable the part below
-    # else:  # MSD Spleen
-    #     t_train = [
-    #         LoadImaged(keys=("image", "label"), reader="ITKReader"),
-    #         ToTensord(keys=("image", "label"), device=device),
-    #         EnsureChannelFirstd(keys=("image", "label")),
-    #         NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
-    #         Orientationd(keys=["image", "label"], axcodes="RAS"),
-    #         Spacingd(keys=["image", "label"], pixdim=spacing),
-    #         ScaleIntensityRanged(
-    #             keys="image", a_min=-224, a_max=212, b_min=0.0, b_max=1.0, clip=True
-    #         ),  # 0.05 and 99.95 percentiles of the spleen HUs
-    #         DivisiblePadd(keys=["image", "label"], k=64, value=0),  # Needed for DynUNet
-    #         # Random Transforms #
-    #         RandFlipd(keys=("image", "label"), spatial_axis=[0], prob=0.10),
-    #         RandFlipd(keys=("image", "label"), spatial_axis=[1], prob=0.10),
-    #         RandFlipd(keys=("image", "label"), spatial_axis=[2], prob=0.10),
-    #         RandRotate90d(keys=("image", "label"), prob=0.10, max_k=3),
-    #         RandShiftIntensityd(keys="image", offsets=0.10, prob=0.50),
-    #         Resized(
-    #             keys=("image", "label"),
-    #             spatial_size=[128, 128, -1],
-    #             mode=("area", "nearest"),
-    #         ),  # downsampled from 512x512x-1 to fit into memory
-    #         # Transforms for click simulation
-    #         FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
-    #         AddInitialSeedPointMissingLabelsd(
-    #             keys="label", guidance_key="guidance", sids_key="sids", device=device
-    #         ),
-    #         # ToTensord(keys=("image", "guidance"), device=device),
-    #         ToTensord(keys=("image"), device=device),
-    #         AddGuidanceSignalDeepEditd(
-    #             keys="image",
-    #             guidance_key="guidance",
-    #             sigma=args.sigma,
-    #             disks=args.disks,
-    #             edt=args.edt,
-    #             gdt=args.gdt,
-    #             gdt_th=args.gdt_th,
-    #             exp_geos=args.exp_geos,
-    #             adaptive_sigma=args.adaptive_sigma,
-    #             device=device,
-    #             spacing=spacing,
-    #         ),
-    #         # ToTensord(keys=("image", "label"), device=torch.device('cpu')), # TODO: check why we need this on the CPU
-    #     ]
-    #     t_val = [
-    #         LoadImaged(keys=("image", "label"), reader="ITKReader"),
-    #         ToTensord(keys=("image", "label"), device=device),
-    #         EnsureChannelFirstd(keys=("image", "label")),
-    #         NormalizeLabelsInDatasetd(keys="label", label_names=labels, device=device),
-    #         Orientationd(keys=["image", "label"], axcodes="RAS"),
-    #         Spacingd(keys=["image", "label"], pixdim=spacing),
-    #         ScaleIntensityRanged(
-    #             keys="image", a_min=-224, a_max=212, b_min=0.0, b_max=1.0, clip=True
-    #         ),  # 0.05 and 99.95 percentiles of the spleen HUs
-    #         DivisiblePadd(keys=["image", "label"], k=64, value=0),  # Needed for DynUNet
-    #         Resized(
-    #             keys=("image", "label"),
-    #             spatial_size=[256, 256, -1],
-    #             mode=("area", "nearest"),
-    #         ),  # downsampled from 512x512x-1 to fit into memory
-    #         # Transforms for click simulation
-    #         # ToTensord(keys=("image", "guidance", "label"), device=device),
-    #         FindAllValidSlicesMissingLabelsd(keys="label", sids="sids", device=device),
-    #         AddInitialSeedPointMissingLabelsd(
-    #             keys="label", guidance_key="guidance", sids_key="sids", device=device
-    #         ),
-    #         AddGuidanceSignalDeepEditd(
-    #             keys="image",
-    #             guidance_key="guidance",
-    #             sigma=args.sigma,
-    #             disks=args.disks,
-    #             edt=args.edt,
-    #             gdt=args.gdt,
-    #             gdt_th=args.gdt_th,
-    #             exp_geos=args.exp_geos,
-    #             adaptive_sigma=args.adaptive_sigma,
-    #             device=device,
-    #             spacing=spacing,
-    #         ),
-    #         # ToTensord(keys=("image", "label"), device=torch.device('cpu')),
-    # ]
 
 
 def get_click_transforms(device, args):
-    spacing = AUTOPET_SPACING if args.dataset == "AutoPET" else MSD_SPLEEN_SPACING
+    spacing = get_spacing(args)
     t = [
         InitLoggerd(args),
         Activationsd(keys="pred", softmax=True),
@@ -327,14 +249,37 @@ def get_click_transforms(device, args):
 
 def get_post_transforms(labels, device):
     t = [
+        PrintDatad(keys=("pred",)),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),
-            to_onehot=(len(labels), len(labels)),
+            #to_onehot=(len(labels), len(labels)),
+        ),
+        PrintDatad(keys=("pred",)),
+        # This transform is to check dice score per segment/label
+        # SplitPredsLabeld(keys="pred"),
+    ]
+    return Compose(t)
+
+
+def get_post_transforms_unsupervised(labels, device, output_dir, output_ext=".nii"):
+    t = [
+        PrintDatad(keys=("pred",)),
+        Activationsd(keys="pred", softmax=True),
+        AsDiscreted(keys="pred", argmax=True#, to_onehot=(len(labels),),
         ),
         # This transform is to check dice score per segment/label
-        SplitPredsLabeld(keys="pred"),
+        # SplitPredsLabeld(keys="pred"),
+        PrintDatad(keys=("pred",)),
+        SaveImaged(keys="pred",
+                   writer="ITKWriter",
+                   output_dir=output_dir,
+                   output_ext=output_ext,
+                   output_dtype=np.uint8,
+                   separate_folder=False,
+                   resample=False,
+        )
     ]
     return Compose(t)
 
@@ -373,7 +318,7 @@ def get_val_post_transforms(labels, device):
     return Compose(t)
 
 
-def get_AutoPET_file_list(args):
+def get_AutoPET_file_list(args) -> List[List, List, List]:
     train_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
     train_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
 
@@ -385,10 +330,62 @@ def get_AutoPET_file_list(args):
     ]
     val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
 
-    return train_data, val_data
+    return train_data, val_data, []
 
 
-def get_MSD_Spleen_file_list(args):
+
+
+def get_AutoPET2_Challenge_file_list(args)  -> List[List, List, List]:
+    test_images = sorted(glob.glob(os.path.join(args.input_dir, "*.mha")))
+    # train_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
+
+    # test_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz")))
+    # test_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz")))
+
+    # Is the conversion even necessary? 
+
+    logger.info(f"{test_images=}")
+    test_data = []
+    for image_path in test_images:
+        logger.info(f"Converting {image_path} to .nii.gz")
+        nii_path = os.path.join(args.cache_dir, 'SUV.nii.gz')
+        convert_mha_to_nii(image_path, nii_path)
+        test_data.append({"image": nii_path})
+
+    # test_data = [
+    #     {"image": image_name} for image_name in test_images
+    # ]
+    logger.info(f"{test_data=}")
+    # val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
+
+    return [], [], test_data
+
+def post_process_AutoPET2_Challenge_file_list(args):
+    nii_dir = os.path.join(args.cache_dir, "nii")
+    shutil.move(args.output_dir, nii_dir)
+    os.makedirs(args.output_dir, exist_ok=True)
+    # nii_dir = os.path.join(args.output_dir, "nii")
+
+    nii_images = sorted(glob.glob(os.path.join(nii_dir, "*.nii")))
+
+    for image_path in nii_images:
+        logger.info(f"{args.output_dir=}")
+        logger.info(f"Using nii file {image_path}")
+        # logger.info(f"Converting {image_path} to .mha")
+        # mha_path = os.path.join(args.cache_dir, 'SUV.nii.gz')
+        # convert_mha_to_nii(image_path, nii_path)
+        # test_data.append({"image": nii_path})
+        image_name = Path(os.path.basename(image_path)).with_suffix("")
+        # true_image_name = image_name.name.removesuffix(''.join(image_name.suffixes))
+        uuid = image_name
+        logger.info(f"{uuid=}")
+
+        mha_path = os.path.join(args.output_dir, f"{uuid}.mha")
+        logger.info(f"Creating mha file {mha_path}")
+        convert_nii_to_mha(image_path, mha_path)
+        assert os.path.exists(mha_path)
+
+def get_MSD_Spleen_file_list(args) -> List[List, List, List]:
     all_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTr", "*.nii.gz")))
     all_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
 
@@ -400,10 +397,10 @@ def get_MSD_Spleen_file_list(args):
         shuffle=True,
         seed=args.seed,
     )
-    return train_data, val_data
+    return train_data, val_data, []
 
 
-def get_AutoPET2_file_list(args):
+def get_AutoPET2_file_list(args) -> List[List, List, List]:
     all_images = glob.glob(os.path.join(args.input, "**", "**", "SUV*.nii.gz"))
     all_labels = glob.glob(os.path.join(args.input, "**", "**", "SEG*.nii.gz"))
 
@@ -416,10 +413,10 @@ def get_AutoPET2_file_list(args):
         seed=args.seed,
     )
 
-    return train_data, val_data
+    return train_data, val_data, []
 
 
-def get_HECKTOR_file_list(args):
+def get_HECKTOR_file_list(args) -> List[List, List, List]:
     # Assuming this is the folder /lsdf/data/medical/HECKTOR/hecktor2022_training/
     train_images = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training", "imagesTr", "*PT*.nii.gz")))
     train_labels = sorted(glob.glob(os.path.join(args.input_dir, "hecktor2022_training", "labelsTr", "*.nii.gz")))
@@ -446,11 +443,14 @@ def get_data(args):
 
     test_data = []
     if args.dataset == "AutoPET":
-        train_data, val_data = get_AutoPET_file_list(args)
+        train_data, val_data, test_data = get_AutoPET_file_list(args)
+    elif args.dataset == "AutoPET2_Challenge":
+        train_data, val_data, test_data = get_AutoPET2_Challenge_file_list(args)
+        return train_data, val_data, test_data
     elif args.dataset == "MSD_Spleen":
-        train_data, val_data = get_MSD_Spleen_file_list(args)
+        train_data, val_data, test_data = get_MSD_Spleen_file_list(args)
     elif args.dataset == "AutoPET2":
-        train_data, val_data = get_AutoPET2_file_list(args)
+        train_data, val_data, test_data = get_AutoPET2_file_list(args)
     elif args.dataset == "HECKTOR":
         train_data, val_data, test_data = get_HECKTOR_file_list(args)
 
@@ -463,6 +463,24 @@ def get_data(args):
         logger.warning("All validation data has been added to the training. Validation on them no longer makes sense.")
 
     return train_data, val_data, test_data
+
+def get_test_loader(args, pre_transforms_test):
+    _, _, test_data = get_data(args)
+
+    total_l = len(test_data)
+    test_ds = Dataset(test_data, pre_transforms_test)
+    test_loader = DataLoader(
+        test_ds,
+        # shuffle=True,
+        # num_workers=args.num_workers,
+        batch_size=1,
+        # The two options below are needed if ToDeviced('cuda' ,..) is activated..
+        # multiprocessing_context="spawn",
+        # persistent_workers=True,
+    )
+    logger.info("{} :: Total Records used for Testing is: {}".format(args.gpu, total_l))
+
+    return test_loader
 
 
 def get_loaders(args, pre_transforms_train, pre_transforms_val):
@@ -542,42 +560,43 @@ def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
     return train_loaders, val_loaders  # , test_loader
 
 
-def get_test_loader(args, file_glob="*.nii.gz"):
-    labels_dir = args.labels_dir
-    predictions_dir = args.predictions_dir
-    predictions_glob = os.path.join(predictions_dir, file_glob)
-    labels_glob = os.path.join(labels_dir, file_glob)
+# def get_test_loader(args, file_glob="*.nii.gz"):
+#     labels_dir = args.labels_dir
+#     predictions_dir = args.predictions_dir
 
-    test_labels = sorted(glob.glob(labels_glob))
-    test_predictions = sorted(glob.glob(predictions_glob))
+#     labels_glob = os.path.join(labels_dir, file_glob)
+#     predictions_glob = os.path.join(predictions_dir, file_glob)
 
-    test_datalist = [
-        {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
-        for label_name, pred_name in zip(test_labels, test_predictions)
-    ]
-    test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
-    total_l = len(test_datalist)
-    assert total_l > 0
+#     test_labels = sorted(glob.glob(labels_glob))
+#     test_predictions = sorted(glob.glob(predictions_glob))
 
-    logger.info("{} :: Total Records used for Dataloader is: {}".format(args.gpu, total_l))
+#     test_datalist = [
+#         {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
+#         for label_name, pred_name in zip(test_labels, test_predictions)
+#     ]
+#     test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
+#     total_l = len(test_datalist)
+#     assert total_l > 0
 
-    return test_datalist
+#     logger.info("{} :: Total Records used for Dataloader is: {}".format(args.gpu, total_l))
+
+#     return test_datalist
 
 
-def get_test_transforms(device, labels):
-    t = [
-        LoadImaged(
-            keys=["pred", "label"],
-            reader="ITKReader",
-            image_only=True,
-        ),
-        ToDeviced(keys=["pred", "label"], device=device),
-        EnsureChannelFirstd(keys=["pred", "label"]),
-        AsDiscreted(
-            keys=("pred", "label"),
-            argmax=(False, False),
-            to_onehot=(len(labels), len(labels)),
-        ),
-    ]
+# def get_test_transforms(device, labels):
+#     t = [
+#         LoadImaged(
+#             keys=["pred", "label"],
+#             reader="ITKReader",
+#             image_only=True,
+#         ),
+#         ToDeviced(keys=["pred", "label"], device=device),
+#         EnsureChannelFirstd(keys=["pred", "label"]),
+#         AsDiscreted(
+#             keys=("pred", "label"),
+#             argmax=(False, False),
+#             to_onehot=(len(labels), len(labels)),
+#         ),
+#     ]
 
-    return Compose(t)
+#     return Compose(t)

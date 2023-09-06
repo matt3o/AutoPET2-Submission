@@ -56,7 +56,7 @@ def parse_args():
         default=0,
         help="Limit the amount of training/validation samples",
     )
-    parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen"])
+    parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen", "AutoPET2_Challenge"])
     parser.add_argument("--train_on_all_samples", action="store_true")
     parser.add_argument(
         "--positive_crop_rate", type=float, default=0.6, help="The rate of positive samples for RandCropByPosNegLabeld"
@@ -202,7 +202,7 @@ def setup_environment_and_adapt_args(args):
         if not args.throw_away_cache:
             raise UserWarning("Cache directory (-c) has to be set if args.throw_away_cache is not True")
         else:
-            args.cache_dir = tempfile.TemporaryDirectory()
+            args.cache_dir = tempfile.TemporaryDirectory().name
     else:
         if args.throw_away_cache:
             args.cache_dir = f"{args.cache_dir}/{uuid.uuid4()}"

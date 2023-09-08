@@ -41,6 +41,7 @@ def parse_args():
     # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default="None")
     parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true")
+    parser.add_argument("--save_pred", default=False, action="store_true", help="To save the prediction in the output_dir/prediction if that is desired")
     parser.add_argument("-x", "--split", type=float, default=0.8)
     parser.add_argument("--gpu_size", default="None", choices=["None", "small", "medium", "large"])
     parser.add_argument(

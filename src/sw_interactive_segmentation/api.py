@@ -518,7 +518,7 @@ def get_trainer_with_loaders(
     device = torch.device(f"cuda:{args.gpu}")
 
     click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device)
+    post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     train_inferer, eval_inferer = get_inferers(

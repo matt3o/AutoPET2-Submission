@@ -291,7 +291,7 @@ def get_click_transforms(device, args):
     return Compose(t)
 
 
-def get_post_transforms(labels, device):
+def get_post_transforms(labels, device, save_pred=False, output_dir=None):
     t = [
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
@@ -299,11 +299,19 @@ def get_post_transforms(labels, device):
             argmax=(True, False),
             #to_onehot=(len(labels), len(labels)),
         ),
+        SaveImaged(keys="pred",
+            writer="ITKWriter",
+            output_dir=os.path.join( output_dir, "predictions")
+        #    output_ext=".nii.gz",
+            output_dtype=np.uint8,
+            separate_folder=False,
+            resample=False,
+        ) if (save_pred and output_dir is not None) else NoOpd(),
+
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
     ]
     return Compose(t)
-
 
 def get_post_transforms_unsupervised(labels, device, cache_dir, output_dir):
     os.makedirs(os.path.join(cache_dir, "nii"), exist_ok=True)

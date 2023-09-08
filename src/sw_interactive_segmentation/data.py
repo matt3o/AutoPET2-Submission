@@ -652,12 +652,14 @@ def get_metrics_loader(args, file_glob="*.nii.gz"):
 
     test_datalist = []
 
-    for prediction_file in test_predictions:
-        pred_file_name = get_filename_without_extensions(prediction_file)
+    for pred_file_name in test_predictions:
         logger.info(f"{pred_file_name=}")
-        label_file_name = os.path.join(labels_dir, f"{pred_file_name}{file_glob[1:]}")
+        assert os.path.exists(pred_file_name)
+        file_name = get_filename_without_extensions(pred_file_name)
+        label_file_name = os.path.join(labels_dir, f"{file_name}{file_glob[1:]}")
         assert os.path.exists(label_file_name)
-        {CommonKeys.LABEL: label_file_name, CommonKeys.PRED: pred_file_name}
+        logger.info(f"{label_file_name=}")
+        test_datalist.append({CommonKeys.LABEL: label_file_name, CommonKeys.PRED: pred_file_name})
 
 
     

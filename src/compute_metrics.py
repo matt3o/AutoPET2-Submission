@@ -50,7 +50,7 @@ def run(args):
     amount_of_classes = len(args.labels)
     if include_background is False:
         amount_of_classes -= 1
-    class_thresholds = (2,) * amount_of_classes
+    class_thresholds = (0.5,) * amount_of_classes
     surface_dice_metric = SurfaceDiceMetric(
         include_background=False, class_thresholds=class_thresholds, reduction="mean", get_not_nans=False
     )

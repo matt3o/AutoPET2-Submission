@@ -163,14 +163,14 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             )
             if "label" in input_keys
             else NoOpd(),
-            # CropForegroundd(
-            #     keys=input_keys,
-            #     source_key="image",
-            #     select_fn=threshold_foreground,
-            # ) if not args.dont_crop_foreground else NoOpd(),
-            # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
-            # if args.val_crop_size is not None
-            # else NoOpd(),
+            CropForegroundd(
+                keys=input_keys,
+                source_key="image",
+                select_fn=threshold_foreground,
+            ) if not args.dont_crop_foreground else NoOpd(),
+            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
+            if args.val_crop_size is not None
+            else NoOpd(),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
             if not args.use_scale_intensity_range_percentiled
@@ -293,14 +293,12 @@ def get_click_transforms(device, args):
 
 def get_post_transforms(labels, device):
     t = [
-        PrintDatad(keys=("pred",)),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),
             #to_onehot=(len(labels), len(labels)),
         ),
-        PrintDatad(keys=("pred",)),
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
     ]

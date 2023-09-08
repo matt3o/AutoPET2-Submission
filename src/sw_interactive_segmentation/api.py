@@ -311,7 +311,7 @@ def get_additional_metrics(labels, include_background=False, loss_kwargs=None, s
         save_details=False,
     )
     amount_of_classes = len(labels) if include_background else (len(labels) - 1)
-    class_thresholds = (2,) * amount_of_classes
+    class_thresholds = (0.5,) * amount_of_classes
     surface_dice_metric = SurfaceDiceMetric(
         include_background=include_background,
         class_thresholds=class_thresholds,

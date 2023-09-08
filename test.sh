@@ -10,7 +10,7 @@ echo $SCRIPTPATH
 ./build.sh
 
 VOLUME_SUFFIX=$(dd if=/dev/urandom bs=32 count=1 | md5sum | cut --delimiter=' ' --fields=1)
-MEM_LIMIT="30g"  # Maximum is currently 30g, configurable in your algorithm image settings on grand challenge
+MEM_LIMIT="15g"  # Maximum is currently 30g, configurable in your algorithm image settings on grand challenge
 
 VOLUME=unet_baseline-output
 #docker volume create $VOLUME 

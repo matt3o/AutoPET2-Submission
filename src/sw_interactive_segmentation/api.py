@@ -49,15 +49,19 @@ from monai.metrics import LossMetric, SurfaceDiceMetric
 from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
+from monai.transforms import Compose
 
 from sw_interactive_segmentation.utils.helper import count_parameters, run_once
 from sw_interactive_segmentation.interaction import Interaction
 from sw_interactive_segmentation.data import (
     get_click_transforms,
-    get_loaders,
+    get_train_loader,
+    get_val_loader,
     get_post_transforms,
     get_pre_transforms,
     get_cross_validation,
+    get_pre_transforms_train_as_list,
+    get_pre_transforms_val_as_list,
 )
 
 
@@ -411,6 +415,90 @@ def get_test_evaluator(
     return evaluator
 
 
+def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator:
+    init(args)
+
+    device = torch.device(f"cuda:{args.gpu}")
+
+    pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
+    val_loader = get_val_loader(args, pre_transforms_val) 
+
+    click_transforms = get_click_transforms(device, args)
+    post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir)
+
+    network = get_network(args.network, args.labels, args.non_interactive).to(device)
+    _, eval_inferer = get_inferers(
+        args.inferer,
+        args.sw_roi_size,
+        args.train_crop_size,
+        args.val_crop_size,
+        args.train_sw_batch_size,
+        args.val_sw_batch_size,
+        args.sw_overlap,
+        True,
+    )
+
+    loss_kwargs = {
+        "squared_pred": (not args.loss_no_squared_pred),
+        "include_background": (not args.loss_dont_include_background),
+    }
+    loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
+    val_key_metric = get_key_metric(str_to_prepend="val_")
+    val_additional_metrics = {}
+
+    if args.additional_metrics:
+        val_additional_metrics = get_additional_metrics(
+            args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
+        )  # (not args.loss_dont_include_background)
+
+    evaluator = SupervisedEvaluator(
+        device=device,
+        val_data_loader=val_loader,
+        network=network,
+        iteration_update=Interaction(
+            deepgrow_probability=args.deepgrow_probability_val,
+            transforms=click_transforms,
+            train=False,
+            label_names=args.labels,
+            max_interactions=args.max_val_interactions,
+            args=args,
+            loss_function=loss_function,
+            post_transform=post_transform,
+            click_generation_strategy=args.val_click_generation,
+            stopping_criterion=args.val_click_generation_stopping_criterion,
+            non_interactive=args.non_interactive,
+        ),
+        inferer=eval_inferer,
+        postprocessing=post_transform,
+        amp=args.amp,
+        key_val_metric=val_key_metric,
+        additional_metrics=val_additional_metrics,
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+    )
+
+    save_dict = {
+            "net": network,
+    }
+
+    if resume_from != "None":
+        logger.info(f"{args.gpu}:: Loading Network...")
+        logger.info(f"{save_dict.keys()=}")
+        map_location = device  # {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
+        checkpoint = torch.load(resume_from)
+
+        for key in save_dict:
+            # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
+            assert (
+                key in checkpoint
+            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
+
+        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+        handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
+        handler(evaluator)
+
+    return evaluator, val_key_metric, val_additional_metrics
+
+
 def get_supervised_evaluator(
     args,
     network,
@@ -505,8 +593,10 @@ def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedE
     init(args)
     device = torch.device(f"cuda:{args.gpu}")
 
-    pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
-    train_loader, val_loader = get_loaders(args, pre_transforms_train, pre_transforms_val)
+    pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
+    pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
+    train_loader  = get_train_loader(args, pre_transforms_train)
+    val_loader = get_val_loader(args, pre_transforms_val) 
 
     return get_trainer_with_loaders(args, train_loader, val_loader, resume_from=resume_from)
 

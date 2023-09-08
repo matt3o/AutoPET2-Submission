@@ -301,7 +301,8 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None):
         ),
         SaveImaged(keys="pred",
             writer="ITKWriter",
-            output_dir=os.path.join( output_dir, "predictions")
+            output_dir=os.path.join( output_dir, "predictions"),
+            output_postfix="",
         #    output_ext=".nii.gz",
             output_dtype=np.uint8,
             separate_folder=False,
@@ -562,10 +563,10 @@ def get_test_loader(args, pre_transforms_test):
     return test_loader
 
 
-def get_loaders(args, pre_transforms_train, pre_transforms_val):
+def get_train_loader(args, pre_transforms_train):
     train_data, val_data, test_data = get_data(args)
-
     total_l = len(train_data) + len(val_data)
+
     train_ds = PersistentDataset(train_data, pre_transforms_train, cache_dir=args.cache_dir)
     train_loader = ThreadDataLoader(
         train_ds,
@@ -578,8 +579,14 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
     logger.info("{} :: Total Records used for Training is: {}/{}".format(args.gpu, len(train_ds), total_l))
 
-    val_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
+    return train_loader
 
+def get_val_loader(args, pre_transforms_val):
+    train_data, val_data, test_data = get_data(args)
+
+    total_l = len(train_data) + len(val_data)
+
+    val_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
     val_loader = ThreadDataLoader(
         val_ds,
         num_workers=args.num_workers,
@@ -589,7 +596,9 @@ def get_loaders(args, pre_transforms_train, pre_transforms_val):
     )
     logger.info("{} :: Total Records used for Validation is: {}/{}".format(args.gpu, len(val_ds), total_l))
 
-    return train_loader, val_loader
+    return val_loader
+
+
 
 
 def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val):

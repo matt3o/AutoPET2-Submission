@@ -249,14 +249,12 @@ def get_click_transforms(device, args):
 
 def get_post_transforms(labels, device):
     t = [
-        PrintDatad(keys=("pred",)),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),
             #to_onehot=(len(labels), len(labels)),
         ),
-        PrintDatad(keys=("pred",)),
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
     ]

@@ -36,6 +36,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     MeanEnsembled,
     SaveImaged,
 )
+from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
 from monai.apps import CrossValidation
 
@@ -51,6 +52,8 @@ from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDa
     SplitPredsLabeld,
     threshold_foreground,
     PrintDatad,
+    Convert_mha_to_niid,
+    Convert_nii_to_mhad,
 )
 
 from sw_interactive_segmentation.utils.helper import convert_mha_to_nii, convert_nii_to_mha
@@ -180,6 +183,47 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
         ]
     return t_val
 
+# def get_pre_transforms_test(labels: Dict, device, args, input_keys=("image", "label")):
+#     cpu_device = torch.device("cpu")
+#     spacing = get_spacing(args)
+
+#     # data Input keys have to be at least ["image"] for val
+#     if args.dataset in PET_dataset_names:
+#         t_val = [
+#             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
+#             InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
+#             Convert_mha_to_niid(keys=input_keys, output_dir=args.cache_dir),
+#             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
+#             EnsureChannelFirstd(keys=input_keys),
+#             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else NoOpd(),
+#             Orientationd(keys=input_keys, axcodes="RAS"),
+#             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
+#             CheckTheAmountOfInformationLossByCropd(
+#                 keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground)
+#             )
+#             if "label" in input_keys
+#             else NoOpd(),
+#             # CropForegroundd(
+#             #     keys=input_keys,
+#             #     source_key="image",
+#             #     select_fn=threshold_foreground,
+#             # ) if not args.dont_crop_foreground else NoOpd(),
+#             # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
+#             # if args.val_crop_size is not None
+#             # else NoOpd(),
+#             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
+#             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
+#             if not args.use_scale_intensity_range_percentiled
+#             else ScaleIntensityRangePercentilesd(
+#                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
+#             ),
+#             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+#             AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
+#             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
+#         ]
+#     return Compose(t_val)
+
+
 
 def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image")):
     spacing = get_spacing(args)
@@ -263,23 +307,40 @@ def get_post_transforms(labels, device):
     return Compose(t)
 
 
-def get_post_transforms_unsupervised(labels, device, output_dir, output_ext=".nii"):
+def get_post_transforms_unsupervised(labels, device, cache_dir, output_dir):
+    os.makedirs(os.path.join(cache_dir, "nii"), exist_ok=True)
+    nii_layout = FolderLayout(
+        output_dir=os.path.join(cache_dir, "nii"),
+        postfix="",
+        extension=".nii.gz",
+        makedirs=False
+    )
+    # mha_layout = FolderLayout(
+    #     output_dir=output_dir,
+    #     postfix="",
+    #     extension=".mha",
+    #     makedirs=False
+    # )
+    
     t = [
         PrintDatad(keys=("pred",)),
         Activationsd(keys="pred", softmax=True),
-        AsDiscreted(keys="pred", argmax=True#, to_onehot=(len(labels),),
+        AsDiscreted(keys="pred", argmax=True, #to_onehot=(len(labels),),
         ),
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
         PrintDatad(keys=("pred",)),
         SaveImaged(keys="pred",
                    writer="ITKWriter",
-                   output_dir=output_dir,
-                   output_ext=output_ext,
+                #    output_dir=cache_dir,
+                #    output_ext=".nii.gz",
+                   folder_layout=nii_layout,
                    output_dtype=np.uint8,
                    separate_folder=False,
                    resample=False,
-        )
+        ),
+        # PrintDatad(),
+        # Convert_nii_to_mhad(keys=("pred"), output_dir=output_dir, nii_layout=nii_layout, mha_layout=mha_layout),
     ]
     return Compose(t)
 
@@ -333,6 +394,9 @@ def get_AutoPET_file_list(args) -> List[List, List, List]:
     return train_data, val_data, []
 
 
+def get_filename_without_extensions(nifti_path):
+    # Strips up to two extensions from the filename, e.g. SUV.nii.gz -> SUV
+    return Path(os.path.basename(nifti_path)).with_suffix("").with_suffix("").name
 
 
 def get_AutoPET2_Challenge_file_list(args)  -> List[List, List, List]:
@@ -348,25 +412,34 @@ def get_AutoPET2_Challenge_file_list(args)  -> List[List, List, List]:
     test_data = []
     for image_path in test_images:
         logger.info(f"Converting {image_path} to .nii.gz")
-        nii_path = os.path.join(args.cache_dir, 'SUV.nii.gz')
+        uuid = get_filename_without_extensions(image_path)
+        nii_path = os.path.join(args.cache_dir, f'{uuid}.nii.gz')
         convert_mha_to_nii(image_path, nii_path)
         test_data.append({"image": nii_path})
 
     # test_data = [
     #     {"image": image_name} for image_name in test_images
     # ]
+
+    # test_images = sorted(glob.glob(os.path.join(args.input_dir, "*.nii.gz")))
+    # test_data = [
+    #     {"image": image_name} for image_name in test_images
+    # ]
+
+
     logger.info(f"{test_data=}")
     # val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
 
     return [], [], test_data
 
 def post_process_AutoPET2_Challenge_file_list(args):
+    logger.info("POSTPROCESSING AutoPET challenge files")
     nii_dir = os.path.join(args.cache_dir, "nii")
-    shutil.move(args.output_dir, nii_dir)
-    os.makedirs(args.output_dir, exist_ok=True)
+    # shutil.move(args.output_dir, nii_dir)
+    # os.makedirs(args.output_dir, exist_ok=True)
     # nii_dir = os.path.join(args.output_dir, "nii")
 
-    nii_images = sorted(glob.glob(os.path.join(nii_dir, "*.nii")))
+    nii_images = sorted(glob.glob(os.path.join(nii_dir, "*.nii.gz")))
 
     for image_path in nii_images:
         logger.info(f"{args.output_dir=}")
@@ -375,7 +448,7 @@ def post_process_AutoPET2_Challenge_file_list(args):
         # mha_path = os.path.join(args.cache_dir, 'SUV.nii.gz')
         # convert_mha_to_nii(image_path, nii_path)
         # test_data.append({"image": nii_path})
-        image_name = Path(os.path.basename(image_path)).with_suffix("")
+        image_name = get_filename_without_extensions(image_path)
         # true_image_name = image_name.name.removesuffix(''.join(image_name.suffixes))
         uuid = image_name
         logger.info(f"{uuid=}")
@@ -560,43 +633,51 @@ def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
     return train_loaders, val_loaders  # , test_loader
 
 
-# def get_test_loader(args, file_glob="*.nii.gz"):
-#     labels_dir = args.labels_dir
-#     predictions_dir = args.predictions_dir
+def get_metrics_loader(args, file_glob="*.nii.gz"):
+    labels_dir = args.labels_dir
+    predictions_dir = args.predictions_dir
 
-#     labels_glob = os.path.join(labels_dir, file_glob)
-#     predictions_glob = os.path.join(predictions_dir, file_glob)
-
-#     test_labels = sorted(glob.glob(labels_glob))
-#     test_predictions = sorted(glob.glob(predictions_glob))
-
-#     test_datalist = [
-#         {CommonKeys.LABEL: label_name, CommonKeys.PRED: pred_name}
-#         for label_name, pred_name in zip(test_labels, test_predictions)
-#     ]
-#     test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
-#     total_l = len(test_datalist)
-#     assert total_l > 0
-
-#     logger.info("{} :: Total Records used for Dataloader is: {}".format(args.gpu, total_l))
-
-#     return test_datalist
+    # labels_glob = os.path.join(labels_dir, file_glob)
+    predictions_glob = os.path.join(predictions_dir, file_glob)
 
 
-# def get_test_transforms(device, labels):
-#     t = [
-#         LoadImaged(
-#             keys=["pred", "label"],
-#             reader="ITKReader",
-#             image_only=True,
-#         ),
-#         ToDeviced(keys=["pred", "label"], device=device),
-#         EnsureChannelFirstd(keys=["pred", "label"]),
-#         AsDiscreted(
-#             keys=("pred", "label"),
-#             argmax=(False, False),
-#             to_onehot=(len(labels), len(labels)),
-#         ),
-#     ]
+    # test_labels = sorted(glob.glob(labels_glob))
+    test_predictions = sorted(glob.glob(predictions_glob))
 
-#     return Compose(t)
+    test_datalist = []
+
+    for prediction_file in test_predictions:
+        pred_file_name = get_filename_without_extensions(prediction_file)
+        logger.info(f"{pred_file_name=}")
+        label_file_name = os.path.join(labels_dir, f"{pred_file_name}{file_glob[1:]}")
+        assert os.path.exists(label_file_name)
+        {CommonKeys.LABEL: label_file_name, CommonKeys.PRED: pred_file_name}
+
+
+    
+    test_datalist = test_datalist[0 : args.limit] if args.limit else test_datalist
+    total_l = len(test_datalist)
+    assert total_l > 0
+
+    logger.info("{} :: Total Records used for Dataloader is: {}".format(args.gpu, total_l))
+
+    return test_datalist
+
+
+def get_metrics_transforms(device, labels):
+    t = [
+        LoadImaged(
+            keys=["pred", "label"],
+            reader="ITKReader",
+            image_only=True,
+        ),
+        ToDeviced(keys=["pred", "label"], device=device),
+        EnsureChannelFirstd(keys=["pred", "label"]),
+        AsDiscreted(
+            keys=("pred", "label"),
+            argmax=(False, False),
+            to_onehot=(len(labels), len(labels)),
+        ),
+    ]
+
+    return Compose(t)

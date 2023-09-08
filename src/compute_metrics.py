@@ -28,7 +28,7 @@ from monai.handlers import write_metrics_reports
 from monai.metrics import DiceMetric, SurfaceDiceMetric
 from monai.utils import string_list_all_gather
 
-from sw_interactive_segmentation.data import get_test_loader, get_test_transforms
+from sw_interactive_segmentation.data import get_metrics_loader, get_metrics_transforms
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,8 @@ def run(args):
     args.device = device
     torch.cuda.set_device(device)
 
-    data_list = get_test_loader(args)
-    transforms = get_test_transforms(device=device, labels=args.labels)
+    data_list = get_metrics_loader(args)
+    transforms = get_metrics_transforms(device=device, labels=args.labels)
     print(f"There are {len(data_list)} items in the dataloader")
 
     assert len(data_list) > 0

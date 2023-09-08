@@ -15,6 +15,8 @@ import gc
 import logging
 from enum import IntEnum
 from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
+from pathlib import Path
+import os
 
 import numpy as np
 import torch
@@ -36,8 +38,11 @@ from sw_interactive_segmentation.utils.helper import (
     get_global_coordinates_from_patch_coordinates,
     get_tensor_at_coordinates,
     timeit,
+    convert_nii_to_mha,
+    convert_mha_to_nii, 
 )
 from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
+from monai.data.folder_layout import default_name_formatter
 
 np.seterr(all="raise")
 logger = None
@@ -82,6 +87,75 @@ def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
         tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
     assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
     return tmp_gui
+
+def get_filename_without_extensions(nifti_path):
+    # Strips up to two extensions from the filename, e.g. SUV.nii.gz -> SUV
+    return Path(os.path.basename(nifti_path)).with_suffix("").with_suffix("").name
+
+class Convert_mha_to_niid(MapTransform):
+    def __init__(self, keys: KeysCollection, output_dir: str, folder_layout=None, file_ext=".nii.gz", ):
+        """
+        """
+        super().__init__(keys)
+        self.output_dir = output_dir
+        self.file_ext = file_ext
+        
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        
+        for key in self.key_iterator(data):
+            assert type(data[key]) == str
+
+            mha_path = data[key]
+            file_name = get_filename_without_extensions(mha_path)
+            nii_path = os.path.join(self.output_dir, f"{file_name}{self.file_ext}")
+            convert_mha_to_nii(mha_path, nii_path)
+            data[key] = nii_path
+        
+        return data
+    
+
+class Convert_nii_to_mhad(MapTransform):
+    def __init__(self, keys: KeysCollection, output_dir: str, nii_layout, mha_layout, file_ext=".mha"):
+        """
+        """
+        super().__init__(keys)
+        self.output_dir = output_dir
+        self.file_ext = file_ext
+        self.nii_layout = nii_layout
+        self.mha_layout = mha_layout
+
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        for key in self.key_iterator(data):
+            assert type(data[key]) == str
+
+            image_path = data[key]
+            # file_name = get_filename_without_extensions(nii_path)
+            # mha_path = os.path.join(self.output_dir, f"{file_name}{self.file_ext}")
+            nii_path = self.nii_layout.filename()
+
+            
+            # nii_path = self.folder_layout.filename(subject=file_name)
+            # assert os.path.exists(nii_path)
+
+            convert_nii_to_mha(nii_path, mha_path)
+            data[key] = mha_path
+        
+        return data
+
+
+
+class NoOpd(MapTransform):
+    def __init__(self, keys: KeysCollection = None):
+        """
+        A transform which does nothing
+        """
+        super().__init__(keys)
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        return data
+
 
 
 class NoOpd(MapTransform):
@@ -157,7 +231,7 @@ class PrintDatad(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         global logger
-        if self.keys is not None:
+        if self.keys is not None and (None not in self.keys and len(self.keys) == 1):
             data_sub_dict = {key: data[key] for key in self.key_iterator(data)}
         else:
             data_sub_dict = data

@@ -728,6 +728,7 @@ def get_metrics_transforms(device, labels, args):
             image_only=True,
         ),
         ToDeviced(keys=["pred", "label"], device=device),
+        PrintDatad(),
         EnsureChannelFirstd(keys=["pred", "label"]),
         AsDiscreted(
             keys=("pred", "label"),

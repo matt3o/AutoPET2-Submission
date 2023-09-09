@@ -85,12 +85,14 @@ def get_spacing(args):
 def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
     cpu_device = torch.device("cpu")
     spacing = get_spacing(args)
+    if args.debug:
+        loglevel = logging.DEBUG
 
     # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
         t_train = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
-            InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
+            InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(
                 keys=input_keys,
                 reader="ITKReader",
@@ -149,11 +151,14 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
     cpu_device = torch.device("cpu")
     spacing = get_spacing(args)
 
+    if args.debug:
+        loglevel = logging.DEBUG
+
     # data Input keys have to be at least ["image"] for val
     if args.dataset in PET_dataset_names:
         t_val = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
-            InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
+            InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else NoOpd(),
@@ -230,11 +235,15 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
     spacing = get_spacing(args)
     cpu_device = torch.device("cpu")
 
+    if args.debug:
+        loglevel = logging.DEBUG
+
+
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset == "AutoPET":
         t_val_1 = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
-            InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
+            InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
@@ -264,8 +273,13 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
 
 def get_click_transforms(device, args):
     spacing = get_spacing(args)
+
+    if args.debug:
+        loglevel = logging.DEBUG
+
+
     t = [
-        InitLoggerd(args),
+        InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         FindDiscrepancyRegions(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
@@ -696,8 +710,12 @@ def get_metrics_loader(args, file_glob="*.nii.gz"):
     return test_datalist
 
 
-def get_metrics_transforms(device, labels):
+def get_metrics_transforms(device, labels, args):
+    if args.debug:
+        loglevel = logging.DEBUG
+    
     t = [
+        InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),
         LoadImaged(
             keys=["pred", "label"],
             reader="ITKReader",

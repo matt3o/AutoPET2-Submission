@@ -284,7 +284,7 @@ class ClearGPUMemoryd(MapTransform):
 
 
 class InitLoggerd(MapTransform):
-    def __init__(self, args):
+    def __init__(self, loglevel=logging.INFO, no_log=True, log_dir=None):
         """
         Initialises the logger inside the dataloader thread (if it is a separate thread).
 
@@ -295,20 +295,20 @@ class InitLoggerd(MapTransform):
         global logger
         super().__init__(None)
 
-        self.loglevel = logging.INFO
-        if args.debug:
-            self.loglevel = logging.DEBUG
+        self.loglevel = loglevel
+        self.log_dir = log_dir
+        self.no_log = no_log
 
-        self.log_file_folder = args.output_dir
-        if args.no_log:
-            self.log_file_folder = None
-        setup_loggers(self.loglevel, self.log_file_folder)
+        if self.no_log:
+            self.log_dir = None
+        
+        setup_loggers(self.loglevel, self.log_dir)
         logger = get_logger()
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         global logger
         if logger is None:
-            setup_loggers(self.loglevel, self.log_file_folder)
+            setup_loggers(self.loglevel, self.log_dir)
         logger = get_logger()
         return data
 

@@ -35,7 +35,8 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     ToTensord,
     MeanEnsembled,
     SaveImaged,
-    CopyItemsd, 
+    CopyItemsd,
+    Invertd,
 )
 from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
@@ -317,12 +318,17 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
     t = [
         Activationsd(keys="pred", softmax=True),
         CopyItemsd("pred", times=1, names=("pred_for_save",)) if save else NoOpd,
+        Invertd(
+            keys="pred_for_save", 
+            orig_keys="image",
+            nearest_interp=False,
+            transform=pretransform,
+        ),
         AsDiscreted(
             keys="pred_for_save",
             argmax=True,
             #to_onehot=(len(labels), len(labels)),
         ) if save else NoOpd,
-        # Invertd()
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),

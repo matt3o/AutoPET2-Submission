@@ -39,7 +39,7 @@ def run(args):
     torch.cuda.set_device(device)
 
     data_list = get_metrics_loader(args)
-    transforms = get_metrics_transforms(device=device, labels=args.labels)
+    transforms = get_metrics_transforms(device=device, labels=args.labels, args=args)
     print(f"There are {len(data_list)} items in the dataloader")
 
     assert len(data_list) > 0

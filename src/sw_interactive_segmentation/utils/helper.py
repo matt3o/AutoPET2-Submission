@@ -233,12 +233,11 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
     else:
         batch_data_string += f"Type of batch data: {type(batchdata)}\n"
         for key in batchdata:
-            extra_info = ""
-            # if key == "pred":
-            extra_info = torch.unique(batchdata[key]).tolist()
-            if len(extra_info) > 20:
-                extra_info = f"too many unique (len): {len(extra_info)}"
             if type(batchdata[key]) == torch.Tensor or type(batchdata[key]) == MetaTensor:
+                extra_info = torch.unique(batchdata[key]).tolist()
+                if len(extra_info) > 20:
+                    extra_info = f"too many unique (len): {len(extra_info)}"
+                
                 batch_data_string += (
                     f"- {key}({batchdata[key].__class__.__qualname__}) size: {batchdata[key].size()} "
                     f"size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB "

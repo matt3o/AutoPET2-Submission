@@ -255,7 +255,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
         t_val_1 = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),
-            LoadImaged(keys=input_keys, reader="ITKReader", image_only=True),
+            LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
@@ -322,27 +322,26 @@ def get_click_transforms(device, args):
 
 
 def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretransform=None):
-    save = False
     if save_pred:
-        save = save_pred
-
         if output_dir is None:
             raise UserWarning("output_dir may not be empty when save_pred is enabled...")
+        if pretransform is None:
+            logger.warning("Make sure to add a pretransform here if you want the prediction to be inverted"
     
     t = [
         Activationsd(keys="pred", softmax=True),
-        CopyItemsd("pred", times=1, names=("pred_for_save",)) if save else NoOpd,
+        CopyItemsd("pred", times=1, names=("pred_for_save",)) if save_pred else NoOpd,
         Invertd(
             keys="pred_for_save", 
             orig_keys="image",
             nearest_interp=False,
             transform=pretransform,
-        ),
+        ) if (save_pred and pretransform is not None) else NoOpd,
         AsDiscreted(
             keys="pred_for_save",
             argmax=True,
             #to_onehot=(len(labels), len(labels)),
-        ) if save else NoOpd,
+        ) if save_pred else NoOpd,
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),
@@ -356,7 +355,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             output_dtype=np.uint8,
             separate_folder=False,
             resample=False,
-        ) if save else NoOpd,
+        ) if save_pred else NoOpd,
 
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),

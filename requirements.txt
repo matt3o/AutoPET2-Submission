@@ -59,6 +59,6 @@ zipp==3.15.0
 pandas
 cupy-cuda11x
 cucim
-monai>=1.2.0
+monai[itk]>=1.2.0
 pynvml
 SimpleITK

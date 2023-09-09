@@ -328,7 +328,6 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             logger.warning("Make sure to add a pretransform here if you want the prediction to be inverted")
     
     t = [
-        Activationsd(keys="pred", softmax=True),
         CopyItemsd("pred", times=1, names=("pred_for_save",)) if save_pred else NoOpd(),
         Invertd(
             keys="pred_for_save", 
@@ -336,6 +335,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             nearest_interp=False,
             transform=pretransform,
         ) if save_pred and pretransform is not None else NoOpd(),
+        Activationsd(keys="pred", softmax=True),
         AsDiscreted(
             keys="pred_for_save",
             argmax=True,
@@ -361,33 +361,36 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
     ]
     return Compose(t)
 
-def get_post_transforms_unsupervised(labels, device, cache_dir, output_dir):
-    os.makedirs(os.path.join(cache_dir, "nii"), exist_ok=True)
+def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None):
+    os.makedirs(pred_dir, exist_ok=True)
     nii_layout = FolderLayout(
-        output_dir=os.path.join(cache_dir, "nii"),
+        output_dir=pred_dir,
         postfix="",
         extension=".nii.gz",
         makedirs=False
     )
-    # mha_layout = FolderLayout(
-    #     output_dir=output_dir,
-    #     postfix="",
-    #     extension=".mha",
-    #     makedirs=False
-    # )
+
+    if pretransform is None:
+        raise UserWarning("Make sure to add a pretransform here if you want the prediction to be inverted")
     
     t = [
-        PrintDatad(keys=("pred",)),
+        # PrintDatad(),
+        Invertd(
+            keys="pred", 
+            orig_keys="image",
+            nearest_interp=False,
+            transform=pretransform,
+        ),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True, #to_onehot=(len(labels),),
         ),
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
-        PrintDatad(keys=("pred",)),
+        # PrintDatad(keys=("pred",)),
         SaveImaged(keys="pred",
                    writer="ITKWriter",
-                #    output_dir=cache_dir,
-                #    output_ext=".nii.gz",
+                   output_postfix="",
+                   output_ext=".nii.gz",
                    folder_layout=nii_layout,
                    output_dtype=np.uint8,
                    separate_folder=False,
@@ -445,7 +448,12 @@ def get_AutoPET_file_list(args) -> List[List, List, List]:
     ]
     val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
 
-    return train_data, val_data, []
+    # Same data as validation but without labels
+    test_data = [
+        {"image": image_name} for image_name in test_images
+    ]
+
+    return train_data, val_data, test_data
 
 
 def get_filename_without_extensions(nifti_path):
@@ -486,17 +494,19 @@ def get_AutoPET2_Challenge_file_list(args)  -> List[List, List, List]:
 
     return [], [], test_data
 
-def post_process_AutoPET2_Challenge_file_list(args):
+def post_process_AutoPET2_Challenge_file_list(args, pred_dir, cache_dir):
     logger.info("POSTPROCESSING AutoPET challenge files")
-    nii_dir = os.path.join(args.cache_dir, "nii")
-    # shutil.move(args.output_dir, nii_dir)
-    # os.makedirs(args.output_dir, exist_ok=True)
+    # nii_dir = pred_dir
+    nii_dir = os.path.join(cache_dir, "prediction")
+    shutil.move(pred_dir, nii_dir)
+    os.makedirs(pred_dir, exist_ok=True)
     # nii_dir = os.path.join(args.output_dir, "nii")
 
     nii_images = sorted(glob.glob(os.path.join(nii_dir, "*.nii.gz")))
+    logger.info(nii_images)
 
     for image_path in nii_images:
-        logger.info(f"{args.output_dir=}")
+        # logger.info(f"{args.output_dir=}")
         logger.info(f"Using nii file {image_path}")
         # logger.info(f"Converting {image_path} to .mha")
         # mha_path = os.path.join(args.cache_dir, 'SUV.nii.gz')
@@ -581,9 +591,12 @@ def get_data(args):
     elif args.dataset == "HECKTOR":
         train_data, val_data, test_data = get_HECKTOR_file_list(args)
 
+    logger.info(f"len(train_data): {len(train_data)}, len(val_data): {len(val_data)}, len(test_data): {len(test_data)}")
+
     # For debugging with small dataset size
     train_data = train_data[0 : args.limit] if args.limit else train_data
     val_data = val_data[0 : args.limit] if args.limit else val_data
+    test_data = test_data[0 : args.limit] if args.limit else test_data
 
     if args.train_on_all_samples:
         train_data += val_data
@@ -592,7 +605,14 @@ def get_data(args):
     return train_data, val_data, test_data
 
 def get_test_loader(args, pre_transforms_test):
-    _, _, test_data = get_data(args)
+    train_data, val_data, test_data = get_data(args)
+    if not len(test_data):
+        if len(val_data) > 0:
+            test_data = val_data
+        if len(train_data) > 0:
+            test_data = train_data
+        else:
+            raise UserWarning("No valid data found..")
 
     total_l = len(test_data)
     test_ds = Dataset(test_data, pre_transforms_test)

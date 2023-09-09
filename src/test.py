@@ -54,7 +54,8 @@ def run(args):
     test_loader = get_test_loader(args, pre_transforms_test)
 
     # click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms_unsupervised(args.labels, device, args.cache_dir, args.output_dir)
+    pred_dir = os.path.join(args.output_dir, "predictions")
+    post_transform = get_post_transforms_unsupervised(args.labels, device, pred_dir=pred_dir, pretransform=pre_transforms_test)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, test_inferer = get_inferers(
@@ -144,7 +145,7 @@ def run(args):
 
     if args.dataset == "AutoPET2_Challenge":
         # convert the mha to nifti
-        post_process_AutoPET2_Challenge_file_list(args)
+        post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
 
 
 def main():

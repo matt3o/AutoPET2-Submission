@@ -67,6 +67,7 @@ def parse_args():
     parser.add_argument("-s", "--seed", type=int, default=36)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--no_log", default=False, action="store_true")
+    parser.add_argument("--no_data", default=False, action="store_true")
     parser.add_argument("--dont_check_output_dir", default=False, action="store_true")
     parser.add_argument("--debug", default=False, action="store_true")
 
@@ -219,9 +220,10 @@ def setup_environment_and_adapt_args(args):
     if args.data_dir == "None":
         args.data_dir = f"{args.output_dir}/data"
         logger.info(f"--data was None, so that {args.data_dir}/data was selected instead")
-
-    if not os.path.exists(args.data_dir):
-        pathlib.Path(args.data_dir).mkdir(parents=True)
+    
+    if not args.no_data:
+        if not os.path.exists(args.data_dir):
+            pathlib.Path(args.data_dir).mkdir(parents=True)
 
     # Training only, so done on the patch of size train_crop_size
     train_click_generation_mapping = {

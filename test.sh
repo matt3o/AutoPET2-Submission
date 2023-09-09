@@ -29,10 +29,11 @@ docker run --rm \
         --pids-limit="256" \
         -v $SCRIPTPATH/test/input/:/input/ \
         -v $VOLUME:/output/ \
-        sw_segmentation
+        sw_segmentation 
 
 echo "Evaluation done, checking results"
 docker build -f Dockerfile.eval -t unet_eval .
+
 
 docker run --rm -it \
         -v $VOLUME:/output/ \

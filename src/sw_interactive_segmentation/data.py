@@ -35,6 +35,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     ToTensord,
     MeanEnsembled,
     SaveImaged,
+    CopyItemsd, 
 )
 from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
@@ -291,23 +292,37 @@ def get_click_transforms(device, args):
     return Compose(t)
 
 
-def get_post_transforms(labels, device, save_pred=False, output_dir=None):
+def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretransform=None):
+    save = False
+    if save_pred:
+        save = save_pred
+
+        if output_dir is None:
+            raise UserWarning("output_dir may not be empty when save_pred is enabled...")
+    
     t = [
         Activationsd(keys="pred", softmax=True),
+        CopyItemsd("pred", times=1, names=("pred_for_save",)) if save else NoOpd,
+        AsDiscreted(
+            keys="pred_for_save",
+            argmax=True,
+            #to_onehot=(len(labels), len(labels)),
+        ) if save else NoOpd,
+        # Invertd()
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),
-            #to_onehot=(len(labels), len(labels)),
+            to_onehot=(len(labels), len(labels)),
         ),
-        SaveImaged(keys="pred",
+        SaveImaged(keys="pred_for_save",
             writer="ITKWriter",
-            output_dir=os.path.join( output_dir, "predictions"),
+            output_dir=os.path.join(output_dir, "predictions"),
             output_postfix="",
         #    output_ext=".nii.gz",
             output_dtype=np.uint8,
             separate_folder=False,
             resample=False,
-        ) if (save_pred and output_dir is not None) else NoOpd(),
+        ) if save else NoOpd,
 
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
@@ -692,7 +707,7 @@ def get_metrics_transforms(device, labels):
         EnsureChannelFirstd(keys=["pred", "label"]),
         AsDiscreted(
             keys=("pred", "label"),
-            argmax=(False, False),
+            argmax=(True, False),
             to_onehot=(len(labels), len(labels)),
         ),
     ]

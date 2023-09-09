@@ -424,7 +424,7 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
     val_loader = get_val_loader(args, pre_transforms_val) 
 
     click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir)
+    post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir, pretransform=pre_transforms_val)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, eval_inferer = get_inferers(

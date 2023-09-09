@@ -49,9 +49,6 @@ def run(args):
     if args.dataset == "AutoPET2_Challenge":
         raise UserWarning("Use test.py for the challenge runs..")
 
-    gpu_thread = GPU_Thread(1, "Track_GPU_Usage", os.path.join(args.output_dir, "usage.csv"), device)
-    logger.info(f"Logging GPU usage to {args.output_dir}/usage.csv")
-
     (
         evaluator,
         key_val_metric,

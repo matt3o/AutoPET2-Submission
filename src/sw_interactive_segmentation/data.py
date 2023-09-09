@@ -88,6 +88,8 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
     spacing = get_spacing(args)
     if args.debug:
         loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
 
     # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
@@ -154,6 +156,8 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
 
     if args.debug:
         loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
 
     # data Input keys have to be at least ["image"] for val
     if args.dataset in PET_dataset_names:
@@ -242,6 +246,8 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
 
     if args.debug:
         loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
 
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
@@ -283,6 +289,8 @@ def get_click_transforms(device, args):
 
     if args.debug:
         loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
 
 
     t = [
@@ -723,8 +731,11 @@ def get_metrics_loader(args, file_glob="*.nii.gz"):
 
 
 def get_metrics_transforms(device, labels, args):
+    
     if args.debug:
         loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
     
     t = [
         InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),
@@ -734,11 +745,10 @@ def get_metrics_transforms(device, labels, args):
             image_only=True,
         ),
         ToDeviced(keys=["pred", "label"], device=device),
-        PrintDatad(),
         EnsureChannelFirstd(keys=["pred", "label"]),
         AsDiscreted(
             keys=("pred", "label"),
-            argmax=(True, False),
+            argmax=(False, False),
             to_onehot=(len(labels), len(labels)),
         ),
     ]

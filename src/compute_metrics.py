@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 def run(args):
     device = torch.device(f"cuda:{args.gpu}")
     args.device = device
+    args.debug = False
+    args.no_log = True
     torch.cuda.set_device(device)
 
     data_list = get_metrics_loader(args)

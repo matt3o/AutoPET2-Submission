@@ -6,3 +6,5 @@ src/sw_interactive_segmentation/data/*
 **/*.egg-info
 dist/
 .git/
+test/
+*.tar.gz

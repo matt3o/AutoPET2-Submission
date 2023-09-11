@@ -30,6 +30,6 @@ COPY --chown=user:user . /opt/app/sw_interactive_segmentation/
 WORKDIR /opt/app/sw_interactive_segmentation/
  
 #CMD python src/test.py -i /input/images/pet/ -o /output/images/automated-petct-lesion-segmentation/ --use_scale_intensity_range_percentiled --non_interactive -a --disks --gpu_size small --eval_only --limit_gpu_memory_to 0.66 --resume_from checkpoint.pt
-CMD python src/test.py -i /input/images/pet/ -d /tmp -o /output/images/automated-petct-lesion-segmentation/ --use_scale_intensity_range_percentiled --non_interactive -a --disks --gpu_size small --eval_only --resume_from 195.pt -ta --dataset AutoPET2_Challenge --dont_check_output_dir --no_log --dont_crop_foreground --sw_overlap 0.75 --no_data
+CMD python src/test.py -i /input/images/pet/ -d /tmp -o /output/images/automated-petct-lesion-segmentation/ --use_scale_intensity_range_percentiled --non_interactive -a --disks --gpu_size small --eval_only --resume_from 195.pt -ta --dataset AutoPET2_Challenge --dont_check_output_dir --no_log --dont_crop_foreground --sw_overlap 0.25 --no_data --val_sw_batch_size 8
 #CMD python src/test.py -i /input/autopet -d /tmp -o /output/images/automated-petct-lesion-segmentation/ --use_scale_intensity_range_percentiled --non_interactive -a --disks --gpu_size small --eval_only --limit_gpu_memory_to 0.66 --resume_from 195.pt -ta --dataset AutoPET --dont_check_output_dir --no_log --dont_crop_foreground --sw_overlap 0.75 --no_data -t 2
 #ENTRYPOINT [ "python", "-m", "process"]

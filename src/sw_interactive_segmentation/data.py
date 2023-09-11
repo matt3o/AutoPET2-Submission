@@ -591,6 +591,13 @@ def get_data(args):
     elif args.dataset == "HECKTOR":
         train_data, val_data, test_data = get_HECKTOR_file_list(args)
 
+    if args.train_on_all_samples:
+        train_data += val_data
+        val_data = train_data
+        test_data = train_data
+        logger.warning("All validation data has been added to the training. Validation on them no longer makes sense.")
+
+
     logger.info(f"len(train_data): {len(train_data)}, len(val_data): {len(val_data)}, len(test_data): {len(test_data)}")
 
     # For debugging with small dataset size
@@ -598,9 +605,6 @@ def get_data(args):
     val_data = val_data[0 : args.limit] if args.limit else val_data
     test_data = test_data[0 : args.limit] if args.limit else test_data
 
-    if args.train_on_all_samples:
-        train_data += val_data
-        logger.warning("All validation data has been added to the training. Validation on them no longer makes sense.")
 
     return train_data, val_data, test_data
 

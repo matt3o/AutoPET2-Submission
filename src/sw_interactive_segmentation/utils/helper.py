@@ -44,7 +44,6 @@ def get_actual_cuda_index_of_device(device: torch.device):
 
 
 def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
-    # empty the cache first
     shutdown = False
     cuda_index = get_actual_cuda_index_of_device(device)
     if nvml_handle is None:
@@ -62,7 +61,6 @@ def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
             info.free / gb_divisor,
             info.used / gb_divisor,
         )
-        # utilization = torch.cuda.utilization(device)
         util_gpu = util.gpu / 100
         util_memory = util.memory / 100
 
@@ -85,7 +83,6 @@ def gpu_usage(device: torch.device, used_memory_only=False, nvml_handle=None):
 
 
 def gpu_usage_per_process(device: torch.device, nvml_handle=None) -> List:
-    # empty the cache first
     cuda_index = get_actual_cuda_index_of_device(device)
     if nvml_handle is None:
         nvmlInit()
@@ -164,13 +161,6 @@ def get_gpu_usage(
     return usage
 
 
-# def print_gpu_usage(*args, **kwargs):
-#     logger.info(get_gpu_usage(*args, **kwargs))
-
-
-# def print_gpu_usage_per_process(*args, **kwargs):
-#     logger.info(gpu_usage_per_process(*args, **kwargs))
-
 
 def print_tensor_gpu_usage(a: torch.Tensor):
     if a.cuda:
@@ -189,15 +179,15 @@ def print_all_tensor_gpu_memory_usage():
 
 
 def print_amount_of_tensors():
+    """
+    Care this function can lead to unexpected crashed, I guess due to accessing deallocated memory.
+    Please use this only for debugging purposes!
+    """
     counter = 0
     for obj in gc.get_objects():
         try:
             if torch.is_tensor(obj) or (hasattr(obj, "data") and torch.is_tensor(obj.data)):
                 counter += 1
-            # if torch.is_tensor(obj) and torch.is_cuda(obj):
-            #     counter += 1
-            # elif (hasattr(obj, 'data') and torch.is_tensor(obj.data)) and torch.is_cuda(obj.data):
-            #     counter += 1
         except Exception:
             pass
     print(f"#################################### Amount of tensors: {counter}")
@@ -219,6 +209,9 @@ def get_total_size_of_all_tensors(data):
 
 
 def describe(t: torch.Tensor):
+    """
+    Analouge to Pandas describe function, this function prints similiar statistics for torch Tensors.
+    """
     return "mean: {} \nmin: {}\nmax: {} \ndtype: {} \ndevice: {}".format(
         torch.mean(t), torch.min(t), torch.max(t), t.dtype, t.device
     )
@@ -394,7 +387,7 @@ class GPU_Thread(threading.Thread):
             self.csv_file.write(usage)
             self.csv_file.write("\n")
             self.csv_file.flush()
-            # print_gpu_usage_per_process(self.device, nvml_handle=self.nvml_handle)
+            # print(gpu_usage_per_process(self.device, nvml_handle=self.nvml_handle))
 
 
 def get_tensor_at_coordinates(t: torch.Tensor, coordinates: torch.Tensor) -> torch.Tensor:

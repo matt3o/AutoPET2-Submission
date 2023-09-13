@@ -550,8 +550,6 @@ class AddGuidanceSignal(MapTransform):
                 assert image.is_cuda
                 tmp_image = image[0 : 0 + self.number_intensity_ch, ...]
 
-                # try:
-                #     guidance = data[self.guidance_key]
                 # e.g. {'spleen': '[[1, 202, 190, 192], [2, 224, 212, 192], [1, 242, 202, 192], [1, 256, 184, 192], [2.0, 258, 198, 118]]',
                 # 'background': '[[257, 0, 98, 118], [1.0, 223, 303, 86]]'}
 
@@ -560,12 +558,6 @@ class AddGuidanceSignal(MapTransform):
                     label_guidance = get_guidance_tensor_for_key_label(data, label_key, self.device)
                     logger.debug(f"Converting guidance for label {label_key}:{label_guidance} into a guidance signal..")
 
-                    # for key_label in data["label_names"]:
-                    # Getting signal based on guidance
-                    # assert (
-                    #     type(label_guidance) == torch.Tensor
-                    #     or type(label_guidance) == MetaTensor
-                    # ), f"guidance[key_label]: {type(label_guidance)}\n{label_guidance}"
                     if label_guidance is not None and label_guidance.numel():
                         signal = self._get_corrective_signal(
                             image,
@@ -652,7 +644,6 @@ class FindDiscrepancyRegions(MapTransform):
                         # Prediction should be represented in one
                         pred = (pred > 0.5).to(dtype=torch.float32)
                     else:
-                        # TODO look into thos weird conversion - are they necessary?
                         # Taking single label
                         label = torch.clone(data[key].detach())
                         label[label != label_value] = 1
@@ -790,14 +781,7 @@ class AddGuidance(Randomizable, MapTransform):
 
     @timeit
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        # Get the previously generated clicks aka guidance
-        # guidance = data.get(self.guidance_key, None)
-        # if guidance is None:
-        #     # Initialize the guidance dict
-        #     data[self.guidance_key] = {}
-
         click_generation_strategy = data[self.click_generation_strategy_key]
-        # logger.info(f"click generation strategy is {click_generation_strategy}")
 
         if click_generation_strategy == ClickGenerationStrategy.GLOBAL_NON_CORRECTIVE:
             # uniform random sampling on label
@@ -863,17 +847,12 @@ class AddGuidance(Randomizable, MapTransform):
             # We now have the worst patches for each label, now sample clicks on them
             for idx, (key_label, _) in enumerate(data[LABELS_KEY].items()):
                 patch_number = max_loss_position_per_label[idx]
-                # label_loss = loss_per_label[patch_number, idx]
                 coordinates = coordinate_list[patch_number]
-                # logger.info(
-                #     f"Selected patch {idx} for label {key_label} with dice score: {label_loss} at coordinates: {coordinates}"
-                # )
 
                 tmp_gui = get_guidance_tensor_for_key_label(data, key_label, self.device)
                 # Add guidance based on discrepancy
                 data[key_label] = self.add_guidance_based_on_discrepancy(data, tmp_gui, key_label, coordinates)
 
-            # del tmp_gui, pred_list, label_list, coordinate_list, loss_per_label, max_loss_position_per_label, new_data
             gc.collect()
         else:
             raise UserWarning("Unknown click strategy")

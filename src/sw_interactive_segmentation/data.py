@@ -237,10 +237,6 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
 
 
 def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image")):
-
-    # pre_transforms = get_pre_transforms_val_as_list(labels, device, args, input_keys)
-    # pre_transforms.append(EnsureTyped(keys=input_keys, device=device, data_type="tensor"))
-
     spacing = get_spacing(args)
     cpu_device = torch.device("cpu")
 
@@ -251,18 +247,15 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
 
     # Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
-        # t_val_1 = pre_transforms
         t_val_1 = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
-            ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True),
-            # TODO enable when publishing the code!
-            # ScaleIntensityRangePercentilesd(
-            #     keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
-            # )
+            ScaleIntensityRangePercentilesd(
+                keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
+            ),
             EnsureTyped(keys=input_keys, device=device, data_type="tensor"),
         ]
         t_val_2 = [
@@ -274,7 +267,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
                 device=device,
             ),
             Orientationd(keys=input_keys, axcodes="RAS"),
-            Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
+            Spacingd(keys=input_keys, pixdim=spacing),
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else NoOpd(),
@@ -303,6 +296,7 @@ def get_click_transforms(device, args):
             probability_key="probability",
             device=device,
         ),
+        # Overwrites the image entry
         AddGuidanceSignal(
             keys="image",
             sigma=args.sigma,
@@ -314,7 +308,7 @@ def get_click_transforms(device, args):
             adaptive_sigma=args.adaptive_sigma,
             device=device,
             spacing=spacing,
-        ),  # Overwrites the image entry
+        ),  
     ]
 
     return Compose(t)
@@ -374,7 +368,6 @@ def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None
         raise UserWarning("Make sure to add a pretransform here if you want the prediction to be inverted")
     
     t = [
-        # PrintDatad(),
         Invertd(
             keys="pred", 
             orig_keys="image",
@@ -384,9 +377,8 @@ def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True, #to_onehot=(len(labels),),
         ),
-        # This transform is to check dice score per segment/label
+        # This transform is to check dice score per segment/label, disabled not needed right now
         # SplitPredsLabeld(keys="pred"),
-        # PrintDatad(keys=("pred",)),
         SaveImaged(keys="pred",
                    writer="ITKWriter",
                    output_postfix="",
@@ -396,8 +388,6 @@ def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None
                    separate_folder=False,
                    resample=False,
         ),
-        # PrintDatad(),
-        # Convert_nii_to_mhad(keys=("pred"), output_dir=output_dir, nii_layout=nii_layout, mha_layout=mha_layout),
     ]
     return Compose(t)
 
@@ -410,7 +400,6 @@ def get_ensemble_transforms(labels, device, nfolds=5, weights=None):
         MeanEnsembled(
             keys=prediction_keys,
             output_key="pred",
-            # weights=[0.95, 0.94, 0.95, 0.94, 0.90],
         ),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
@@ -463,12 +452,6 @@ def get_filename_without_extensions(nifti_path):
 
 def get_AutoPET2_Challenge_file_list(args)  -> List[List, List, List]:
     test_images = sorted(glob.glob(os.path.join(args.input_dir, "*.mha")))
-    # train_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTr", "*.nii.gz")))
-
-    # test_images = sorted(glob.glob(os.path.join(args.input_dir, "imagesTs", "*.nii.gz")))
-    # test_labels = sorted(glob.glob(os.path.join(args.input_dir, "labelsTs", "*.nii.gz")))
-
-    # Is the conversion even necessary? 
 
     logger.info(f"{test_images=}")
     test_data = []
@@ -479,41 +462,21 @@ def get_AutoPET2_Challenge_file_list(args)  -> List[List, List, List]:
         convert_mha_to_nii(image_path, nii_path)
         test_data.append({"image": nii_path})
 
-    # test_data = [
-    #     {"image": image_name} for image_name in test_images
-    # ]
-
-    # test_images = sorted(glob.glob(os.path.join(args.input_dir, "*.nii.gz")))
-    # test_data = [
-    #     {"image": image_name} for image_name in test_images
-    # ]
-
 
     logger.info(f"{test_data=}")
-    # val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
-
     return [], [], test_data
 
 def post_process_AutoPET2_Challenge_file_list(args, pred_dir, cache_dir):
     logger.info("POSTPROCESSING AutoPET challenge files")
-    # nii_dir = pred_dir
     nii_dir = os.path.join(cache_dir, "prediction")
     shutil.move(pred_dir, nii_dir)
     os.makedirs(pred_dir, exist_ok=True)
-    # nii_dir = os.path.join(args.output_dir, "nii")
-
     nii_images = sorted(glob.glob(os.path.join(nii_dir, "*.nii.gz")))
     logger.info(nii_images)
 
     for image_path in nii_images:
-        # logger.info(f"{args.output_dir=}")
         logger.info(f"Using nii file {image_path}")
-        # logger.info(f"Converting {image_path} to .mha")
-        # mha_path = os.path.join(args.cache_dir, 'SUV.nii.gz')
-        # convert_mha_to_nii(image_path, nii_path)
-        # test_data.append({"image": nii_path})
         image_name = get_filename_without_extensions(image_path)
-        # true_image_name = image_name.name.removesuffix(''.join(image_name.suffixes))
         uuid = image_name
         logger.info(f"{uuid=}")
 
@@ -708,28 +671,14 @@ def get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
         for i in folds
     ]
 
-    # test_ds = PersistentDataset(val_data, pre_transforms_val, cache_dir=args.cache_dir)
-
-    # test_loader = ThreadDataLoader(
-    #     val_ds,
-    #     num_workers=args.num_workers,
-    #     batch_size=1,
-    # )
-
     return train_loaders, val_loaders  # , test_loader
 
 
 def get_metrics_loader(args, file_glob="*.nii.gz"):
     labels_dir = args.labels_dir
     predictions_dir = args.predictions_dir
-
-    # labels_glob = os.path.join(labels_dir, file_glob)
     predictions_glob = os.path.join(predictions_dir, file_glob)
-
-
-    # test_labels = sorted(glob.glob(labels_glob))
     test_predictions = sorted(glob.glob(predictions_glob))
-
     test_datalist = []
 
     for pred_file_name in test_predictions:

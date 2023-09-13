@@ -118,35 +118,18 @@ class Interaction:
             )
         )
 
-        # -> Moved to AddEmptySignalChannels
-        # # Set up the initial batch data
-        # in_channels = 1 + len(self.args.labels)
-        # batchdata_list = decollate_batch(batchdata)
-        # for i in range(len(batchdata_list)):
-        #     tmp_image = batchdata_list[i][CommonKeys.IMAGE][0 : 0 + 1, ...]
-        #     assert len(tmp_image.shape) == 4
-        #     new_shape = list(tmp_image.shape)
-        #     new_shape[0] = in_channels
-        #     # Set the signal to 0 for all input images
-        #     # image is on channel 0 of e.g. (1,128,128,128) and the signals get appended, so
-        #     # e.g. (3,128,128,128) for two labels
-        #     inputs = torch.zeros(new_shape, device=engine.state.device)
-        #     inputs[0] = batchdata_list[i][CommonKeys.IMAGE][0]
-        #     batchdata_list[i][CommonKeys.IMAGE] = inputs
-        # batchdata = list_data_collate(batchdata_list)
-
         iteration = 0
-        # last_loss = 1
         last_dice_loss = 1
         before_it = time.time()
         while True:
             assert iteration < 1000
 
             # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
+            # BCHWD
             inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
             batchdata[CommonKeys.IMAGE] = inputs
             batchdata[CommonKeys.LABEL] = labels
-            # BCHW[D] ?
+            
 
             if iteration == 0:
                 logger.info("inputs.shape is {}".format(inputs.shape))
@@ -215,14 +198,6 @@ class Interaction:
 
             batchdata[CommonKeys.PRED] = predictions
 
-            # Not necessary for anything anymore
-            # loss = self.loss_function(
-            #     batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]
-            # )
-            # last_loss = loss
-            # logger.info(
-            #     f"It: {iteration} {self.loss_function.__class__.__name__}: {loss:.4f} Epoch: {engine.state.epoch}"
-            # )
             last_dice_loss = self.dice_loss_function(batchdata[CommonKeys.PRED], batchdata[CommonKeys.LABEL]).item()
             logger.info(
                 f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice_loss:.4f} Epoch: {engine.state.epoch}"
@@ -255,8 +230,6 @@ class Interaction:
             iteration += 1
 
         logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
-        # Might be needed for sw_roi_size smaller than 128
-        # torch.cuda.empty_cache()
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata)  # train network with the final iteration cycle
 

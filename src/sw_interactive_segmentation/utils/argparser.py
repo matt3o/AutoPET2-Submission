@@ -23,6 +23,7 @@ import pathlib
 import sys
 import uuid
 import tempfile
+import time
 
 import torch
 
@@ -171,14 +172,7 @@ def setup_environment_and_adapt_args(args):
 
     device = torch.device(f"cuda:{args.gpu}")
 
-    # Aliases for backward compatibility
-    # TODO: Remove
-    args.output = args.output_dir
-    args.input = args.input_dir
-    args.data = args.data_dir
-
-    # For single label using one of the Medical Segmentation Decathlon
-    args.labels = {"spleen": 1, "background": 0}
+    args.labels = {"tumor": 1, "background": 0}
 
     if not args.dont_check_output_dir and os.path.isdir(args.output_dir):
         raise UserWarning(f"output path {args.output_dir} already exists. Please choose another path..")
@@ -212,6 +206,8 @@ def setup_environment_and_adapt_args(args):
             logger.warning("Reusing the cache_dir between different network runs may lead to cache inconsistencies.")
             logger.warning("Most importantly the crops may not be updated if you set them differently")
             logger.warning("PersistentDataset does not detect this automatically but only checks if the hash matches")
+            logger.warning("Waiting shortly...")
+            time.sleep(60)
             args.cache_dir = f"{args.cache_dir}"
 
     if not os.path.exists(args.cache_dir):

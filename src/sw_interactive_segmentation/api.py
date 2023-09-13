@@ -295,13 +295,6 @@ def get_key_metric(str_to_prepend="") -> OrderedDict:
     return key_metrics
 
 
-# def prepend_str_to_all_keys(input_dict: Dict, str_to_prepend: str) -> Dict:
-#     for k, v in input_dict.items():
-#         del input_dict[k]
-#         input_dict[f"{str_to_prepend}_{k}"] = v
-#     return input_dict
-
-
 def get_additional_metrics(labels, include_background=False, loss_kwargs=None, str_to_prepend=""):
     # loss_function_metric = loss_function
     if loss_kwargs is None:
@@ -341,13 +334,6 @@ def get_additional_metrics(labels, include_background=False, loss_kwargs=None, s
 
     return additional_metrics
 
-
-# def get_key_train_metrics(loss_function):
-#     all_train_metrics = get_key_val_metrics(loss_function)
-#     all_train_metrics["train_dice"] = all_train_metrics.pop("val_dice")
-#     all_train_metrics["train_dice_ce_loss"] = all_train_metrics.pop("val_dice_ce_loss")
-#     all_train_metrics["train_surfaced_dice"] = all_train_metrics.pop("val_surfaced_dice")
-#     return all_train_metrics
 
 def get_test_evaluator(
     args,

@@ -33,9 +33,6 @@ from sw_interactive_segmentation.utils.argparser import parse_args, setup_enviro
 from sw_interactive_segmentation.utils.tensorboard_logger import init_tensorboard_logger
 from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
 from sw_interactive_segmentation.data import post_process_AutoPET2_Challenge_file_list, get_test_loader, get_post_transforms_unsupervised
-# from monai.handlers import (
-#     CheckpointLoader,
-# )
 
 from monai.data import DataLoader, decollate_batch
 from monai.transforms.utils import allow_missing_keys_mode
@@ -43,6 +40,12 @@ from monai.transforms.utils import allow_missing_keys_mode
 
 logger = None
 
+"""
+test.py
+
+Use this file for the AutoPET2 Challenge. It does not expect any labels and works on input images only.
+
+"""
 
 def run(args):
     for arg in vars(args):
@@ -69,14 +72,6 @@ def run(args):
         True,
     )
 
-    # loss_kwargs = {
-    #     "squared_pred": (not args.loss_no_squared_pred),
-    #     "include_background": (not args.loss_dont_include_background),
-    # }
-    # loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
-    # optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
-    # lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    # train_key_metric = get_key_metric(str_to_prepend="train_")
     val_key_metric = get_key_metric(str_to_prepend="val_")
 
     evaluator = get_test_evaluator(
@@ -96,38 +91,9 @@ def run(args):
         "net": network,
     }
     
-    # if args.resume_from != "None":
-    #     logger.info(f"{args.gpu}:: Loading Network...")
-    #     logger.info(f"{save_dict.keys()=}")
-    #     logger.info(f"CWD: {os.getcwd()}")
-    #     map_location = device
-    #     checkpoint = torch.load(args.resume_from)
-    #     logger.info(f"{checkpoint.keys()=}")
-    #     network.load_state_dict(checkpoint['net'])
-
 
     try:
-        # network.eval()
-        # with torch.no_grad():
-        #     with torch.cuda.amp.autocast():
-        #         for batch_data in test_loader:
-        #             inputs = batch_data["image"].to(device)
-        #             pred = test_inferer(inputs, network)
-        #             pred.applied_operations = batch_data["image"].applied_operations
-        #             # logger.info(f"{pred=}")
-        #             # seg.applied_operations = transformed_data["label"].applied_operations
-        #             pred_dict = {"pred": pred}
-        #             # logger.info(f"{pred=}")
-        #             with allow_missing_keys_mode(pre_transforms_test):
-        #                 inverted_pred = pre_transforms_test.inverse(pred_dict)
-        #             logger.info(f"{inverted_pred=}")
-        #             # pred_dict = {"pred": inverted_pred}
-        #             # inverted_pred["pred"] = inverted_pred["image"]
-        #             # del inverted_pred["image"]
-        #             # logger.info(f"{pred_dict=}")
-        #             trans_outputs = [post_transform(i) for i in decollate_batch(inverted_pred)]
-
-            evaluator.run()
+        evaluator.run()
     except torch.cuda.OutOfMemoryError:
         # oom_observer(device, None, None, None)
         logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))

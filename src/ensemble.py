@@ -105,4 +105,6 @@ def main():
 
 
 if __name__ == "__main__":
+    raise UserWarning("Code has not been finished! Before running please fix it!")
+
     main()

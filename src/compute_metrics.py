@@ -32,6 +32,11 @@ from sw_interactive_segmentation.data import get_metrics_loader, get_metrics_tra
 
 logger = logging.getLogger(__name__)
 
+"""
+compute_metrics.py
+
+Computes the metrics of a labels against a prediction dir.
+"""
 
 def run(args):
     device = torch.device(f"cuda:{args.gpu}")

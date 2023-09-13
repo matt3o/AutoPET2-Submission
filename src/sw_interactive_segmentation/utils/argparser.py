@@ -244,19 +244,12 @@ def setup_environment_and_adapt_args(args):
 
     # NOTE Added for backwards compatibility with DeepGrow. Manual override of some settings, thus need to accept it
     if args.deepgrow_probability_val != 1 or args.deepgrow_probability_val != 1:
-        # raise UserWarning("For DeepGrow to work you have to set args.val_click_generation_stopping_criterion to 5!")
         logger.warning("############## DeepGrow mode activated ###################")
         logger.warning(
             """args.train_click_generation, args.val_click_generation, args.train_click_generation_stopping_criterion
              and args.val_click_generation_stopping_criterion will be overwritten by this option"""
         )
         logger.warning("##########################################################")
-        # logger.info("To reproduce ")
-        # accept = input("please type y to agree: ")
-        # if not accept.startswith("y"):
-        #     logger.warning("Not accepted. Now leaving the program")
-        #     exit(0)
-        # else:
         args.train_click_generation_stopping_criterion = StoppingCriterion.DEEPGROW_PROBABILITY
         args.val_click_generation_stopping_criterion = StoppingCriterion.DEEPGROW_PROBABILITY
         args.train_click_generation = ClickGenerationStrategy.DEEPGROW_GLOBAL_CORRECTIVE

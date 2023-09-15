@@ -37,6 +37,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     SaveImaged,
     CopyItemsd,
     Invertd,
+    Identityd,
 )
 from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
@@ -49,7 +50,7 @@ from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDa
     CheckTheAmountOfInformationLossByCropd,
     FindDiscrepancyRegions,
     InitLoggerd,
-    NoOpd,
+    # NoOpd,
     NormalizeLabelsInDatasetd,
     SplitPredsLabeld,
     threshold_foreground,
@@ -113,7 +114,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 select_fn=threshold_foreground,
             )
             if not args.dont_crop_foreground
-            else NoOpd(),
+            else Identityd(keys=input_keys, allow_missing_keys=True),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
             if not args.use_scale_intensity_range_percentiled
@@ -131,15 +132,15 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 allow_smaller=True,
             )
             if args.train_crop_size is not None
-            else NoOpd(),
+            else Identityd(keys=input_keys, allow_missing_keys=True),
             DivisiblePadd(keys=input_keys, k=64, value=0)
             if args.inferer == "SimpleInferer"
-            else NoOpd(),  # UNet needs this
+            else Identityd(keys=input_keys, allow_missing_keys=True),  # UNet needs this
             RandFlipd(keys=input_keys, spatial_axis=[0], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -166,30 +167,30 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else NoOpd(),
+            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
                 keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground)
             )
             if "label" in input_keys
-            else NoOpd(),
+            else Identityd(keys=input_keys, allow_missing_keys=True),
             CropForegroundd(
                 keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
-            ) if not args.dont_crop_foreground else NoOpd(),
+            ) if not args.dont_crop_foreground else Identityd(keys=input_keys, allow_missing_keys=True),
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
-            else NoOpd(),
+            else Identityd(keys=input_keys, allow_missing_keys=True),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
             if not args.use_scale_intensity_range_percentiled
             else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
-            DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
+            DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else Identityd(keys=input_keys, allow_missing_keys=True),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
         ]
     return t_val
@@ -270,8 +271,8 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             Spacingd(keys=input_keys, pixdim=spacing),
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
-            else NoOpd(),
-            DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
+            else Identityd(keys=input_keys, allow_missing_keys=True),
+            DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else Identityd(keys=input_keys, allow_missing_keys=True),
         ]
     return t_val_1, t_val_2
 
@@ -322,19 +323,19 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             logger.warning("Make sure to add a pretransform here if you want the prediction to be inverted")
     
     t = [
-        CopyItemsd("pred", times=1, names=("pred_for_save",)) if save_pred else NoOpd(),
+        CopyItemsd("pred", times=1, names=("pred_for_save",)) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
         Invertd(
             keys="pred_for_save", 
             orig_keys="image",
             nearest_interp=False,
             transform=pretransform,
-        ) if save_pred and pretransform is not None else NoOpd(),
+        ) if save_pred and pretransform is not None else Identityd(keys=input_keys, allow_missing_keys=True),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(
             keys="pred_for_save",
             argmax=True,
             #to_onehot=(len(labels), len(labels)),
-        ) if save_pred else NoOpd(),
+        ) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
         AsDiscreted(
             keys=("pred", "label"),
             argmax=(True, False),
@@ -348,7 +349,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             output_dtype=np.uint8,
             separate_folder=False,
             resample=False,
-        ) if save_pred else NoOpd(),
+        ) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
 
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),

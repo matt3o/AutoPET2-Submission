@@ -538,8 +538,10 @@ def get_MSD_Spleen_file_list(args) -> List[List, List, List]:
 
 
 def get_AutoPET2_file_list(args) -> List[List, List, List]:
-    all_images = glob.glob(os.path.join(args.input, "**", "**", "SUV*.nii.gz"))
-    all_labels = glob.glob(os.path.join(args.input, "**", "**", "SEG*.nii.gz"))
+    all_images = [str(p) for p in Path(args.input).rglob("**/SUV*.nii.gz") if p.is_file()]
+    all_labels = [str(p) for p in Path(args.input).rglob("**/SEG*.nii.gz") if p.is_file()]
+
+    # all_labels = glob.glob(os.path.join(args.input, "**", "**", "SEG*.nii.gz"))
 
     data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)]
 

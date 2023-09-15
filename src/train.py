@@ -135,12 +135,12 @@ def run(args):
 def main():
     global logger
 
-    # Slurm only: Speed up the creation of temporary files
-    if os.environ.get("SLURM_JOB_ID") is not None:
-        tmpdir = "/local/work/mhadlich/tmp"
-        os.environ["TMPDIR"] = tmpdir
-        if not os.path.exists(tmpdir):
-            pathlib.Path(tmpdir).mkdir(parents=True)
+#    # Slurm only: Speed up the creation of temporary files
+#    if os.environ.get("SLURM_JOB_ID") is not None:
+#        tmpdir = "/local/work/mhadlich/tmp"
+#        os.environ["TMPDIR"] = tmpdir
+#        if not os.path.exists(tmpdir):
+#            pathlib.Path(tmpdir).mkdir(parents=True)
 
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))

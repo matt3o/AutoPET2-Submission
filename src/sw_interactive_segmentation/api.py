@@ -51,7 +51,7 @@ from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
 from monai.transforms import Compose
 
-from sw_interactive_segmentation.utils.helper import count_parameters, run_once
+from sw_interactive_segmentation.utils.helper import count_parameters, run_once, is_docker
 from sw_interactive_segmentation.interaction import Interaction
 from sw_interactive_segmentation.data import (
     get_click_transforms,
@@ -784,10 +784,12 @@ def init(args):
     torch.manual_seed(args.seed)
 
     set_determinism(seed=args.seed)
-    with cp.cuda.Device(args.gpu):
-        # mempool = cp.get_default_memory_pool()
-        # mempool.set_limit(size=10 * 1024**3)
-        cp.random.seed(seed=args.seed)
+
+    if not is_docker():
+        with cp.cuda.Device(args.gpu):
+            # mempool = cp.get_default_memory_pool()
+            # mempool.set_limit(size=10 * 1024**3)
+            cp.random.seed(seed=args.seed)
 
 
 def oom_observer(device, alloc, device_alloc, device_free):

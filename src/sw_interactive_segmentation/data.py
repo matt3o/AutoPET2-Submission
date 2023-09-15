@@ -538,6 +538,9 @@ def get_MSD_Spleen_file_list(args) -> List[List, List, List]:
 
 
 def get_AutoPET2_file_list(args) -> List[List, List, List]:
+    all_images = []
+    all_labels = []
+    
     for root, dirs, files in os.walk(args.input, followlinks=True):
         for file in files:
             if file.startswith("SUV") and file.endswith(".nii.gz"):

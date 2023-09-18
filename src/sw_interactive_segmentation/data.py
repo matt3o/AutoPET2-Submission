@@ -276,6 +276,7 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else Identityd(keys=input_keys, allow_missing_keys=True),
+            SignalFillEmptyd(input_keys),
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else Identityd(keys=input_keys, allow_missing_keys=True),
         ]
     return t_val_1, t_val_2
@@ -542,7 +543,7 @@ def get_AutoPET2_file_list(args) -> List[List, List, List]:
     all_images = []
     all_labels = []
     
-    for root, dirs, files in os.walk(args.input, followlinks=True):
+    for root, dirs, files in os.walk(args.input_dir, followlinks=True):
         for file in files:
             if file.startswith("SUV") and file.endswith(".nii.gz"):
                 all_images.append(os.path.join(root, file))

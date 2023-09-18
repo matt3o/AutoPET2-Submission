@@ -179,6 +179,8 @@ def get_inferers(
     val_sw_batch_size,
     sw_overlap=0.25,
     cache_roi_weight_map: bool = True,
+    device='cpu',
+    sw_cpu_output=False,
 ):
     if inferer == "SimpleInferer":
         train_inferer = SimpleInferer()
@@ -213,19 +215,26 @@ def get_inferers(
         )
         logger.info(f"{val_batch_size=}")
 
+        sw_params = {
+            "roi_size": sw_roi_size,
+            "mode":"gaussian",
+            "cache_roi_weight_map": cache_roi_weight_map,
+            "overlap": sw_overlap,
+        }
+        
+        if sw_cpu_output:
+            logger.warning("Enabling Sliding Window output on the CPU")
+            sw_params.update({
+                "sw_device": device, 
+                "device": 'cpu'
+            })
         train_inferer = SlidingWindowInferer(
-            roi_size=sw_roi_size,
             sw_batch_size=train_batch_size,
-            mode="gaussian",
-            cache_roi_weight_map=cache_roi_weight_map,
-            overlap=sw_overlap,
+            **sw_params
         )
         eval_inferer = SlidingWindowInferer(
-            roi_size=sw_roi_size,
             sw_batch_size=val_batch_size,
-            mode="gaussian",
-            cache_roi_weight_map=cache_roi_weight_map,
-            overlap=sw_overlap,
+            **sw_params
         )
     return train_inferer, eval_inferer
 
@@ -426,6 +435,8 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
         args.val_sw_batch_size,
         args.sw_overlap,
         True,
+        device,
+        sw_cpu_output=args.sw_cpu_output,
     )
 
     loss_kwargs = {
@@ -519,7 +530,7 @@ def get_supervised_evaluator(
             click_generation_strategy=args.val_click_generation,
             stopping_criterion=args.val_click_generation_stopping_criterion,
             non_interactive=args.non_interactive,
-        ),
+        ) if not args.non_interactive else None,
         inferer=inferer,
         postprocessing=post_transform,
         amp=args.amp,
@@ -628,12 +639,13 @@ def get_trainer_with_loaders(
     args, train_loader, val_loader, file_prefix="", ensemble_mode: bool = False, resume_from="None"
 ) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
-    device = torch.device(f"cuda:{args.gpu}")
+    device = torch.device(f"cuda:{args.gpu}") if not args.sw_cpu_output else 'cpu'
+    sw_device = torch.device(f"cuda:{args.gpu}")
 
     click_transforms = get_click_transforms(device, args)
     post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir)
 
-    network = get_network(args.network, args.labels, args.non_interactive).to(device)
+    network = get_network(args.network, args.labels, args.non_interactive).to(sw_device)
     train_inferer, eval_inferer = get_inferers(
         args.inferer,
         args.sw_roi_size,
@@ -643,6 +655,8 @@ def get_trainer_with_loaders(
         args.val_sw_batch_size,
         args.sw_overlap,
         True,
+        sw_device,
+        sw_cpu_output=args.sw_cpu_output,
     )
 
     loss_kwargs = {
@@ -710,7 +724,7 @@ def get_trainer_with_loaders(
             iteration_probability=args.train_iteration_probability,
             loss_stopping_threshold=args.train_loss_stopping_threshold,
             non_interactive=args.non_interactive,
-        ),
+        ) if not args.non_interactive else None,
         optimizer=optimizer,
         loss_function=loss_function,
         inferer=train_inferer,

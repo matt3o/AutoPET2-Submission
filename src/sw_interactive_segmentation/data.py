@@ -323,15 +323,16 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
         if pretransform is None:
             logger.warning("Make sure to add a pretransform here if you want the prediction to be inverted")
     
+    input_keys = ("pred",)
     t = [
-        CopyItemsd("pred", times=1, names=("pred_for_save",)) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
+        CopyItemsd(keys=("pred",), times=1, names=("pred_for_save",)) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
         Invertd(
-            keys="pred_for_save", 
+            keys=("pred_for_save", ), 
             orig_keys="image",
             nearest_interp=False,
             transform=pretransform,
         ) if save_pred and pretransform is not None else Identityd(keys=input_keys, allow_missing_keys=True),
-        Activationsd(keys="pred", softmax=True),
+        Activationsd(keys=("pred",), softmax=True),
         AsDiscreted(
             keys="pred_for_save",
             argmax=True,
@@ -342,7 +343,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             argmax=(True, False),
             to_onehot=(len(labels), len(labels)),
         ),
-        SaveImaged(keys="pred_for_save",
+        SaveImaged(keys=("pred_for_save",),
             writer="ITKWriter",
             output_dir=os.path.join(output_dir, "predictions"),
             output_postfix="",

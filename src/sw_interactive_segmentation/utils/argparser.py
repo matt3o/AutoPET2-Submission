@@ -90,6 +90,7 @@ def parse_args():
     parser.add_argument("--train_sw_batch_size", type=int, default=8)
     parser.add_argument("--val_sw_batch_size", type=int, default=1)
     parser.add_argument("--sw_overlap", type=float, default=0.25)
+    parser.add_argument("--sw_cpu_output", default=False, action="store_true")
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action="store_true")
@@ -207,7 +208,7 @@ def setup_environment_and_adapt_args(args):
             logger.warning("Most importantly the crops may not be updated if you set them differently")
             logger.warning("PersistentDataset does not detect this automatically but only checks if the hash matches")
             logger.warning("Waiting shortly...")
-            time.sleep(60)
+            time.sleep(10)
             args.cache_dir = f"{args.cache_dir}"
 
     if not os.path.exists(args.cache_dir):

@@ -38,7 +38,8 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     CopyItemsd,
     Invertd,
     Identityd,
-    VoteEnsembled
+    VoteEnsembled,
+    # SignalFillEmpty
 )
 from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
@@ -58,6 +59,7 @@ from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDa
     PrintDatad,
     Convert_mha_to_niid,
     Convert_nii_to_mhad,
+    SignalFillEmptyd,
 )
 
 from sw_interactive_segmentation.utils.helper import convert_mha_to_nii, convert_nii_to_mha
@@ -141,6 +143,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
+            SignalFillEmptyd(input_keys),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance

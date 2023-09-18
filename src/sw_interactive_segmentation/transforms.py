@@ -24,7 +24,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
-from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd
+from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty
 from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
@@ -146,26 +146,30 @@ class Convert_nii_to_mhad(MapTransform):
 
 
 
-class NoOpd(MapTransform):
+# class SignalFillEmptyd(MapTransform):
+#     def __init__(self, keys: KeysCollection = None):
+#         """
+#         A transform which does nothing
+#         """
+#         super().__init__(keys)
+
+#     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+#         return data
+
+
+
+class SignalFillEmptyd(MapTransform):
     def __init__(self, keys: KeysCollection = None):
         """
         A transform which does nothing
         """
         super().__init__(keys)
+        self.signal_fill_empty = SignalFillEmpty(replacement=0.0)
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        return data
-
-
-
-class NoOpd(MapTransform):
-    def __init__(self, keys: KeysCollection = None):
-        """
-        A transform which does nothing
-        """
-        super().__init__(keys)
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        for key in self.key_iterator(data):
+            data[key] = self.signal_fill_empty(data[key])
+        
         return data
 
 

@@ -38,6 +38,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     CopyItemsd,
     Invertd,
     Identityd,
+    VoteEnsembled
 )
 from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
@@ -356,7 +357,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
     ]
     return Compose(t)
 
-def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None):
+def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform):
     os.makedirs(pred_dir, exist_ok=True)
     nii_layout = FolderLayout(
         output_dir=pred_dir,
@@ -364,9 +365,6 @@ def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None
         extension=".nii.gz",
         makedirs=False
     )
-
-    if pretransform is None:
-        raise UserWarning("Make sure to add a pretransform here if you want the prediction to be inverted")
     
     t = [
         Invertd(
@@ -393,20 +391,55 @@ def get_post_transforms_unsupervised(labels, device, pred_dir, pretransform=None
     return Compose(t)
 
 
-def get_ensemble_transforms(labels, device, nfolds=5, weights=None):
+def get_post_ensemble_transforms(labels, device, pred_dir, pretransform, nfolds=5, weights=None):
     prediction_keys = [f"pred_{i}" for i in range(nfolds)]
 
+    os.makedirs(pred_dir, exist_ok=True)
+    nii_layout = FolderLayout(
+        output_dir=pred_dir,
+        postfix="",
+        extension=".nii.gz",
+        makedirs=False
+    )
+
     t = [
-        EnsureTyped(keys=prediction_keys),
-        MeanEnsembled(
-            keys=prediction_keys,
-            output_key="pred",
+        # PrintDatad(),
+        Invertd(
+            keys=prediction_keys, 
+            orig_keys="image",
+            nearest_interp=False,
+            transform=pretransform,
         ),
-        Activationsd(keys="pred", softmax=True),
-        AsDiscreted(
-            keys=("pred", "label"),
-            argmax=(True, False),
-            to_onehot=(len(labels), len(labels)),
+    ]
+
+    mean_or_vote = "vote"
+    if mean_or_vote == "mean":
+        t += [
+            EnsureTyped(keys=prediction_keys),
+            MeanEnsembled(
+                keys=prediction_keys,
+                output_key="pred",
+            ),
+            Activationsd(keys="pred", softmax=True),
+            AsDiscreted(keys="pred", argmax=True),
+        ]
+    else:
+        t += [
+            EnsureTyped(keys=prediction_keys),
+            Activationsd(keys=prediction_keys, softmax=True),
+            AsDiscreted(keys=prediction_keys, argmax=True),
+            VoteEnsembled(keys=prediction_keys, output_key="pred"),
+
+        ]
+    t += [
+        SaveImaged(keys="pred",
+            writer="ITKWriter",
+            output_postfix="",
+            output_ext=".nii.gz",
+            folder_layout=nii_layout,
+            output_dtype=np.uint8,
+            separate_folder=False,
+            resample=False,
         ),
     ]
     return Compose(t)

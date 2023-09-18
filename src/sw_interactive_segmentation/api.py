@@ -357,11 +357,7 @@ def get_test_evaluator(
     inferer,
     device,
     val_loader,
-    # loss_function,
-    # click_transforms,
     post_transform,
-    # key_val_metric,
-    # additional_metrics,
     resume_from="None",
 ) -> SupervisedEvaluator:
     init(args)
@@ -403,14 +399,6 @@ def get_test_evaluator(
         checkpoint = torch.load(resume_from)
         logger.info(f"{checkpoint.keys()=}")
         network.load_state_dict(checkpoint['net'])
-
-        # for key in save_dict:
-        #     # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
-        #     assert (
-        #         key in checkpoint
-        #     ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
-
-        # logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
         handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
         handler(evaluator)
 
@@ -565,30 +553,63 @@ def get_cross_validation_trainers_generator(args, nfolds=5):
             print(f"{file=}")
             exit(0)
 
-    for i in range(5):
+    for i in range(nfolds):
         yield get_trainer_with_loaders(
             args, train_loaders[i], val_loaders[i], file_prefix=f"{i}_", resume_from=filenames[i]
         )
 
 
-def ensemble_evaluate(args, post_transforms, models, nfolds=5):
+def get_ensemble_evaluator(    
+        args,
+        networks,
+        inferer,
+        device,
+        val_loader,
+        post_transform,
+        resume_from="None",
+        nfolds=5
+    ) -> EnsembleEvaluator:
+    init(args)
+
+    # args, post_transforms, models, nfolds=5):
     device = torch.device(f"cuda:{args.gpu}")
+    prediction_keys = [f"pred_{i}" for i in range(nfolds)]
 
     evaluator = EnsembleEvaluator(
         device=device,
-        val_data_loader=test_loader,
-        pred_keys=["pred0", "pred1", "pred2", "pred3", "pred4"],
-        networks=models,
-        inferer=SlidingWindowInferer(roi_size=(96, 96, 96), sw_batch_size=4, overlap=0.5),
-        postprocessing=post_transforms,
-        key_val_metric={
-            "test_mean_dice": MeanDice(
-                include_background=True,
-                output_transform=from_engine(["pred", "label"]),
-            )
-        },
+        val_data_loader=val_loader,
+        # pred_keys=["pred0", "pred1", "pred2", "pred3", "pred4"],
+        networks=networks,
+        inferer=inferer,
+        postprocessing=post_transform,
+        pred_keys=prediction_keys,
+        amp=args.amp,
     )
-    evaluator.run()
+    
+    # save_dict = {
+    #     "net": networks,
+    # }
+    
+    if resume_from != "None":
+        logger.info(f"{args.gpu}:: Loading Networks...")
+        # logger.info(f"{save_dict.keys()=}")
+        logger.info(f"CWD: {os.getcwd()}")
+        resume_path = os.path.abspath(resume_from)
+        logger.info(f"{resume_path=}")
+
+        for i in range(nfolds):
+            file_path = os.path.join(resume_path, f"{i}.pt")
+            logger.info(f"{file_path=}")
+            map_location = device
+            checkpoint = torch.load(file_path)
+            # logger.info(f"{checkpoint.keys()=}")
+            networks[i].load_state_dict(checkpoint['net'])
+            # del checkpoint
+
+            # handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
+            # handler(evaluator)
+    return evaluator
+
 
 
 def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedEvaluator, List]:
@@ -784,13 +805,18 @@ def init(args):
     # for OOM debugging
     output_dir = args.output_dir
 
+    if not is_docker():
+        torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
+
+
     if args.limit_gpu_memory_to != -1:
         limit = args.limit_gpu_memory_to
         assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
         torch.cuda.set_per_process_memory_fraction(limit, args.gpu)
+        
 
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
     torch.backends.cudnn.deterministic = True
 
     # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..

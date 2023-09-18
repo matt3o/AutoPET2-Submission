@@ -28,11 +28,11 @@ from ignite.engine import Events
 from monai.engines.utils import IterationEvents
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
-from sw_interactive_segmentation.api import  oom_observer, get_test_evaluator, get_network, get_inferers, get_key_metric, get_pre_transforms
+from sw_interactive_segmentation.api import  oom_observer, get_test_evaluator, get_network, get_inferers, get_key_metric, get_pre_transforms, get_ensemble_evaluator
 from sw_interactive_segmentation.utils.argparser import parse_args, setup_environment_and_adapt_args
 from sw_interactive_segmentation.utils.tensorboard_logger import init_tensorboard_logger
 from sw_interactive_segmentation.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
-from sw_interactive_segmentation.data import post_process_AutoPET2_Challenge_file_list, get_test_loader, get_post_transforms_unsupervised
+from sw_interactive_segmentation.data import post_process_AutoPET2_Challenge_file_list, get_test_loader, get_post_transforms_unsupervised, get_post_ensemble_transforms
 
 from monai.data import DataLoader, decollate_batch
 from monai.transforms.utils import allow_missing_keys_mode
@@ -59,7 +59,7 @@ def run(args):
     # click_transforms = get_click_transforms(device, args)
     pred_dir = os.path.join(args.output_dir, "predictions")
     post_transform = get_post_transforms_unsupervised(args.labels, device, pred_dir=pred_dir, pretransform=pre_transforms_test)
-
+    
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, test_inferer = get_inferers(
         args.inferer,
@@ -72,7 +72,7 @@ def run(args):
         True,
     )
 
-    val_key_metric = get_key_metric(str_to_prepend="val_")
+    # val_key_metric = get_key_metric(str_to_prepend="val_")
 
     evaluator = get_test_evaluator(
         args,
@@ -114,28 +114,90 @@ def run(args):
         post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
 
 
+def run_ensemble(args):
+    args.nfolds = 5
+
+    
+    for arg in vars(args):
+        logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
+    print("")
+    device = torch.device(f"cuda:{args.gpu}")
+
+    _, pre_transforms_test = get_pre_transforms(args.labels, device, args, input_keys=("image",))
+    test_loader = get_test_loader(args, pre_transforms_test)
+
+    pred_dir = os.path.join(args.output_dir, "predictions")
+    post_transform = get_post_ensemble_transforms(labels=args.labels, device=device, pred_dir=pred_dir, pretransform=pre_transforms_test, nfolds=args.nfolds)
+
+    networks = []
+    for i in range(args.nfolds):
+        networks.append(get_network(args.network, args.labels, args.non_interactive).to(device))
+    assert(len(networks) == args.nfolds)
+
+
+    _, test_inferer = get_inferers(
+        args.inferer,
+        args.sw_roi_size,
+        args.train_crop_size,
+        args.val_crop_size,
+        args.train_sw_batch_size,
+        args.val_sw_batch_size,
+        args.sw_overlap,
+        True,
+    )
+
+    # val_key_metric = get_key_metric(str_to_prepend="val_")
+
+    evaluator = get_ensemble_evaluator(
+        args,
+        networks=networks,
+        inferer=test_inferer,
+        device=device,
+        val_loader=test_loader,
+        post_transform=post_transform,
+        resume_from=args.resume_from,
+    )    
+
+    try:
+        evaluator.run()
+    except torch.cuda.OutOfMemoryError:
+        logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+        raise
+
+    except RuntimeError as e:
+        if "cuDNN" in str(e):
+            pass
+        logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
+        raise
+
+    # POSTPROCESSING for the challenge
+
+    if args.dataset == "AutoPET2_Challenge":
+        # convert the mha to nifti
+        post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
+
+
+
+
 def main():
     global logger
 
-    # Slurm only: Speed up the creation of temporary files
-    if os.environ.get("SLURM_JOB_ID") is not None:
-        tmpdir = "/local/work/mhadlich/tmp"
-        os.environ["TMPDIR"] = tmpdir
-        if not os.path.exists(tmpdir):
-            pathlib.Path(tmpdir).mkdir(parents=True)
+    # # Slurm only: Speed up the creation of temporary files
+    # if os.environ.get("SLURM_JOB_ID") is not None:
+    #     tmpdir = "/local/work/mhadlich/tmp"
+    #     os.environ["TMPDIR"] = tmpdir
+    #     if not os.path.exists(tmpdir):
+    #         pathlib.Path(tmpdir).mkdir(parents=True)
 
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
 
     sys.excepthook = handle_exception
 
-    if not is_docker():
-        torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
-
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)
 
-    run(args)
+    run_ensemble(args)
 
 
 if __name__ == "__main__":

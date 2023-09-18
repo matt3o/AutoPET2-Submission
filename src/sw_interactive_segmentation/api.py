@@ -148,6 +148,21 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
             deep_supervision=False,
             res_block=True,
         )
+    elif network_str == "matteodynunet":
+        network = DynUNet(
+            spatial_dims=3,
+            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            in_channels=in_channels,
+            out_channels=len(labels),
+            kernel_size=[3, 3, 3, 3, 3, 3, 3],
+            strides=[1, 2, 2, 2, 2, 2, 2],
+            upsample_kernel_size=[2, 2, 2, 2, 2, 2],
+            filters=[32, 64, 128, 192, 256, 384, 512],#, 768, 1024, 2048],
+            dropout=0.1,
+            norm_name="instance",
+            deep_supervision=False,
+            res_block=True,
+        )
 
     logger.info(f"Selected network {network.__class__.__qualname__}")
     logger.info(f"Number of parameters: {count_parameters(network):,}")
@@ -232,7 +247,7 @@ def get_scheduler(optimizer, scheduler_str: str, epochs_to_run: int):
     return lr_scheduler
 
 
-def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
+def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str, garbage_collector=True):
     if sw_roi_size[0] < 128:
         val_trigger_event = Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED
     else:
@@ -244,7 +259,7 @@ def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str):
         # End of epoch GarbageCollection
         GarbageCollector(log_level=10),
     ]
-    if inferer == "SlidingWindowInferer":
+    if inferer == "SlidingWindowInferer" and garbage_collector:
         # https://github.com/Project-MONAI/MONAI/issues/3423
         iteration_gc = GarbageCollector(log_level=10, trigger_event=val_trigger_event)
         val_handlers.append(iteration_gc)
@@ -260,6 +275,7 @@ def get_train_handlers(
     sw_roi_size: List,
     inferer: str,
     gpu_size: str,
+    garbage_collector=True
 ):
     if sw_roi_size[0] <= 128:
         train_trigger_event = Events.ITERATION_COMPLETED(every=4) if gpu_size == "large" else Events.ITERATION_COMPLETED
@@ -279,7 +295,7 @@ def get_train_handlers(
         # End of epoch GarbageCollection
         GarbageCollector(log_level=10),
     ]
-    if inferer == "SlidingWindowInferer":
+    if inferer == "SlidingWindowInferer" and garbage_collector:
         # https://github.com/Project-MONAI/MONAI/issues/3423
         iteration_gc = GarbageCollector(log_level=10, trigger_event=train_trigger_event)
         train_handlers.append(iteration_gc)
@@ -386,7 +402,7 @@ def get_test_evaluator(
         amp=args.amp,
         # key_val_metric=key_val_metric,
         # additional_metrics=additional_metrics,
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
     )
 
     save_dict = {
@@ -473,7 +489,7 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
         amp=args.amp,
         key_val_metric=val_key_metric,
         additional_metrics=val_additional_metrics,
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
     )
 
     save_dict = {
@@ -535,7 +551,7 @@ def get_supervised_evaluator(
         amp=args.amp,
         key_val_metric=key_val_metric,
         additional_metrics=additional_metrics,
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size),
+        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
     )
     return evaluator
 
@@ -666,6 +682,7 @@ def get_trainer_with_loaders(
         args.sw_roi_size,
         args.inferer,
         args.gpu_size,
+        not args.non_interactive,
     )
     trainer = SupervisedTrainer(
         device=device,
@@ -786,8 +803,8 @@ def init(args):
         assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
         torch.cuda.set_per_process_memory_fraction(limit, args.gpu)
 
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     torch.backends.cudnn.deterministic = True
 
     # DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING..

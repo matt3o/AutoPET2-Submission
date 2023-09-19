@@ -16,8 +16,8 @@ RUN python -m pip install -U pip
 #RUN python -m pip install SimpleITK
 #RUN python -m pip install --user -U pip && python -m pip install --user pip-tools
 
-COPY --chown=user:user requirements.txt /opt/app/
-RUN python -m pip install -r requirements.txt
+COPY --chown=user:user requirements_docker.txt /opt/app/
+RUN python -m pip install -r requirements_docker.txt
 
 
 #ENV INPUTS_PET="/inputs/images/pet/"

@@ -29,7 +29,7 @@ docker run --rm \
         --pids-limit="256" \
         -v /cvhci/data/AutoPET/AutoPET/:/input/ \
         -v $VOLUME:/output/ \
-        sw_segmentation python src/test.py -i /input/ -d /tmp -o /output/images/automated-petct-lesion-segmentation/ --use_scale_intensity_range_percentiled --non_interactive -a --disks --gpu_size small --eval_only --limit_gpu_memory_to 0.66 -ta --dataset AutoPET --dont_check_output_dir --no_log --dont_crop_foreground --sw_overlap 0.5 --no_data -x 0 --val_sw_batch_size 8 -t 5 --resume_from 196.pt
+        sw_segmentation python src/test.py -i /input/ -d /tmp -o /output/images/automated-petct-lesion-segmentation/ --use_scale_intensity_range_percentiled --non_interactive -a --disks --gpu_size small --eval_only --limit_gpu_memory_to 0.66 -ta --dataset AutoPET --dont_check_output_dir --no_log --dont_crop_foreground --sw_overlap 0.75 --no_data -x 0 --val_sw_batch_size 8 -t 5 --resume_from 196.pt
 
 echo "Evaluation done, checking results"
 #docker build -f Dockerfile.eval -t unet_eval .

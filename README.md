@@ -4,11 +4,11 @@ An extension / rework of the DeepEdit code. Most work has been put into moving t
 
 The entire project is a Python, so I can be installed with `pip install -e`. This was added mostly for the MONAILabel Plugin.
 
-Training with 10 clicks on (224,224,320) patches with validation on full volumes finishes in under a week on a single Nvidia A6000 50Gb.
+Training with 10 clicks on (224,224,224) patches with validation on full volumes finishes in under a week on a single Nvidia A6000 50Gb.
 
 This code was exracted from MONAI, reworked by M.Sc. Zdravko Marinov, Karlsuhe Institute of Techonology (zdravko.marinov@kit.edu) to make it's way into my master thesis, which is this repository.
 
-2023, B.Sc. Matthias Hadlich, Karlsuhe Institute of Techonology (matthiashadlich@posteo.de)
+2023, B.Sc. Matthias Hadlich, Karlsuhe Institute of Technology (matthiashadlich@posteo.de)
 
 A paper on the results from this repository will follow as well. A user study will be done to evaluate the performance of humans vs the robot clicks.
 

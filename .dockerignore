@@ -8,3 +8,4 @@ dist/
 .git/
 test/
 *.tar.gz
+weights/

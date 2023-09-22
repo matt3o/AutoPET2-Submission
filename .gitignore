@@ -6,3 +6,4 @@ src/sw_interactive_segmentation/data/*
 **/*.egg-info
 dist/
 *.pt
+weights/

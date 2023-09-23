@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import gc
+import time
 import logging
 from enum import IntEnum
 from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
@@ -24,7 +25,7 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
-from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty
+from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty, Transform
 from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
@@ -45,6 +46,7 @@ from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
 from monai.data.folder_layout import default_name_formatter
 
 np.seterr(all="raise")
+torch.autograd.set_detect_anomaly(True)
 logger = None
 
 LABELS_KEY = "label_names"
@@ -156,6 +158,40 @@ class Convert_nii_to_mhad(MapTransform):
 #     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
 #         return data
 
+
+class AbortifNaNd(MapTransform):
+    def __init__(self, keys: KeysCollection = None):
+        """
+        A transform which does nothing
+        """
+        super().__init__(keys)
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        for key in self.key_iterator(data):
+            assert not torch.isnan(data[key]).any()
+        
+        return data
+
+
+class TrackTimed(Transform):
+    def __init__(self, transform):
+        """
+        A transform which does nothing
+        """
+        super().__init__()
+        # self.keys = keys
+        self.transform = transform
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        global logger        
+        start_time = time.perf_counter()
+        data = self.transform(data)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        logger.info(f"-------- {self.transform.__class__.__qualname__:<20.20}() took {total_time:.3f} seconds")
+        # print(f"{self.transform.__class__.__qualname__}() took {total_time:.3f} seconds")
+        
+        return data
 
 
 class SignalFillEmptyd(MapTransform):

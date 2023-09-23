@@ -120,6 +120,10 @@ def get_gpu_usage(
     csv_format=False,
     nvml_handle=None,
 ):
+    if device.type == "cpu":
+        # important for the sw_cpu_output flag
+        return ""
+    
     (cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_total, cupy_used) = gpu_usage(
         device=device, nvml_handle=nvml_handle
     )

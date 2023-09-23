@@ -7,3 +7,4 @@ src/sw_interactive_segmentation/data/*
 dist/
 *.pt
 weights/
+*.tar.gz

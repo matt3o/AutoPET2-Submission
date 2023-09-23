@@ -19,10 +19,10 @@ from sw_interactive_segmentation.api import (  # SupervisedTester,; get_validati
     get_val_handlers,
 )
 
-from sw_interactive_segmentation.data import (
-    get_pre_transforms_val_as_list_monailabel,
+# from sw_interactive_segmentation.data import (
+#     get_pre_transforms_val_as_list_monailabel,
 
-)
+# )
 
 # __all__ = [
 #     "get_click_transforms",

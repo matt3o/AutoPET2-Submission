@@ -39,11 +39,23 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     Invertd,
     Identityd,
     VoteEnsembled,
+    DataStatsd,
+    ToNumpyd,
     # SignalFillEmpty
 )
 from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
 from monai.apps import CrossValidation
+
+from monai.apps.deepedit.transforms import (
+    AddGuidanceSignalDeepEditd,
+    AddRandomGuidanceDeepEditd,
+    FindDiscrepancyRegionsDeepEditd,
+    NormalizeLabelsInDatasetd as M_NormalizeLabelsInDatasetd,
+    FindAllValidSlicesMissingLabelsd,
+    AddInitialSeedPointMissingLabelsd,
+    SplitPredsLabeld as M_SplitPredsLabeld,
+)
 
 from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDatad,
     AddEmptySignalChannels,
@@ -60,15 +72,15 @@ from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDa
     Convert_mha_to_niid,
     Convert_nii_to_mhad,
     SignalFillEmptyd,
+    AbortifNaNd,
+    TrackTimed,
 )
 
 from sw_interactive_segmentation.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
 logger = logging.getLogger("sw_interactive_segmentation")
 
-AUTOPET_SPACING = [2.03642011, 2.03642011, 3.0]
-MSD_SPLEEN_SPACING = [2 * 0.79296899, 2 * 0.79296899, 5.0]
-HECKTOR_SPACING = [4, 4, 4]
+
 
 PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR", "AutoPET2_Challenge"]
 
@@ -78,16 +90,20 @@ def get_pre_transforms(labels: Dict, device, args, input_keys=("image", "label")
     )
 
 def get_spacing(args):
+    AUTOPET_SPACING = (2.03642011, 2.03642011, 3.0)
+    MSD_SPLEEN_SPACING = (2 * 0.79296899, 2 * 0.79296899, 5.0)
+    HECKTOR_SPACING = (4, 4, 4)
+        
     if args.dataset == "AutoPET" or args.dataset == "AutoPET2" or args.dataset == "AutoPET2_Challenge":
-        spacing = AUTOPET_SPACING
+        return AUTOPET_SPACING
     elif args.dataset == "HECKTOR":
-        spacing = HECKTOR_SPACING
+        return HECKTOR_SPACING
     elif args.dataset == "MSD_Spleen":
-        spacing = MSD_SPLEEN_SPACING
-    return spacing
+        return MSD_SPLEEN_SPACING
+    # return spacing
 
 
-def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
+def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label"), use_monai_guidance=False):
     cpu_device = torch.device("cpu")
     spacing = get_spacing(args)
     if args.debug:
@@ -97,7 +113,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
 
     # data Input keys have to be ["image", "label"] for train, and least ["image"] for val
     if args.dataset in PET_dataset_names:
-        t_train = [
+        t = [
             # Initial transforms on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(
@@ -143,8 +159,8 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
+            AbortifNaNd(input_keys),
             SignalFillEmptyd(input_keys),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -152,10 +168,21 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             # Until MONAI has fixed the underlying issues
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
-    return t_train
+        if use_monai_guidance:
+            t += [
+                FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
+                AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
+                AddGuidanceSignalDeepEditd(keys="image", guidance="guidance"),
+            ]
+        else:
+            t += [
+                AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
+            ]
+
+    return t
 
 
-def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label")):
+def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label"), use_monai_guidance=True):
     cpu_device = torch.device("cpu")
     spacing = get_spacing(args)
 
@@ -166,12 +193,14 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
 
     # data Input keys have to be at least ["image"] for val
     if args.dataset in PET_dataset_names:
-        t_val = [
+        t = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
+            # UsedTimed(None),
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
+            # NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
+            M_NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(
@@ -194,54 +223,29 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else Identityd(keys=input_keys, allow_missing_keys=True),
-            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
-            # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
         ]
-    return t_val
+        if use_monai_guidance:
+            t += [
+                FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
+                AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
+                AddGuidanceSignalDeepEditd(keys="image", guidance="guidance"),
+                ToTensord(keys=("image", "label")),
+            ]
+        else:
+            t += [
+                AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
+            ]
 
-# def get_pre_transforms_test(labels: Dict, device, args, input_keys=("image", "label")):
-#     cpu_device = torch.device("cpu")
-#     spacing = get_spacing(args)
-
-#     # data Input keys have to be at least ["image"] for val
-#     if args.dataset in PET_dataset_names:
-#         t_val = [
-#             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
-#             InitLoggerd(args),  # necessary if the dataloader runs in an extra thread / process
-#             Convert_mha_to_niid(keys=input_keys, output_dir=args.cache_dir),
-#             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-#             EnsureChannelFirstd(keys=input_keys),
-#             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else NoOpd(),
-#             Orientationd(keys=input_keys, axcodes="RAS"),
-#             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
-#             CheckTheAmountOfInformationLossByCropd(
-#                 keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground)
-#             )
-#             if "label" in input_keys
-#             else NoOpd(),
-#             # CropForegroundd(
-#             #     keys=input_keys,
-#             #     source_key="image",
-#             #     select_fn=threshold_foreground,
-#             # ) if not args.dont_crop_foreground else NoOpd(),
-#             # CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
-#             # if args.val_crop_size is not None
-#             # else NoOpd(),
-#             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
-#             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
-#             if not args.use_scale_intensity_range_percentiled
-#             else ScaleIntensityRangePercentilesd(
-#                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
-#             ),
-#             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else NoOpd(),
-#             AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else NoOpd(),
-#             # EnsureTyped(keys=("image", "label"), device=cpu_device, track_meta=False),
-#         ]
-#     return Compose(t_val)
+    for i in range(len(t)):
+        t[i] = TrackTimed(t[i])
+        
+    return t
 
 
+def get_device(data):
+    return f"device - {data.device}"
 
-def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_keys=("image")):
+def get_click_transforms(device, args, use_monai_guidance=True):
     spacing = get_spacing(args)
     cpu_device = torch.device("cpu")
 
@@ -250,51 +254,29 @@ def get_pre_transforms_val_as_list_monailabel(labels: Dict, device, args, input_
     else:
         loglevel = logging.INFO
 
-    # Input keys have to be ["image", "label"] for train, and least ["image"] for val
-    if args.dataset in PET_dataset_names:
-        t_val_1 = [
-            # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
-            InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),
-            LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
-            EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
-            ScaleIntensityRangePercentilesd(
-                keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
-            ),
-            EnsureTyped(keys=input_keys, device=device, data_type="tensor"),
-        ]
-        t_val_2 = [
-            AddEmptySignalChannels(keys=input_keys, device=device),
-            AddGuidanceSignal(
-                keys=input_keys,
-                sigma=1,
-                disks=True,
-                device=device,
-            ),
-            Orientationd(keys=input_keys, axcodes="RAS"),
-            Spacingd(keys=input_keys, pixdim=spacing),
-            CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
-            if args.val_crop_size is not None
-            else Identityd(keys=input_keys, allow_missing_keys=True),
-            SignalFillEmptyd(input_keys),
-            DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else Identityd(keys=input_keys, allow_missing_keys=True),
-        ]
-    return t_val_1, t_val_2
-
-
-
-def get_click_transforms(device, args):
-    spacing = get_spacing(args)
-
-    if args.debug:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-
+    logger.info(f"{device=}")
 
     t = [
+        # ToTensord(keys=("image", "label", "pred"), device=device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
+    ]
+    if use_monai_guidance:
+        t += [
+            ToNumpyd(keys=("image", "label", "pred")),
+            # Transforms for click simulation
+            FindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
+            AddRandomGuidanceDeepEditd(
+                keys="NA",
+                guidance="guidance",
+                discrepancy="discrepancy",
+                probability="probability",
+            ),
+            AddGuidanceSignalDeepEditd(keys="image", guidance="guidance"),
+            ToTensord(keys=("image", "label")),
+        ]
+    else:
+        t += [
         FindDiscrepancyRegions(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         AddGuidance(
             keys="NA",
@@ -314,13 +296,21 @@ def get_click_transforms(device, args):
             adaptive_sigma=args.adaptive_sigma,
             device=device,
             spacing=spacing,
-        ),  
+        ),
     ]
+    t+= [
+        # DataStatsd(keys=("pred",), additional_info=get_device),
+        ToTensord(keys=("image", "label", "pred"), device=cpu_device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
+    ]
+    
+    for i in range(len(t)):
+        t[i] = TrackTimed(t[i])
 
     return Compose(t)
 
 
 def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretransform=None):
+    cpu_device = torch.device("cpu")
     if save_pred:
         if output_dir is None:
             raise UserWarning("output_dir may not be empty when save_pred is enabled...")
@@ -329,6 +319,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
     
     input_keys = ("pred",)
     t = [
+        # ToTensord(keys=("pred","label",), device=device),
         CopyItemsd(keys=("pred",), times=1, names=("pred_for_save",)) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
         Invertd(
             keys=("pred_for_save", ), 
@@ -356,7 +347,8 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             separate_folder=False,
             resample=False,
         ) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
-
+        # DataStatsd(keys=("pred",), additional_info=get_device),
+        ToTensord(keys=("image", "label", "pred"), device=cpu_device),
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),
     ]

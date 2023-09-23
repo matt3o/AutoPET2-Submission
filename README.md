@@ -1,7 +1,13 @@
+# AutoPET 2 submission
+
+Authors: Matthias Hadlich, Zdravko Marinov, Rainer Stiefelhagen
+Link to the Paper https://arxiv.org/abs/2309.12114
 
 Link to the weights of the submission: https://bwsyncandshare.kit.edu/s/Jg3K6Y35jXiBzpK
 
-# Sliding Window Based Interactive Segmentation of Volumetric Medical Images
+
+
+# Full repostitory README
 
 An extension / rework of the DeepEdit code. Most work has been put into moving the transform to torch and thus on the GPU while preventing the common OOMs with MONAI. Also cupy based distance transforms have been integrated to remove the old scipy based ones. More specifically the scipy cdt distance transform has been replaced by an edt one.
 

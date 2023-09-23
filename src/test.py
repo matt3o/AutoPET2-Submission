@@ -116,7 +116,6 @@ def run(args):
 
 def run_ensemble(args):
     args.nfolds = 5
-
     
     for arg in vars(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
@@ -156,6 +155,7 @@ def run_ensemble(args):
         val_loader=test_loader,
         post_transform=post_transform,
         resume_from=args.resume_from,
+        nfolds=args.nfolds,
     )    
 
     try:

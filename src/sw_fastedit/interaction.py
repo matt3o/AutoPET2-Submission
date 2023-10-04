@@ -25,10 +25,10 @@ from monai.losses import DiceLoss
 from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
 
-from sw_interactive_segmentation.utils.helper import get_gpu_usage, timeit
-from sw_interactive_segmentation.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_fastedit.utils.helper import get_gpu_usage, timeit
+from sw_fastedit.transforms import ClickGenerationStrategy, StoppingCriterion
 
-logger = logging.getLogger("sw_interactive_segmentation")
+logger = logging.getLogger("sw_fastedit")
 np.seterr(all="raise")
 
 # To debug Nans, slows down code:
@@ -221,7 +221,9 @@ class Interaction:
             for i in range(len(batchdata_list)):
                 batchdata_list[i][self.click_probability_key] = self.deepgrow_probability
                 batchdata_list[i][self.click_generation_strategy_key] = self.click_generation_strategy.value
+                start = time.time()
                 batchdata_list[i] = self.transforms(batchdata_list[i])  # Apply click transform
+                logger.info(f"Click transform took: {time.time() - start:.2} seconds")
 
             batchdata = list_data_collate(batchdata_list)
 

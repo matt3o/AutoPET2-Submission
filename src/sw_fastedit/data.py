@@ -57,7 +57,7 @@ from monai.apps.deepedit.transforms import (
     SplitPredsLabeld as M_SplitPredsLabeld,
 )
 
-from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDatad,
+from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,
     AddEmptySignalChannels,
     AddGuidance,
     AddGuidanceSignal,
@@ -76,9 +76,9 @@ from sw_interactive_segmentation.transforms import (  # PrintGPUUsaged,; PrintDa
     TrackTimed,
 )
 
-from sw_interactive_segmentation.utils.helper import convert_mha_to_nii, convert_nii_to_mha
+from sw_fastedit.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
-logger = logging.getLogger("sw_interactive_segmentation")
+logger = logging.getLogger("sw_fastedit")
 
 
 

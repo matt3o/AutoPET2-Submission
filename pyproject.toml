@@ -10,7 +10,7 @@
 # limitations under the License.
 
 [project]
-name = "sw_interactive_segmentation"
+name = "sw_fastedit"
 version = "0.0.1"
 dependencies = [
     "requests",

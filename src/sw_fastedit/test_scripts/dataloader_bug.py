@@ -15,7 +15,7 @@ from monai.data.dataset import Dataset, PersistentDataset
 NETWORK_INPUT_SHAPE = (1, 128, 128, 256)
 NUM_IMAGES = 1
 
-logger = logging.getLogger("sw_interactive_segmentation")
+logger = logging.getLogger("sw_fastedit")
 if logger.hasHandlers():
     logger.handlers.clear()
 logger.propagate = False

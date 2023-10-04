@@ -2,7 +2,7 @@ cache/*
 output/*
 data/*
 utils/__pycache__/*
-src/sw_interactive_segmentation/data/*
+src/sw_fastedit/data/*
 **/*.egg-info
 dist/
 .git/

@@ -14,7 +14,7 @@ from scipy.ndimage.morphology import distance_transform_edt
 
 np.seterr(all="raise")
 
-logger = logging.getLogger("sw_interactive_segmentation")
+logger = logging.getLogger("sw_fastedit")
 
 """
 CUDA enabled distance transforms using cupy

@@ -51,9 +51,9 @@ from monai.optimizers.novograd import Novograd
 from monai.utils import set_determinism
 from monai.transforms import Compose
 
-from sw_interactive_segmentation.utils.helper import count_parameters, run_once, is_docker
-from sw_interactive_segmentation.interaction import Interaction
-from sw_interactive_segmentation.data import (
+from sw_fastedit.utils.helper import count_parameters, run_once, is_docker
+from sw_fastedit.interaction import Interaction
+from sw_fastedit.data import (
     get_click_transforms,
     get_train_loader,
     get_val_loader,
@@ -65,7 +65,7 @@ from sw_interactive_segmentation.data import (
 )
 
 
-logger = logging.getLogger("sw_interactive_segmentation")
+logger = logging.getLogger("sw_fastedit")
 output_dir = None
 
 

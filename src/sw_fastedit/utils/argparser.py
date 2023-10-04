@@ -27,9 +27,9 @@ import time
 
 import torch
 
-from sw_interactive_segmentation.utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
-from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
-from sw_interactive_segmentation.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_fastedit.utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
+from sw_fastedit.utils.logger import get_logger, setup_loggers
+from sw_fastedit.transforms import ClickGenerationStrategy, StoppingCriterion
 
 
 def parse_args():

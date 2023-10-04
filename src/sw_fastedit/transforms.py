@@ -29,12 +29,12 @@ from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Comp
 from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
-from sw_interactive_segmentation.utils.distance_transform import (
+from sw_fastedit.utils.distance_transform import (
     get_choice_from_distance_transform_cp,
     get_choice_from_tensor,
     get_distance_transform,
 )
-from sw_interactive_segmentation.utils.helper import (
+from sw_fastedit.utils.helper import (
     describe_batch_data,
     get_global_coordinates_from_patch_coordinates,
     get_tensor_at_coordinates,
@@ -42,12 +42,12 @@ from sw_interactive_segmentation.utils.helper import (
     convert_nii_to_mha,
     convert_mha_to_nii, 
 )
-from sw_interactive_segmentation.utils.logger import get_logger, setup_loggers
+from sw_fastedit.utils.logger import get_logger, setup_loggers
 from monai.data.folder_layout import default_name_formatter
 
 np.seterr(all="raise")
 torch.autograd.set_detect_anomaly(True)
-logger = None
+logger = logging.getLogger("sw_fastedit")
 
 LABELS_KEY = "label_names"
 
@@ -279,7 +279,7 @@ class PrintDatad(MapTransform):
         try:
             logger.info(describe_batch_data(data_sub_dict))
         except UnboundLocalError:
-            logger = logging.getLogger("sw_interactive_segmentation")
+            logger = logging.getLogger("sw_fastedit")
             logger.info(describe_batch_data(data_sub_dict))
 
         # exit(0)

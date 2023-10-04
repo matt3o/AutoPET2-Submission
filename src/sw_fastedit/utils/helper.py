@@ -29,7 +29,7 @@ from pynvml import (
     nvmlShutdown,
 )
 
-logger = logging.getLogger("sw_interactive_segmentation")
+logger = logging.getLogger("sw_fastedit")
 
 gb_divisor = 1024**3
 memory_unit = "GB"

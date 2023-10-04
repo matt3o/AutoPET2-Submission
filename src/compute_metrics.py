@@ -28,7 +28,7 @@ from monai.handlers import write_metrics_reports
 from monai.metrics import DiceMetric, SurfaceDiceMetric
 from monai.utils import string_list_all_gather
 
-from sw_interactive_segmentation.data import get_metrics_loader, get_metrics_transforms
+from sw_fastedit.data import get_metrics_loader, get_metrics_transforms
 
 logger = logging.getLogger(__name__)
 

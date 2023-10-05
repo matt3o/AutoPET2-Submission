@@ -47,15 +47,15 @@ from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
 from monai.apps import CrossValidation
 
-from monai.apps.deepedit.transforms import (
-    AddGuidanceSignalDeepEditd,
-    AddRandomGuidanceDeepEditd,
-    FindDiscrepancyRegionsDeepEditd,
-    NormalizeLabelsInDatasetd as M_NormalizeLabelsInDatasetd,
-    FindAllValidSlicesMissingLabelsd,
-    AddInitialSeedPointMissingLabelsd,
-    SplitPredsLabeld as M_SplitPredsLabeld,
-)
+# from monai.apps.deepedit.transforms import (
+#     AddGuidanceSignalDeepEditd,
+#     AddRandomGuidanceDeepEditd,
+#     FindDiscrepancyRegionsDeepEditd,
+#     NormalizeLabelsInDatasetd as M_NormalizeLabelsInDatasetd,
+#     FindAllValidSlicesMissingLabelsd,
+#     AddInitialSeedPointMissingLabelsd,
+#     SplitPredsLabeld as M_SplitPredsLabeld,
+# )
 
 from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,
     AddEmptySignalChannels,
@@ -103,7 +103,7 @@ def get_spacing(args):
     # return spacing
 
 
-def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label"), use_monai_guidance=False):
+def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("image", "label")):
     cpu_device = torch.device("cpu")
     spacing = get_spacing(args)
     if args.debug:
@@ -161,6 +161,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
             AbortifNaNd(input_keys),
             SignalFillEmptyd(input_keys),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -168,21 +169,11 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             # Until MONAI has fixed the underlying issues
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
-        if use_monai_guidance:
-            t += [
-                FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-                AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
-                AddGuidanceSignalDeepEditd(keys="image", guidance="guidance"),
-            ]
-        else:
-            t += [
-                AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
-            ]
 
     return t
 
 
-def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label"), use_monai_guidance=True):
+def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("image", "label")):
     cpu_device = torch.device("cpu")
     spacing = get_spacing(args)
 
@@ -223,21 +214,11 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
             DivisiblePadd(keys=input_keys, k=64, value=0) if args.inferer == "SimpleInferer" else Identityd(keys=input_keys, allow_missing_keys=True),
+            AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
         ]
-        if use_monai_guidance:
-            t += [
-                FindAllValidSlicesMissingLabelsd(keys="label", sids="sids"),
-                AddInitialSeedPointMissingLabelsd(keys="label", guidance="guidance", sids="sids"),
-                AddGuidanceSignalDeepEditd(keys="image", guidance="guidance"),
-                ToTensord(keys=("image", "label")),
-            ]
-        else:
-            t += [
-                AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
-            ]
 
-    for i in range(len(t)):
-        t[i] = TrackTimed(t[i])
+    # for i in range(len(t)):
+    #     t[i] = TrackTimed(t[i])
         
     return t
 
@@ -245,7 +226,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
 def get_device(data):
     return f"device - {data.device}"
 
-def get_click_transforms(device, args, use_monai_guidance=True):
+def get_click_transforms(device, args):
     spacing = get_spacing(args)
     cpu_device = torch.device("cpu")
 
@@ -260,23 +241,6 @@ def get_click_transforms(device, args, use_monai_guidance=True):
         # ToTensord(keys=("image", "label", "pred"), device=device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
-    ]
-    if use_monai_guidance:
-        t += [
-            ToNumpyd(keys=("image", "label", "pred")),
-            # Transforms for click simulation
-            FindDiscrepancyRegionsDeepEditd(keys="label", pred="pred", discrepancy="discrepancy"),
-            AddRandomGuidanceDeepEditd(
-                keys="NA",
-                guidance="guidance",
-                discrepancy="discrepancy",
-                probability="probability",
-            ),
-            AddGuidanceSignalDeepEditd(keys="image", guidance="guidance"),
-            ToTensord(keys=("image", "label")),
-        ]
-    else:
-        t += [
         FindDiscrepancyRegions(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
         AddGuidance(
             keys="NA",
@@ -297,14 +261,12 @@ def get_click_transforms(device, args, use_monai_guidance=True):
             device=device,
             spacing=spacing,
         ),
-    ]
-    t+= [
         # DataStatsd(keys=("pred",), additional_info=get_device),
         ToTensord(keys=("image", "label", "pred"), device=cpu_device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
     ]
     
-    for i in range(len(t)):
-        t[i] = TrackTimed(t[i])
+    # for i in range(len(t)):
+    #     t[i] = TrackTimed(t[i])
 
     return Compose(t)
 

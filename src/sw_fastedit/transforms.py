@@ -42,6 +42,11 @@ from sw_fastedit.utils.helper import (
     convert_nii_to_mha,
     convert_mha_to_nii, 
 )
+from monai.utils.type_conversion import (
+    convert_to_dst_type,
+    convert_to_tensor,
+)
+
 from sw_fastedit.utils.logger import get_logger, setup_loggers
 from monai.data.folder_layout import default_name_formatter
 
@@ -204,7 +209,18 @@ class SignalFillEmptyd(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
-            data[key] = self.signal_fill_empty(data[key])
+            # tensor = None
+            if isinstance(data[key], MetaTensor):
+                # tensor = data[key].array
+                data[key].array = self.signal_fill_empty(data[key].array)
+            else:
+                # tensor = data[key]
+                data[key] = self.signal_fill_empty(data[key])
+            # data_, orig_type, orig_device = convert_to_tensor(data[key], dst=torch.Tensor)
+            
+
+            # data[key] = convert_to_dst_type(tensor, dst=data[key], dtype=data[key].dtype)[0]
+            # data[key] = convert_to_dst_type(data[key], dst=torch.Tensor)
         
         return data
 

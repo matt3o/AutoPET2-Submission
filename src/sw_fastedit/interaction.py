@@ -43,6 +43,9 @@ class Interaction:
 
     More details about this can be found at:
 
+        TODO add our paper
+    
+    The code is based on:
         Diaz-Pinto et al., MONAI Label: A framework for AI-assisted Interactive
         Labeling of 3D Medical Images. (2022) https://arxiv.org/abs/2203.12362
 

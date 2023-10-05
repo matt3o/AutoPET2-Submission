@@ -190,8 +190,8 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             # UsedTimed(None),
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
-            # NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
-            M_NormalizeLabelsInDatasetd(keys="label", label_names=labels),
+            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
+            # NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
             CheckTheAmountOfInformationLossByCropd(

@@ -36,8 +36,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
-    parser.add_argument("-i", "--input_dir")
-    parser.add_argument("-o", "--output_dir")
+    parser.add_argument("-i", "--input_dir", required=True)
+    parser.add_argument("-o", "--output_dir", required=True)
     parser.add_argument("-d", "--data_dir", default="None")
     # a subdirectory is created below cache_dir for every run
     parser.add_argument("-c", "--cache_dir", type=str, default="None")
@@ -176,7 +176,7 @@ def setup_environment_and_adapt_args(args):
     args.labels = {"tumor": 1, "background": 0}
 
     if not args.dont_check_output_dir and os.path.isdir(args.output_dir):
-        raise UserWarning(f"output path {args.output_dir} already exists. Please choose another path..")
+        raise UserWarning(f"output path {args.output_dir} already exists. Please choose another path or set --dont_check_output_dir")
     if not os.path.exists(args.output_dir):
         pathlib.Path(args.output_dir).mkdir(parents=True)
 

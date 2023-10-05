@@ -51,7 +51,8 @@ from sw_fastedit.utils.logger import get_logger, setup_loggers
 from monai.data.folder_layout import default_name_formatter
 
 np.seterr(all="raise")
-torch.autograd.set_detect_anomaly(True)
+# To debug Nans, slows down code:
+# torch.autograd.set_detect_anomaly(True)
 logger = logging.getLogger("sw_fastedit")
 
 LABELS_KEY = "label_names"

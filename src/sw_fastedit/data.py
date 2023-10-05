@@ -159,7 +159,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
             RandRotate90d(keys=input_keys, prob=0.10, max_k=3),
-            AbortifNaNd(input_keys),
+            # AbortifNaNd(input_keys),
             SignalFillEmptyd(input_keys),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
             # Move to GPU

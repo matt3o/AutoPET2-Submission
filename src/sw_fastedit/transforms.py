@@ -117,7 +117,6 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self.labels = labels
         self.device = device
 
-    @timeit
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             if key == "label":

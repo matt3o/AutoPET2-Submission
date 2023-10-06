@@ -142,7 +142,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
-            # Random Transforms #
+            # Random Transforms 
             # allow_smaller=True not necessary for the default AUTOPET split of (224,)**3, just there for safety so that training does not get interrupted
             RandCropByPosNegLabeld(
                 keys=input_keys,
@@ -172,6 +172,11 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             # ToTensord(keys=("image", "label"), device=device, track_meta=False),
         ]
 
+        if args.debug:
+            for i in range(len(t)):
+                t[i] = TrackTimed(t[i])
+
+
     return t
 
 
@@ -189,13 +194,11 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
         t = [
             # Initial transforms on the inputs done on the CPU which does not hurt since they are executed asynchronously and only once
             InitLoggerd(loglevel=loglevel, no_log=args.no_log, log_dir=args.output_dir),  # necessary if the dataloader runs in an extra thread / process
-            # UsedTimed(None),
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device) if "label" in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
-            # NormalizeLabelsInDatasetd(keys="label", label_names=labels),
             Orientationd(keys=input_keys, axcodes="RAS"),
-            Spacingd(keys=input_keys, pixdim=spacing),  # 2-factor because of the spatial size
+            Spacingd(keys=input_keys, pixdim=spacing),
             CheckTheAmountOfInformationLossByCropd(
                 keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground)
             )
@@ -264,13 +267,12 @@ def get_click_transforms(device, args):
             device=device,
             spacing=spacing,
         ),
-        # DataStatsd(keys=("pred",), additional_info=get_device),
         ToTensord(keys=("image", "label", "pred"), device=cpu_device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
     ]
     
-    if args.debug:
-        for i in range(len(t)):
-            t[i] = TrackTimed(t[i])
+    # if args.debug:
+    #     for i in range(len(t)):
+    #         t[i] = TrackTimed(t[i])
 
     return Compose(t)
 
@@ -313,7 +315,6 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             separate_folder=False,
             resample=False,
         ) if save_pred else Identityd(keys=input_keys, allow_missing_keys=True),
-        # DataStatsd(keys=("pred",), additional_info=get_device),
         ToTensord(keys=("image", "label", "pred"), device=cpu_device),
         # This transform is to check dice score per segment/label
         # SplitPredsLabeld(keys="pred"),

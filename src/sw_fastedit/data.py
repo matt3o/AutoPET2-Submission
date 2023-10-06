@@ -61,25 +61,27 @@ from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,
     AddEmptySignalChannels,
     AddGuidance,
     AddGuidanceSignal,
-    CheckTheAmountOfInformationLossByCropd,
     FindDiscrepancyRegions,
-    InitLoggerd,
     # NoOpd,
     NormalizeLabelsInDatasetd,
     SplitPredsLabeld,
+)
+from sw_fastedit.helper_transforms import (
+    InitLoggerd,
+    CheckTheAmountOfInformationLossByCropd,
     threshold_foreground,
     PrintDatad,
-    Convert_mha_to_niid,
-    Convert_nii_to_mhad,
+    # Convert_mha_to_niid,
+    # Convert_nii_to_mhad,
     SignalFillEmptyd,
     AbortifNaNd,
     TrackTimed,
+
 )
 
 from sw_fastedit.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
 logger = logging.getLogger("sw_fastedit")
-
 
 
 PET_dataset_names = ["AutoPET", "AutoPET2", "AutoPET_merged", "HECKTOR", "AutoPET2_Challenge"]
@@ -217,8 +219,9 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             AddEmptySignalChannels(keys=input_keys, device=cpu_device) if not args.non_interactive else Identityd(keys=input_keys, allow_missing_keys=True),
         ]
 
-    # for i in range(len(t)):
-    #     t[i] = TrackTimed(t[i])
+    if args.debug:
+        for i in range(len(t)):
+            t[i] = TrackTimed(t[i])
         
     return t
 
@@ -265,8 +268,9 @@ def get_click_transforms(device, args):
         ToTensord(keys=("image", "label", "pred"), device=cpu_device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
     ]
     
-    # for i in range(len(t)):
-    #     t[i] = TrackTimed(t[i])
+    if args.debug:
+        for i in range(len(t)):
+            t[i] = TrackTimed(t[i])
 
     return Compose(t)
 
@@ -725,7 +729,7 @@ def get_metrics_transforms(device, labels, args):
         LoadImaged(
             keys=["pred", "label"],
             reader="ITKReader",
-            image_only=True,
+            image_only=False,
         ),
         ToDeviced(keys=["pred", "label"], device=device),
         EnsureChannelFirstd(keys=["pred", "label"]),

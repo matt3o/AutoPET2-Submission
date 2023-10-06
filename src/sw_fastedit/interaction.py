@@ -26,7 +26,7 @@ from monai.transforms import Compose
 from monai.utils.enums import CommonKeys
 
 from sw_fastedit.utils.helper import get_gpu_usage, timeit
-from sw_fastedit.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_fastedit.click_definitions import ClickGenerationStrategy, StoppingCriterion
 
 logger = logging.getLogger("sw_fastedit")
 np.seterr(all="raise")

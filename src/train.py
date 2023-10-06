@@ -21,6 +21,7 @@ import pathlib
 import resource
 import sys
 import time
+import logging
 
 import pandas as pd
 import torch
@@ -33,11 +34,8 @@ from sw_fastedit.utils.argparser import parse_args, setup_environment_and_adapt_
 from sw_fastedit.utils.tensorboard_logger import init_tensorboard_logger
 from sw_fastedit.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
 from sw_fastedit.data import post_process_AutoPET2_Challenge_file_list
-# from monai.handlers import (
-#     CheckpointLoader,
-# )
 
-logger = None
+logger = logging.getLogger("sw_fastedit")
 
 
 def run(args):
@@ -134,27 +132,12 @@ def run(args):
 
 def main():
     global logger
-
-#    # Slurm only: Speed up the creation of temporary files
-#    if os.environ.get("SLURM_JOB_ID") is not None:
-#        tmpdir = "/local/work/mhadlich/tmp"
-#        os.environ["TMPDIR"] = tmpdir
-#        if not os.path.exists(tmpdir):
-#            pathlib.Path(tmpdir).mkdir(parents=True)
-
-    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
-
+    
     sys.excepthook = handle_exception
-
-    if not is_docker():
-        torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
-
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)
 
     run(args)
-
 
 if __name__ == "__main__":
     main()

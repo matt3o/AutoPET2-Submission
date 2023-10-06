@@ -89,14 +89,17 @@ def parse_args():
     # 1 on 24 Gb, 8 on 50 Gb,
     parser.add_argument("--train_sw_batch_size", type=int, default=8)
     parser.add_argument("--val_sw_batch_size", type=int, default=1)
-    parser.add_argument("--sw_overlap", type=float, default=0.25)
+    parser.add_argument("--train_sw_overlap", type=float, default=0.25)
+    # Reduce this if you run into OOMs
+    parser.add_argument("--val_sw_overlap", type=float, default=0.25)
     parser.add_argument("--sw_cpu_output", default=False, action="store_true")
 
     # Training
     parser.add_argument("-a", "--amp", default=False, action="store_true")
-    parser.add_argument("--num_workers", type=int, default=1)
+    parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("-e", "--epochs", type=int, default=100)
     # If learning rate is set to 0.001, the DiceCELoss will produce Nans very quickly
+    # LOSS
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
     parser.add_argument("--loss", default="DiceCELoss", choices=["DiceCELoss", "DiceLoss"])
@@ -105,8 +108,9 @@ def parse_args():
         default="MultiStepLR",
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
-    parser.add_argument("--loss_dont_include_background", default=False, action="store_true")
-    parser.add_argument("--loss_no_squared_pred", action="store_true")
+    parser.add_argument("--loss_include_background", action="store_false")
+    parser.add_argument("--loss_squared_pred", action="store_false")
+    
     parser.add_argument("--resume_from", type=str, default="None")
     # Use this parameter to change the scheduler..
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")

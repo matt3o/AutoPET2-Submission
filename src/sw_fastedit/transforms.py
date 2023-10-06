@@ -14,7 +14,7 @@ from __future__ import annotations
 import gc
 import time
 import logging
-from enum import IntEnum
+
 from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
 from pathlib import Path
 import os
@@ -25,8 +25,8 @@ from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
-from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty, Transform
-from monai.transforms.transform import MapTransform, Randomizable
+from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty, Transform, MapTransform, Randomizable
+# from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
 from sw_fastedit.utils.distance_transform import (
@@ -39,53 +39,24 @@ from sw_fastedit.utils.helper import (
     get_global_coordinates_from_patch_coordinates,
     get_tensor_at_coordinates,
     timeit,
-    convert_nii_to_mha,
-    convert_mha_to_nii, 
-)
-from monai.utils.type_conversion import (
-    convert_to_dst_type,
-    convert_to_tensor,
+    # convert_nii_to_mha,
+    # convert_mha_to_nii, 
 )
 
-from sw_fastedit.utils.logger import get_logger, setup_loggers
-from monai.data.folder_layout import default_name_formatter
+from sw_fastedit.click_definitions import ClickGenerationStrategy, StoppingCriterion, LABELS_KEY
+
+# from monai.utils.type_conversion import (
+#     convert_to_dst_type,
+#     convert_to_tensor,
+# )
+
+# from sw_fastedit.utils.logger import get_logger, setup_loggers
+# from monai.data.folder_layout import default_name_formatter
 
 np.seterr(all="raise")
 # To debug Nans, slows down code:
 # torch.autograd.set_detect_anomaly(True)
 logger = logging.getLogger("sw_fastedit")
-
-LABELS_KEY = "label_names"
-
-
-class ClickGenerationStrategy(IntEnum):
-    # Sample a click randomly based on the label, so no correction based on the prediction
-    GLOBAL_NON_CORRECTIVE = 1
-    # Sample a click based on the discrepancy between label and predition
-    # Thus generate corrective clicks where the networks predicts incorrectly so far
-    GLOBAL_CORRECTIVE = 2
-    # Subdivide volume into patches of size train_crop_size, calculate the dice score for each, then sample click on the worst one
-    PATCH_BASED_CORRECTIVE = 3
-    # At each iteration sample from the probability and don't add a click if it yields False
-    DEEPGROW_GLOBAL_CORRECTIVE = 4
-
-
-class StoppingCriterion(IntEnum):
-    # Sample max_train_interactions amount of clicks (can be done in the first iteration if non-corrective)
-    MAX_ITER = 1
-    # Sample clicks iteratively. At each step sample p~(0,1). If p > x continue sampling
-    MAX_ITER_AND_PROBABILITY = 2
-    # Sample clicks iteratively. Stop when dice good enough (e.g. 0.9) or when max_train_interactions amount of clicks
-    MAX_ITER_AND_DICE = 3
-    # Sample clicks iteratively. At each step: Stop if max_train_interactions is reached. Otherwise sample p~(0,1).
-    # If p > dice continue sampling, then check if dice is good enough. If so no more clicks are required.
-    MAX_ITER_PROBABILITY_AND_DICE = 4
-    # Stopping as previously implemented with Deepgrow
-    DEEPGROW_PROBABILITY = 5
-
-
-def threshold_foreground(x):
-    return x > 0.005
 
 
 def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
@@ -95,279 +66,6 @@ def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
         tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
     assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
     return tmp_gui
-
-def get_filename_without_extensions(nifti_path):
-    # Strips up to two extensions from the filename, e.g. SUV.nii.gz -> SUV
-    return Path(os.path.basename(nifti_path)).with_suffix("").with_suffix("").name
-
-class Convert_mha_to_niid(MapTransform):
-    def __init__(self, keys: KeysCollection, output_dir: str, folder_layout=None, file_ext=".nii.gz", ):
-        """
-        """
-        super().__init__(keys)
-        self.output_dir = output_dir
-        self.file_ext = file_ext
-        
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        
-        for key in self.key_iterator(data):
-            assert type(data[key]) == str
-
-            mha_path = data[key]
-            file_name = get_filename_without_extensions(mha_path)
-            nii_path = os.path.join(self.output_dir, f"{file_name}{self.file_ext}")
-            convert_mha_to_nii(mha_path, nii_path)
-            data[key] = nii_path
-        
-        return data
-    
-
-class Convert_nii_to_mhad(MapTransform):
-    def __init__(self, keys: KeysCollection, output_dir: str, nii_layout, mha_layout, file_ext=".mha"):
-        """
-        """
-        super().__init__(keys)
-        self.output_dir = output_dir
-        self.file_ext = file_ext
-        self.nii_layout = nii_layout
-        self.mha_layout = mha_layout
-
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        for key in self.key_iterator(data):
-            assert type(data[key]) == str
-
-            image_path = data[key]
-            # file_name = get_filename_without_extensions(nii_path)
-            # mha_path = os.path.join(self.output_dir, f"{file_name}{self.file_ext}")
-            nii_path = self.nii_layout.filename()
-
-            
-            # nii_path = self.folder_layout.filename(subject=file_name)
-            # assert os.path.exists(nii_path)
-
-            convert_nii_to_mha(nii_path, mha_path)
-            data[key] = mha_path
-        
-        return data
-
-
-
-# class SignalFillEmptyd(MapTransform):
-#     def __init__(self, keys: KeysCollection = None):
-#         """
-#         A transform which does nothing
-#         """
-#         super().__init__(keys)
-
-#     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-#         return data
-
-
-class AbortifNaNd(MapTransform):
-    def __init__(self, keys: KeysCollection = None):
-        """
-        A transform which does nothing
-        """
-        super().__init__(keys)
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        for key in self.key_iterator(data):
-            assert not torch.isnan(data[key]).any()
-        
-        return data
-
-
-class TrackTimed(Transform):
-    def __init__(self, transform):
-        """
-        A transform which does nothing
-        """
-        super().__init__()
-        # self.keys = keys
-        self.transform = transform
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        global logger        
-        start_time = time.perf_counter()
-        data = self.transform(data)
-        end_time = time.perf_counter()
-        total_time = end_time - start_time
-        logger.info(f"-------- {self.transform.__class__.__qualname__:<20.20}() took {total_time:.3f} seconds")
-        # print(f"{self.transform.__class__.__qualname__}() took {total_time:.3f} seconds")
-        
-        return data
-
-
-class SignalFillEmptyd(MapTransform):
-    def __init__(self, keys: KeysCollection = None):
-        """
-        A transform which does nothing
-        """
-        super().__init__(keys)
-        self.signal_fill_empty = SignalFillEmpty(replacement=0.0)
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        for key in self.key_iterator(data):
-            # tensor = None
-            if isinstance(data[key], MetaTensor):
-                # tensor = data[key].array
-                data[key].array = self.signal_fill_empty(data[key].array)
-            else:
-                # tensor = data[key]
-                data[key] = self.signal_fill_empty(data[key])
-            # data_, orig_type, orig_device = convert_to_tensor(data[key], dst=torch.Tensor)
-            
-
-            # data[key] = convert_to_dst_type(tensor, dst=data[key], dtype=data[key].dtype)[0]
-            # data[key] = convert_to_dst_type(data[key], dst=torch.Tensor)
-        
-        return data
-
-
-class CheckTheAmountOfInformationLossByCropd(MapTransform):
-    def __init__(self, keys: KeysCollection, roi_size: Iterable, crop_foreground=True):
-        """
-        Prints how much information is lost due to the crop.
-        """
-        super().__init__(keys)
-        self.roi_size = roi_size
-        self.crop_foreground = crop_foreground
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        labels = data[LABELS_KEY]
-        for key in self.key_iterator(data):
-            if key == "label":
-                t = []
-                if self.crop_foreground:
-                    t.append(
-                        CropForegroundd(
-                            keys=("image", "label"),
-                            source_key="image",
-                            select_fn=threshold_foreground,
-                        )
-                    )
-                if self.roi_size is not None:
-                    t.append(CenterSpatialCropd(keys="label", roi_size=self.roi_size))
-
-                if len(t):
-                    # copy the label and crop it to the desired size
-                    label = data[key]
-                    new_data = {"label": label.clone(), "image": data["image"].clone()}
-
-                    cropped_label = Compose(t)(new_data)["label"]
-
-                    # label_num_el = torch.numel(label)
-                    for idx, (key_label, _) in enumerate(labels.items(), start=1):
-                        # Only count non-background lost labels
-                        if key_label != "background":
-                            sum_label = torch.sum(label == idx).item()
-                            sum_cropped_label = torch.sum(cropped_label == idx).item()
-                            # then check how much of the labels is lost
-                            lost_pixels = sum_label - sum_cropped_label
-                            if sum_label != 0:
-                                lost_pixels_ratio = lost_pixels / sum_label * 100
-                                logger.info(
-                                    f"{lost_pixels_ratio:.1f} % of labelled pixels of the type {key_label} have been lost when cropping"
-                                )
-                            else:
-                                logger.info("No labeled pixels found for current image")
-                                logger.debug(f"image {data['image_meta_dict']['filename_or_obj']}")
-            else:
-                raise UserWarning("This transform only applies to key 'label'")
-        return data
-
-
-class PrintDatad(MapTransform):
-    def __init__(self, keys: KeysCollection = None, allow_missing_keys: bool = False,):
-        """
-        Prints all the information inside data
-        """
-        super().__init__(keys, allow_missing_keys=allow_missing_keys)
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        global logger
-        if self.keys is not None and (None not in self.keys and len(self.keys) == 1):
-            data_sub_dict = {key: data[key] for key in self.key_iterator(data)}
-        else:
-            data_sub_dict = data
-
-        try:
-            logger.info(describe_batch_data(data_sub_dict))
-        except UnboundLocalError:
-            logger = logging.getLogger("sw_fastedit")
-            logger.info(describe_batch_data(data_sub_dict))
-
-        # exit(0)
-        return data
-
-
-class PrintGPUUsaged(MapTransform):
-    def __init__(self, device, keys: KeysCollection = None, name=""):
-        """
-        Prints the GPU usage
-        """
-        super().__init__(keys)
-        self.device = device
-        self.name = name
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        if logger is not None:
-            logger.info(
-                f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
-            )
-        return data
-
-
-class ClearGPUMemoryd(MapTransform):
-    def __init__(self, device, keys: KeysCollection = None, garbage_collection: bool = True):
-        """
-        Prints the GPU usage
-        """
-        super().__init__(keys)
-        self.device = device
-        self.garbage_collection = garbage_collection
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        if self.garbage_collection:
-            gc.collect()
-        torch.cuda.empty_cache()
-        if logger is not None:
-            logger.info(
-                f"Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"
-            )
-        return data
-
-
-class InitLoggerd(MapTransform):
-    def __init__(self, loglevel=logging.INFO, no_log=True, log_dir=None):
-        """
-        Initialises the logger inside the dataloader thread (if it is a separate thread).
-
-        Has to be reinitialized for some weird reason here, I think this is due to the data transform
-        being on an extra thread
-        Otherwise the logger only works for the click_transforms and never for the pre_transform
-        """
-        global logger
-        super().__init__(None)
-
-        self.loglevel = loglevel
-        self.log_dir = log_dir
-        self.no_log = no_log
-
-        if self.no_log:
-            self.log_dir = None
-        
-        setup_loggers(self.loglevel, self.log_dir)
-        logger = get_logger()
-
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        global logger
-        if logger is None:
-            setup_loggers(self.loglevel, self.log_dir)
-        logger = get_logger()
-        return data
 
 
 class AddEmptySignalChannels(MapTransform):

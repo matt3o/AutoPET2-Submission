@@ -21,6 +21,7 @@ import pathlib
 import resource
 import sys
 import time
+import logging
 
 import pandas as pd
 import torch
@@ -38,13 +39,12 @@ from monai.data import DataLoader, decollate_batch
 from monai.transforms.utils import allow_missing_keys_mode
 
 
-logger = None
+logger = logging.getLogger("sw_fastedit")
 
 """
 test.py
 
 Use this file for the AutoPET2 Challenge. It does not expect any labels and works on input images only.
-
 """
 
 def run(args):
@@ -56,7 +56,6 @@ def run(args):
     _, pre_transforms_test = get_pre_transforms(args.labels, device, args, input_keys=("image",))
     test_loader = get_test_loader(args, pre_transforms_test)
 
-    # click_transforms = get_click_transforms(device, args)
     pred_dir = os.path.join(args.output_dir, "predictions")
     post_transform = get_post_transforms_unsupervised(args.labels, device, pred_dir=pred_dir, pretransform=pre_transforms_test)
     
@@ -72,43 +71,23 @@ def run(args):
         True,
     )
 
-    # val_key_metric = get_key_metric(str_to_prepend="val_")
-
     evaluator = get_test_evaluator(
         args,
         network=network,
         inferer=test_inferer,
         device=device,
         val_loader=test_loader,
-        # loss_function=loss_function,
-        # click_transforms=click_transforms,
         post_transform=post_transform,
         resume_from=args.resume_from,
-        # key_val_metric=val_key_metric,
     )
 
     save_dict = {
         "net": network,
     }
     
-
-    try:
-        evaluator.run()
-    except torch.cuda.OutOfMemoryError:
-        # oom_observer(device, None, None, None)
-        logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
-        raise
-
-    except RuntimeError as e:
-        if "cuDNN" in str(e):
-            # Got a cuDNN error
-            pass
-        # oom_observer(device, None, None, None)
-        logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
-        raise
+    evaluator.run()
 
     # POSTPROCESSING for the challenge
-
     if args.dataset == "AutoPET2_Challenge":
         # convert the mha to nifti
         post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
@@ -145,8 +124,6 @@ def run_ensemble(args):
         True,
     )
 
-    # val_key_metric = get_key_metric(str_to_prepend="val_")
-
     evaluator = get_ensemble_evaluator(
         args,
         networks=networks,
@@ -158,36 +135,16 @@ def run_ensemble(args):
         nfolds=args.nfolds,
     )    
 
-    try:
-        evaluator.run()
-    except torch.cuda.OutOfMemoryError:
-        logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
-        raise
-
-    except RuntimeError as e:
-        if "cuDNN" in str(e):
-            pass
-        logger.critical(get_gpu_usage(device, used_memory_only=False, context="ERROR"))
-        raise
+    evaluator.run()
 
     # POSTPROCESSING for the challenge
-
     if args.dataset == "AutoPET2_Challenge":
         # convert the mha to nifti
         post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
 
 
-
-
 def main():
     global logger
-
-    # # Slurm only: Speed up the creation of temporary files
-    # if os.environ.get("SLURM_JOB_ID") is not None:
-    #     tmpdir = "/local/work/mhadlich/tmp"
-    #     os.environ["TMPDIR"] = tmpdir
-    #     if not os.path.exists(tmpdir):
-    #         pathlib.Path(tmpdir).mkdir(parents=True)
 
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))

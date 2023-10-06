@@ -24,6 +24,7 @@ from typing import Iterable, List, Dict
 import random
 import os
 import glob
+import resource
 
 import cupy as cp
 import torch
@@ -82,7 +83,7 @@ def get_loss_function(loss_args, loss_kwargs=None):  # squared_pred=True, includ
     if loss_kwargs is None:
         loss_kwargs = {}
     if loss_args == "DiceCELoss":
-        # squared_pred enables much faster convergence, possibly even better results in the long run
+        # squared_pred enables faster convergence, possibly even better results in the long run
         loss_function = DiceCELoss(to_onehot_y=True, softmax=True, **loss_kwargs)
     elif loss_args == "DiceLoss":
         loss_function = DiceLoss(to_onehot_y=True, softmax=True, **loss_kwargs)
@@ -90,14 +91,20 @@ def get_loss_function(loss_args, loss_kwargs=None):  # squared_pred=True, includ
 
 
 def get_network(network_str: str, labels: Iterable, non_interactive: bool = False):
+    """
+    in_channels: 1 slice for the image, the other ones for the signal per label whereas each signal is the size of image.
+        The signal is only added for interactive runs of this code.
+    out_channels: amount of labels
+    """
     in_channels = 1 if non_interactive else 1 + len(labels)
+    out_channels = len(labels)
 
     if network_str == "dynunet":
         network = DynUNet(
             spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
+            # 
             in_channels=in_channels,
-            out_channels=len(labels),
+            out_channels=out_channels,
             kernel_size=[3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, [2, 2, 1]],
             upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
@@ -108,9 +115,8 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
     elif network_str == "smalldynunet":
         network = DynUNet(
             spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
             in_channels=in_channels,
-            out_channels=len(labels),
+            out_channels=out_channels,
             kernel_size=[3, 3, 3],
             strides=[1, 2, [2, 2, 1]],
             upsample_kernel_size=[2, [2, 2, 1]],
@@ -121,9 +127,8 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
     elif network_str == "bigdynunet":
         network = DynUNet(
             spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
             in_channels=in_channels,
-            out_channels=len(labels),
+            out_channels=out_channels,
             kernel_size=[3, 3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, 2, [2, 2, 1]],
             upsample_kernel_size=[2, 2, 2, 2, 2, [2, 2, 1]],
@@ -133,27 +138,12 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
             deep_supervision=False,
             res_block=True,
         )
-    elif network_str == "bigdynunet2":
+    # No good results with this dynunet so far
+    elif network_str == "hugedynunet":
         network = DynUNet(
             spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
             in_channels=in_channels,
-            out_channels=len(labels),
-            kernel_size=[3, 3, 3, 3, 3, 3],
-            strides=[1, 2, 2, 2, 2, [2, 2, 1]],
-            upsample_kernel_size=[2, 2, 2, 2, [2, 2, 1]],
-            filters=[32, 64, 128, 192, 256, 512],  # , 768, 1024, 2048],
-            dropout=0.1,
-            norm_name="instance",
-            deep_supervision=False,
-            res_block=True,
-        )
-    elif network_str == "matteodynunet":
-        network = DynUNet(
-            spatial_dims=3,
-            # 1 dim for the image, the other ones for the signal per label with is the size of image
-            in_channels=in_channels,
-            out_channels=len(labels),
+            out_channels=out_channels,
             kernel_size=[3, 3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, 2, 2],
             upsample_kernel_size=[2, 2, 2, 2, 2, 2],
@@ -172,12 +162,14 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
 
 def get_inferers(
     inferer: str,
+    *,
     sw_roi_size,
     train_crop_size,
     val_crop_size,
     train_sw_batch_size,
     val_sw_batch_size,
-    sw_overlap=0.25,
+    train_sw_overlap=0.25,
+    val_sw_overlap = 0.25,
     cache_roi_weight_map: bool = True,
     device='cpu',
     sw_cpu_output=False,
@@ -219,21 +211,24 @@ def get_inferers(
             "roi_size": sw_roi_size,
             "mode":"gaussian",
             "cache_roi_weight_map": cache_roi_weight_map,
-            "overlap": sw_overlap,
+            
         }
         
         if sw_cpu_output:
             logger.warning("Enabling Sliding Window output on the CPU")
+            logger.warning("Note that this only works well for validation! For training AMP has to be turned off and it has no real effect")
             sw_params.update({
                 "sw_device": device, 
                 "device": 'cpu'
             })
         train_inferer = SlidingWindowInferer(
             sw_batch_size=train_batch_size,
+            overlap=train_sw_overlap,
             **sw_params
         )
         eval_inferer = SlidingWindowInferer(
             sw_batch_size=val_batch_size,
+            overlap=val_sw_overlap,
             **sw_params
         )
     return train_inferer, eval_inferer
@@ -375,24 +370,9 @@ def get_test_evaluator(
         device=device,
         val_data_loader=val_loader,
         network=network,
-        # iteration_update=Interaction(
-        #     deepgrow_probability=args.deepgrow_probability_val,
-        #     transforms=click_transforms,
-        #     train=False,
-        #     label_names=args.labels,
-        #     max_interactions=args.max_val_interactions,
-        #     args=args,
-        #     loss_function=loss_function,
-        #     post_transform=post_transform,
-        #     click_generation_strategy=args.val_click_generation,
-        #     stopping_criterion=args.val_click_generation_stopping_criterion,
-        #     non_interactive=args.non_interactive,
-        # ),
         inferer=inferer,
         postprocessing=post_transform,
         amp=args.amp,
-        # key_val_metric=key_val_metric,
-        # additional_metrics=additional_metrics,
         val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
     )
 
@@ -426,22 +406,23 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
     post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir, pretransform=pre_transforms_val)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
+    
     _, eval_inferer = get_inferers(
         args.inferer,
-        args.sw_roi_size,
-        args.train_crop_size,
-        args.val_crop_size,
-        args.train_sw_batch_size,
-        args.val_sw_batch_size,
-        args.sw_overlap,
-        True,
-        device,
+        sw_roi_size= args.sw_roi_size,
+        train_crop_size=args.train_crop_size,
+        val_crop_size=args.val_crop_size,
+        train_sw_batch_size = args.train_sw_batch_size,
+        val_sw_batch_size = args.val_sw_batch_size,
+        train_sw_overlap=args.train_sw_overlap,
+        val_sw_overlap=args.val_sw_overlap,
+        devic=device,
         sw_cpu_output=args.sw_cpu_output,
     )
 
     loss_kwargs = {
-        "squared_pred": (not args.loss_no_squared_pred),
-        "include_background": (not args.loss_dont_include_background),
+        "squared_pred": args.loss_squared_pred,
+        "include_background": args.loss_include_background,
     }
     loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
     val_key_metric = get_key_metric(str_to_prepend="val_")
@@ -450,7 +431,7 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
     if args.additional_metrics:
         val_additional_metrics = get_additional_metrics(
             args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
-        )  # (not args.loss_dont_include_background)
+        )
 
     evaluator = SupervisedEvaluator(
         device=device,
@@ -582,14 +563,12 @@ def get_ensemble_evaluator(
     ) -> EnsembleEvaluator:
     init(args)
 
-    # args, post_transforms, models, nfolds=5):
     device = torch.device(f"cuda:{args.gpu}")
     prediction_keys = [f"pred_{i}" for i in range(nfolds)]
 
     evaluator = EnsembleEvaluator(
         device=device,
         val_data_loader=val_loader,
-        # pred_keys=["pred0", "pred1", "pred2", "pred3", "pred4"],
         networks=networks,
         inferer=inferer,
         postprocessing=post_transform,
@@ -597,13 +576,9 @@ def get_ensemble_evaluator(
         amp=args.amp,
     )
     
-    # save_dict = {
-    #     "net": networks,
-    # }
     
     if resume_from != "None":
         logger.info(f"{args.gpu}:: Loading Networks...")
-        # logger.info(f"{save_dict.keys()=}")
         logger.info(f"CWD: {os.getcwd()}")
         resume_path = os.path.abspath(resume_from)
         logger.info(f"{resume_path=}")
@@ -613,12 +588,7 @@ def get_ensemble_evaluator(
             logger.info(f"{file_path=}")
             map_location = device
             checkpoint = torch.load(file_path)
-            # logger.info(f"{checkpoint.keys()=}")
             networks[i].load_state_dict(checkpoint['net'])
-            # del checkpoint
-
-            # handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
-            # handler(evaluator)
     return evaluator
 
 
@@ -648,20 +618,18 @@ def get_trainer_with_loaders(
     network = get_network(args.network, args.labels, args.non_interactive).to(sw_device)
     train_inferer, eval_inferer = get_inferers(
         args.inferer,
-        args.sw_roi_size,
-        args.train_crop_size,
-        args.val_crop_size,
-        args.train_sw_batch_size,
-        args.val_sw_batch_size,
-        args.sw_overlap,
-        True,
-        sw_device,
-        sw_cpu_output=args.sw_cpu_output,
+        sw_roi_size= args.sw_roi_size,
+        train_crop_size=args.train_crop_size,
+        val_crop_size=args.val_crop_size,
+        train_sw_batch_size = args.train_sw_batch_size,
+        val_sw_batch_size = args.val_sw_batch_size,
+        train_sw_overlap=args.train_sw_overlap,
+        val_sw_overlap=args.val_sw_overlap,
     )
 
     loss_kwargs = {
-        "squared_pred": (not args.loss_no_squared_pred),
-        "include_background": (not args.loss_dont_include_background),
+        "squared_pred": args.loss_squared_pred,
+        "include_background": args.loss_include_background,
     }
     loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
@@ -674,10 +642,10 @@ def get_trainer_with_loaders(
     if args.additional_metrics:
         train_additional_metrics = get_additional_metrics(
             args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="train_"
-        )  # (not args.loss_dont_include_background)
+        )
         val_additional_metrics = get_additional_metrics(
             args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
-        )  # (not args.loss_dont_include_background)
+        )
     # key_val_metric = get_key_val_metrics(loss_function)
 
     # additional_train_metrics
@@ -822,12 +790,24 @@ def init(args):
     if not is_docker():
         torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
 
+        # # needed for the interaction training for some reason
+        # rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        # resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
+
+
 
     if args.limit_gpu_memory_to != -1:
         limit = args.limit_gpu_memory_to
         assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
         torch.cuda.set_per_process_memory_fraction(limit, args.gpu)
         
+        #    # Slurm only: Speed up the creation of temporary files
+        #    if os.environ.get("SLURM_JOB_ID") is not None:
+        #        tmpdir = "/local/work/mhadlich/tmp"
+        #        os.environ["TMPDIR"] = tmpdir
+        #        if not os.path.exists(tmpdir):
+        #            pathlib.Path(tmpdir).mkdir(parents=True)
+
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True

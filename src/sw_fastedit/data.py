@@ -3,49 +3,68 @@ from __future__ import annotations
 import glob
 import logging
 import os
-from typing import Dict, List
 import shutil
+
 # from collections import OrderedDict
 from pathlib import Path
+from typing import Dict, List
 
 import numpy as np
 import torch
-from monai.data import ThreadDataLoader, partition_dataset, Dataset, DataLoader
+from monai.apps import CrossValidation
+from monai.data import DataLoader, Dataset, ThreadDataLoader, partition_dataset
 
 # from monai.data.dataloader import DataLoader
 from monai.data.dataset import PersistentDataset  # , Dataset
-from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensityRanged,
+from monai.data.folder_layout import FolderLayout
+from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensityRanged,; SignalFillEmpty
     Activationsd,
     AsDiscreted,
     CenterSpatialCropd,
     Compose,
+    CopyItemsd,
     CropForegroundd,
+    DataStatsd,
     DivisiblePadd,
     EnsureChannelFirstd,
     EnsureTyped,
+    Identityd,
+    Invertd,
     LoadImaged,
+    MeanEnsembled,
     Orientationd,
     RandCropByPosNegLabeld,
     RandFlipd,
     RandRotate90d,
+    SaveImaged,
     ScaleIntensityRanged,
     ScaleIntensityRangePercentilesd,
+    SignalFillEmptyd,
     Spacingd,
     ToDeviced,
-    ToTensord,
-    MeanEnsembled,
-    SaveImaged,
-    CopyItemsd,
-    Invertd,
-    Identityd,
-    VoteEnsembled,
-    DataStatsd,
     ToNumpyd,
-    # SignalFillEmpty
+    ToTensord,
+    VoteEnsembled,
 )
-from monai.data.folder_layout import FolderLayout
 from monai.utils.enums import CommonKeys
-from monai.apps import CrossValidation
+
+from sw_fastedit.helper_transforms import (  # Convert_mha_to_niid,; Convert_nii_to_mhad,; SignalFillEmptyd,
+    AbortifNaNd,
+    CheckTheAmountOfInformationLossByCropd,
+    InitLoggerd,
+    PrintDatad,
+    TrackTimed,
+    threshold_foreground,
+)
+from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,; NoOpd,
+    AddEmptySignalChannels,
+    AddGuidance,
+    AddGuidanceSignal,
+    FindDiscrepancyRegions,
+    NormalizeLabelsInDatasetd,
+    SplitPredsLabeld,
+)
+from sw_fastedit.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
 # from monai.apps.deepedit.transforms import (
 #     AddGuidanceSignalDeepEditd,
@@ -57,30 +76,8 @@ from monai.apps import CrossValidation
 #     SplitPredsLabeld as M_SplitPredsLabeld,
 # )
 
-from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,
-    AddEmptySignalChannels,
-    AddGuidance,
-    AddGuidanceSignal,
-    FindDiscrepancyRegions,
-    # NoOpd,
-    NormalizeLabelsInDatasetd,
-    SplitPredsLabeld,
-)
-from sw_fastedit.helper_transforms import (
-    InitLoggerd,
-    CheckTheAmountOfInformationLossByCropd,
-    threshold_foreground,
-    PrintDatad,
-    # Convert_mha_to_niid,
-    # Convert_nii_to_mhad,
-    # SignalFillEmptyd,
-    AbortifNaNd,
-    TrackTimed,
-)
 
-from monai.transforms import SignalFillEmptyd
 
-from sw_fastedit.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
 logger = logging.getLogger("sw_fastedit")
 

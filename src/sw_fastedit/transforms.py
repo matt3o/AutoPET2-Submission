@@ -12,32 +12,33 @@
 from __future__ import annotations
 
 import gc
-import time
 import logging
-
-from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
-from pathlib import Path
 import os
+import time
+from pathlib import Path
+from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
 
 import torch
 from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
-from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty, Transform, MapTransform, Randomizable
+from monai.transforms import (
+    Activationsd,
+    AsDiscreted,
+    CenterSpatialCropd,
+    Compose,
+    CropForegroundd,
+    MapTransform,
+    Randomizable,
+    SignalFillEmpty,
+    Transform,
+)
 from monai.utils.enums import CommonKeys
 
-from sw_fastedit.utils.distance_transform import (
-    get_random_choice_from_tensor,
-    get_distance_transform,
-)
-from sw_fastedit.utils.helper import (
-    get_global_coordinates_from_patch_coordinates,
-    get_tensor_at_coordinates,
-    timeit,
-)
-
-from sw_fastedit.click_definitions import ClickGenerationStrategy, StoppingCriterion, LABELS_KEY
+from sw_fastedit.click_definitions import LABELS_KEY, ClickGenerationStrategy, StoppingCriterion
+from sw_fastedit.utils.distance_transform import get_distance_transform, get_random_choice_from_tensor
+from sw_fastedit.utils.helper import get_global_coordinates_from_patch_coordinates, get_tensor_at_coordinates, timeit
 
 # from monai.transforms import DistanceTransformEDT
 

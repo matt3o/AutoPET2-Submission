@@ -1,9 +1,12 @@
 # import csv
-import pandas as pd
-# import matplotlib as mpl
-import matplotlib.pyplot as plt
+from __future__ import annotations
+
 # import numpy as np
 import sys
+
+# import matplotlib as mpl
+import matplotlib.pyplot as plt
+import pandas as pd
 
 plt.rcParams["figure.figsize"] = [15, 3]
 

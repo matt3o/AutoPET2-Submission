@@ -21,15 +21,15 @@ import logging
 import os
 import pathlib
 import sys
-import uuid
 import tempfile
 import time
+import uuid
 
 import torch
 
+from sw_fastedit.transforms import ClickGenerationStrategy, StoppingCriterion
 from sw_fastedit.utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
 from sw_fastedit.utils.logger import get_logger, setup_loggers
-from sw_fastedit.transforms import ClickGenerationStrategy, StoppingCriterion
 
 
 def parse_args():

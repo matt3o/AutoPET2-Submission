@@ -16,28 +16,39 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import pathlib
 import resource
 import sys
 import time
-import logging
 
 import pandas as pd
 import torch
 from ignite.engine import Events
+from monai.data import DataLoader, decollate_batch
 from monai.engines.utils import IterationEvents
+from monai.transforms.utils import allow_missing_keys_mode
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
-from sw_fastedit.api import  oom_observer, get_test_evaluator, get_network, get_inferers, get_key_metric, get_pre_transforms, get_ensemble_evaluator
+from sw_fastedit.api import (
+    get_ensemble_evaluator,
+    get_inferers,
+    get_key_metric,
+    get_network,
+    get_pre_transforms,
+    get_test_evaluator,
+    oom_observer,
+)
+from sw_fastedit.data import (
+    get_post_ensemble_transforms,
+    get_post_transforms_unsupervised,
+    get_test_loader,
+    post_process_AutoPET2_Challenge_file_list,
+)
 from sw_fastedit.utils.argparser import parse_args, setup_environment_and_adapt_args
-from sw_fastedit.utils.tensorboard_logger import init_tensorboard_logger
 from sw_fastedit.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
-from sw_fastedit.data import post_process_AutoPET2_Challenge_file_list, get_test_loader, get_post_transforms_unsupervised, get_post_ensemble_transforms
-
-from monai.data import DataLoader, decollate_batch
-from monai.transforms.utils import allow_missing_keys_mode
-
+from sw_fastedit.utils.tensorboard_logger import init_tensorboard_logger
 
 logger = logging.getLogger("sw_fastedit")
 

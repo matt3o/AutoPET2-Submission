@@ -12,11 +12,10 @@ from datetime import datetime
 from functools import wraps
 from typing import List
 
-import SimpleITK
-
 import cupy as cp
 import pandas as pd
 import psutil
+import SimpleITK
 import torch
 from monai.data.meta_tensor import MetaTensor
 from pynvml import (

@@ -1,8 +1,11 @@
 # Importing the necessary libraries
+from __future__ import annotations
+
 import os
 import shutil
 from math import ceil
 from pathlib import Path
+
 
 def split_and_symlink_folders(main_folder_path):
     # List all subfolders in the main folder

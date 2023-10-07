@@ -16,24 +16,23 @@
 
 from __future__ import annotations
 
+import glob
 import logging
+import os
+import random
+import resource
 from collections import OrderedDict
 from functools import reduce
 from pickle import dump
-from typing import Iterable, List, Dict
-import random
-import os
-import glob
-import resource
+from typing import Dict, Iterable, List
 
-import numpy as np
 import cupy as cp
+import numpy as np
 import torch
 from ignite.engine import Events
 from ignite.handlers import TerminateOnNan
-
 from monai.data import set_track_meta
-from monai.engines import SupervisedEvaluator, SupervisedTrainer, EnsembleEvaluator, Evaluator
+from monai.engines import EnsembleEvaluator, Evaluator, SupervisedEvaluator, SupervisedTrainer
 from monai.handlers import (
     CheckpointLoader,
     CheckpointSaver,
@@ -50,22 +49,21 @@ from monai.losses import DiceCELoss, DiceLoss
 from monai.metrics import LossMetric, SurfaceDiceMetric
 from monai.networks.nets.dynunet import DynUNet
 from monai.optimizers.novograd import Novograd
-from monai.utils import set_determinism
 from monai.transforms import Compose
+from monai.utils import set_determinism
 
-from sw_fastedit.utils.helper import count_parameters, run_once, is_docker
-from sw_fastedit.interaction import Interaction
 from sw_fastedit.data import (
     get_click_transforms,
-    get_train_loader,
-    get_val_loader,
+    get_cross_validation,
     get_post_transforms,
     get_pre_transforms,
-    get_cross_validation,
     get_pre_transforms_train_as_list,
     get_pre_transforms_val_as_list,
+    get_train_loader,
+    get_val_loader,
 )
-
+from sw_fastedit.interaction import Interaction
+from sw_fastedit.utils.helper import count_parameters, is_docker, run_once
 
 logger = logging.getLogger("sw_fastedit")
 output_dir = None

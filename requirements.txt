@@ -1,7 +1,7 @@
 pandas
 cupy-cuda11x
 cucim
-monai[all]>=1.2.0
+monai[all]>=1.3.0
 pynvml
 SimpleITK
 scipy

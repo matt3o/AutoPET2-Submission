@@ -36,15 +36,15 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data
-    parser.add_argument("-i", "--input_dir", required=True)
-    parser.add_argument("-o", "--output_dir", required=True)
-    parser.add_argument("-d", "--data_dir", default="None")
+    parser.add_argument("-i", "--input_dir", required=True, help="Base folder for input images and labels")
+    parser.add_argument("-o", "--output_dir", required=True, help="All the logs and weights will be stored here")
+    parser.add_argument("-d", "--data_dir", default="None", help="Only used for debugging Niftii files, so usually not required")
     # a subdirectory is created below cache_dir for every run
-    parser.add_argument("-c", "--cache_dir", type=str, default="None")
-    parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true")
+    parser.add_argument("-c", "--cache_dir", type=str, default="None", help="Code uses a CacheDataset, so stores the transforms on the disk. This parameter is where the data gets stored.")
+    parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true", help="Use a temporary folder which will be cleaned up after the program run.")
     parser.add_argument("--save_pred", default=False, action="store_true", help="To save the prediction in the output_dir/prediction if that is desired")
-    parser.add_argument("-x", "--split", type=float, default=0.8)
-    parser.add_argument("--gpu_size", default="None", choices=["None", "small", "medium", "large"])
+    parser.add_argument("-x", "--split", type=float, default=0.8, help="Split into training and validation samples, default is 80% training samples.")
+    parser.add_argument("--gpu_size", default="None", choices=["None", "small", "medium", "large"], help="Influcences some performance options of the code")
     parser.add_argument(
         "--limit_gpu_memory_to",
         type=float,
@@ -56,7 +56,7 @@ def parse_args():
         "--limit",
         type=int,
         default=0,
-        help="Limit the amount of training/validation samples",
+        help="Limit the amount of training/validation samples to a fixed number",
     )
     parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen", "AutoPET2_Challenge"])
     parser.add_argument("--train_on_all_samples", action="store_true")
@@ -66,7 +66,7 @@ def parse_args():
 
     # Configuration
     parser.add_argument("-s", "--seed", type=int, default=36)
-    parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--gpu", type=int, default=0, help="Which GPU to use.")
     parser.add_argument("--no_log", default=False, action="store_true")
     parser.add_argument("--no_data", default=False, action="store_true")
     parser.add_argument("--dont_check_output_dir", default=False, action="store_true")
@@ -108,25 +108,26 @@ def parse_args():
         default="MultiStepLR",
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
-    parser.add_argument("--loss_include_background", action="store_false")
-    parser.add_argument("--loss_squared_pred", action="store_false")
+    parser.add_argument("--loss_dont_include_background", action="store_false")
+    parser.add_argument("--loss_no_squared_pred", action="store_false")
     
     parser.add_argument("--resume_from", type=str, default="None")
     # Use this parameter to change the scheduler..
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")
-    parser.add_argument("--use_scale_intensity_range_percentiled", default=False, action="store_true")
+    parser.add_argument("--use_scale_intensity_ranged", default=False, action="store_true")
     parser.add_argument("--additional_metrics", default=False, action="store_true")
-    parser.add_argument("--dont_crop_foreground", default=False, action="store_true")
+    # Can speed up the training by cropping away some percentiles of the data
+    parser.add_argument("--crop_foreground", default=False, action="store_true")
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1)  # Epoch Level
-    parser.add_argument("--save_interval", type=int, default=3)
-    parser.add_argument("--export", default=False, action="store_true")
+    parser.add_argument("--save_interval", type=int, default=3) # Save checkpoints every x epochs
+    
     parser.add_argument("--eval_only", default=False, action="store_true")
     parser.add_argument("--save_nifti", default=False, action="store_true")
 
     # Interactions
-    parser.add_argument("--non_interactive", action="store_true")
+    parser.add_argument("--non_interactive", action="store_true", help="Default training of neural network. Don't add any guidance channels, do normal backprop only.") 
     parser.add_argument("-it", "--max_train_interactions", type=int, default=10)
     parser.add_argument("-iv", "--max_val_interactions", type=int, default=10)
     parser.add_argument("-dpt", "--deepgrow_probability_train", type=float, default=1.0)
@@ -134,14 +135,7 @@ def parse_args():
 
     # Guidance Signal Hyperparameters
     parser.add_argument("--sigma", type=int, default=1)
-    parser.add_argument("--disks", default=False, action="store_true")
-    parser.add_argument("--edt", default=False, action="store_true")
-    parser.add_argument("--gdt", default=False, action="store_true")
-    parser.add_argument("--gdt_th", type=float, default=10)
-    parser.add_argument("--exp_geos", default=False, action="store_true")
-    parser.add_argument("--conv1d", default=False, action="store_true")
-    parser.add_argument("--conv1s", default=False, action="store_true")
-    parser.add_argument("--adaptive_sigma", default=False, action="store_true")
+    parser.add_argument("--no_disks", default=True, action="store_false")
 
     # Guidance Signal Click Generation - for details see the mappings below
     parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1, 2])
@@ -290,7 +284,7 @@ def setup_environment_and_adapt_args(args):
         assert len(args.train_crop_size) == 3
 
     # verify both have a valid size (for Unet with seven layers)
-    if args.network == "dynunet" and args.inferer == "SimpleInferer":
+    if args.inferer == "SimpleInferer":
         for size in args.train_crop_size:
             assert (size % 64) == 0
         for size in args.val_crop_size:

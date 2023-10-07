@@ -103,7 +103,6 @@ def run(args):
                         ["Whole run", wp, Events.STARTED, Events.COMPLETED],
                     ]:
                         event[0] = f"{name}: {event[0]}"
-                        # print(*event)
                         ProfileHandler(*event).attach(t)
 
                 try:

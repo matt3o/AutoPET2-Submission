@@ -29,10 +29,6 @@ from sw_fastedit.utils.helper import get_gpu_usage, timeit
 from sw_fastedit.click_definitions import ClickGenerationStrategy, StoppingCriterion
 
 logger = logging.getLogger("sw_fastedit")
-np.seterr(all="raise")
-
-# To debug Nans, slows down code:
-# torch.autograd.set_detect_anomaly(True)
 
 # WARNING Code is not tested on batch_size > 1!!!!!!!!!!!!
 
@@ -54,10 +50,22 @@ class Interaction:
         transforms: execute additional transformation during every iteration (before train).
             Typically, several Tensor based transforms composed by `Compose`.
         train: True for training mode or False for evaluation mode
-        click_probability_key: key to click/interaction probability
         label_names: Dict of label names
+        click_probability_key: key to click/interaction probability
         max_interactions: maximum number of interactions per iteration
-        TODO: Add more args here!
+        save_nifti: whether to save nifti files to debug the code
+        nifti_dir: location where to store the debug nifti files
+        nifti_post_transform: post transforms to be run before the information is stored into the nifti files
+        loss_function: loss_function to the ran after every interaction to determine if the clicks actually help the model
+        click_generation_strategy: used to select the according `ClickGenerationStrategy`, which decides how clicks are generated
+        click_generation_strategy_key: which key to use for storing the `ClickGenerationStrategy` in the batchdata
+        stopping_criterion: used to select the `StoppingCriterion`, which decides when the click generation is stopped. This may be
+            max interaction based, loss based, or completely different. Look into `StoppingCriterion` definition for details.
+        iteration_probability: parameter for the `StoppingCriterion`. States after how many iterations the click generation is stopped
+        loss_stopping_threshold: parameter for the `StoppingCriterion`. States at which optimal loss the click generation is stopped.
+            Usually used in combination with `iteration_probability`, to have a hard upper bound on the amount of clicks.
+        non_interactive: set it for non-interactive runs, where no clicks shall be added. The Interaction class only prints the 
+            shape of image and label, then resumes normal training.
     """
 
     def __init__(
@@ -68,9 +76,10 @@ class Interaction:
         label_names: Union[None, Dict[str, int]] = None,
         click_probability_key: str = "probability",
         max_interactions: int = 1,
-        args=None,
+        save_nifti=False,
+        nifti_dir=None,
+        nifti_post_transform=None,
         loss_function=None,
-        post_transform=None,
         click_generation_strategy: ClickGenerationStrategy = ClickGenerationStrategy.GLOBAL_CORRECTIVE,
         click_generation_strategy_key: str = "click_generation_strategy",
         stopping_criterion: StoppingCriterion = StoppingCriterion.MAX_ITER,
@@ -85,9 +94,10 @@ class Interaction:
         self.label_names = label_names
         self.click_probability_key = click_probability_key
         self.max_interactions = max_interactions
-        self.args = args
+        self.save_nifti = save_nifti
+        self.nifti_dir = nifti_dir
         self.loss_function = loss_function
-        self.post_transform = post_transform
+        self.nifti_post_transform = nifti_post_transform
         self.click_generation_strategy = click_generation_strategy
         self.stopping_criterion = stopping_criterion
         self.iteration_probability = iteration_probability
@@ -126,8 +136,7 @@ class Interaction:
         before_it = time.time()
         while True:
             assert iteration < 1000
-
-            # NOTE: Image shape e.g. 3x192x192x256, label shape 1x192x192x256
+            # Shape for interactive image e.g. 3x192x192x256, label 1x192x192x256
             # BCHWD
             inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
             batchdata[CommonKeys.IMAGE] = inputs
@@ -214,7 +223,7 @@ class Interaction:
                 }
                 tmp_batchdata_list = decollate_batch(tmp_batchdata)
                 for i in range(len(tmp_batchdata_list)):
-                    tmp_batchdata_list[i] = self.post_transform(tmp_batchdata_list[i])
+                    tmp_batchdata_list[i] = self.nifti_post_transform(tmp_batchdata_list[i])
                 tmp_batchdata = list_data_collate(tmp_batchdata_list)
 
                 self.debug_viz(inputs, labels, tmp_batchdata[CommonKeys.PRED], iteration)
@@ -239,15 +248,14 @@ class Interaction:
         return engine._iteration(engine, batchdata)  # train network with the final iteration cycle
 
     def debug_viz(self, inputs, labels, preds, j):
-        self.save_nifti(f"{self.args.data_dir}/im", inputs[0, 0].cpu().detach().numpy())
-        self.save_nifti(f"{self.args.data_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy())
-        self.save_nifti(f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy())
-        self.save_nifti(f"{self.args.data_dir}/labels", labels[0, 0].cpu().detach().numpy())
-        self.save_nifti(f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy())
-        if j == self.max_interactions:
-            exit()
+        self.save_nifti_file(f"{self.args.data_dir}/im", inputs[0, 0].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.args.data_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.args.data_dir}/labels", labels[0, 0].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy())
 
-    def save_nifti(self, name, im):
+
+    def save_nifti_file(self, name, im):
         affine = np.eye(4)
         affine[0][0] = -1
         ni_img = nib.Nifti1Image(im, affine=affine)

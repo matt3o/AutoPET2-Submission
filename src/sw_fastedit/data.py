@@ -73,11 +73,12 @@ from sw_fastedit.helper_transforms import (
     PrintDatad,
     # Convert_mha_to_niid,
     # Convert_nii_to_mhad,
-    SignalFillEmptyd,
+    # SignalFillEmptyd,
     AbortifNaNd,
     TrackTimed,
-
 )
+
+from monai.transforms import SignalFillEmptyd
 
 from sw_fastedit.utils.helper import convert_mha_to_nii, convert_nii_to_mha
 
@@ -134,11 +135,11 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
                 source_key="image",
                 select_fn=threshold_foreground,
             )
-            if not args.dont_crop_foreground
+            if args.crop_foreground
             else Identityd(keys=input_keys, allow_missing_keys=True),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
-            if not args.use_scale_intensity_range_percentiled
+            if args.use_scale_intensity_ranged
             else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
@@ -175,7 +176,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
         if args.debug:
             for i in range(len(t)):
                 t[i] = TrackTimed(t[i])
-
+            print(t)
 
     return t
 
@@ -200,7 +201,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys=input_keys, pixdim=spacing),
             CheckTheAmountOfInformationLossByCropd(
-                keys="label", roi_size=args.val_crop_size, crop_foreground=(not args.dont_crop_foreground)
+                keys="label", roi_size=args.val_crop_size, crop_foreground=args.crop_foreground
             )
             if "label" in input_keys
             else Identityd(keys=input_keys, allow_missing_keys=True),
@@ -208,13 +209,13 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
                 keys=input_keys,
                 source_key="image",
                 select_fn=threshold_foreground,
-            ) if not args.dont_crop_foreground else Identityd(keys=input_keys, allow_missing_keys=True),
+            ) if args.crop_foreground else Identityd(keys=input_keys, allow_missing_keys=True),
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else Identityd(keys=input_keys, allow_missing_keys=True),
             # 0.05 and 99.95 percentiles of the spleen HUs, either manually or automatically
             ScaleIntensityRanged(keys="image", a_min=0, a_max=43, b_min=0.0, b_max=1.0, clip=True)
-            if not args.use_scale_intensity_range_percentiled
+            if args.use_scale_intensity_ranged
             else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
@@ -244,7 +245,6 @@ def get_click_transforms(device, args):
     logger.info(f"{device=}")
 
     t = [
-        # ToTensord(keys=("image", "label", "pred"), device=device) if args.sw_cpu_output else Identityd(keys=("pred",), allow_missing_keys=True),
         Activationsd(keys="pred", softmax=True),
         AsDiscreted(keys="pred", argmax=True),
         FindDiscrepancyRegions(keys="label", pred_key="pred", discrepancy_key="discrepancy", device=device),
@@ -258,12 +258,12 @@ def get_click_transforms(device, args):
         AddGuidanceSignal(
             keys="image",
             sigma=args.sigma,
-            disks=args.disks,
-            edt=args.edt,
-            gdt=args.gdt,
-            gdt_th=args.gdt_th,
-            exp_geos=args.exp_geos,
-            adaptive_sigma=args.adaptive_sigma,
+            disks=(not args.no_disks),
+            # edt=args.edt,
+            # gdt=args.gdt,
+            # gdt_th=args.gdt_th,
+            # exp_geos=args.exp_geos,
+            # adaptive_sigma=args.adaptive_sigma,
             device=device,
             spacing=spacing,
         ),

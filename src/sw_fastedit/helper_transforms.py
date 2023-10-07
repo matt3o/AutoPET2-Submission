@@ -28,10 +28,10 @@ from sw_fastedit.utils.helper import (
 from sw_fastedit.click_definitions import LABELS_KEY
 
 
-logger = logging.getLogger("sw_fastedit")
+logger = None
 
 def threshold_foreground(x):
-    return x > 0.005 and x < 0.995
+    return (x > 0.005) & (x < 0.995)
 
 
 class AbortifNaNd(MapTransform):
@@ -58,7 +58,7 @@ class TrackTimed(Transform):
         self.transform = transform
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        global logger        
+        global logger
         start_time = time.perf_counter()
         data = self.transform(data)
         end_time = time.perf_counter()
@@ -69,30 +69,30 @@ class TrackTimed(Transform):
         return data
 
 
-class SignalFillEmptyd(MapTransform):
-    def __init__(self, keys: KeysCollection = None):
-        """
-        A transform which does nothing
-        """
-        super().__init__(keys)
-        self.signal_fill_empty = SignalFillEmpty(replacement=0.0)
+# class SignalFillEmptyd(MapTransform):
+#     def __init__(self, keys: KeysCollection = None):
+#         """
+#         A transform which does nothing
+#         """
+#         super().__init__(keys)
+#         self.signal_fill_empty = SignalFillEmpty(replacement=0.0)
 
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
-        for key in self.key_iterator(data):
-            # tensor = None
-            if isinstance(data[key], MetaTensor):
-                # tensor = data[key].array
-                data[key].array = self.signal_fill_empty(data[key].array)
-            else:
-                # tensor = data[key]
-                data[key] = self.signal_fill_empty(data[key])
-            # data_, orig_type, orig_device = convert_to_tensor(data[key], dst=torch.Tensor)
+#     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+#         for key in self.key_iterator(data):
+#             # tensor = None
+#             if isinstance(data[key], MetaTensor):
+#                 # tensor = data[key].array
+#                 data[key].array = self.signal_fill_empty(data[key].array)
+#             else:
+#                 # tensor = data[key]
+#                 data[key] = self.signal_fill_empty(data[key])
+#             # data_, orig_type, orig_device = convert_to_tensor(data[key], dst=torch.Tensor)
             
 
-            # data[key] = convert_to_dst_type(tensor, dst=data[key], dtype=data[key].dtype)[0]
-            # data[key] = convert_to_dst_type(data[key], dst=torch.Tensor)
+#             # data[key] = convert_to_dst_type(tensor, dst=data[key], dtype=data[key].dtype)[0]
+#             # data[key] = convert_to_dst_type(data[key], dst=torch.Tensor)
         
-        return data
+#         return data
 
 
 class CheckTheAmountOfInformationLossByCropd(MapTransform):
@@ -167,8 +167,7 @@ class PrintDatad(MapTransform):
         except UnboundLocalError:
             logger = logging.getLogger("sw_fastedit")
             logger.info(describe_batch_data(data_sub_dict))
-
-        # exit(0)
+        
         return data
 
 

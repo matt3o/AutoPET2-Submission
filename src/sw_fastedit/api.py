@@ -26,6 +26,7 @@ import os
 import glob
 import resource
 
+import numpy as np
 import cupy as cp
 import torch
 from ignite.engine import Events
@@ -37,7 +38,7 @@ from monai.handlers import (
     CheckpointLoader,
     CheckpointSaver,
     GarbageCollector,
-    IgniteMetric,
+    IgniteMetricHandler,
     LrScheduleHandler,
     MeanDice,
     StatsHandler,
@@ -321,9 +322,9 @@ def get_additional_metrics(labels, include_background=False, loss_kwargs=None, s
         loss_kwargs = {}
     mid = "with_bg_" if include_background else "without_bg_"
     loss_function = DiceCELoss(softmax=True, **loss_kwargs)
-    loss_function_metric = LossMetric(loss_fn=loss_function, reduction="mean", get_not_nans=False)
-    loss_function_metric_ignite = IgniteMetric(
-        metric_fn=loss_function_metric,
+    # loss_function_metric = LossMetric(loss_fn=loss_function, reduction="mean", get_not_nans=False)
+    loss_function_metric_ignite = IgniteMetricHandler(
+        loss_fn=loss_function,
         output_transform=from_engine(["pred", "label"]),
         save_details=False,
     )
@@ -333,9 +334,10 @@ def get_additional_metrics(labels, include_background=False, loss_kwargs=None, s
         include_background=include_background,
         class_thresholds=class_thresholds,
         reduction="mean",
-        get_not_nans=False,  # , use_subvoxels=True
+        get_not_nans=False,  
+        use_subvoxels=True,
     )
-    surface_dice_metric_ignite = IgniteMetric(
+    surface_dice_metric_ignite = IgniteMetricHandler(
         metric_fn=surface_dice_metric,
         output_transform=from_engine(["pred", "label"]),
         save_details=False,
@@ -394,91 +396,91 @@ def get_test_evaluator(
     return evaluator
 
 
-def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator:
-    init(args)
+# def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator:
+#     init(args)
 
-    device = torch.device(f"cuda:{args.gpu}")
+#     device = torch.device(f"cuda:{args.gpu}")
 
-    pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-    val_loader = get_val_loader(args, pre_transforms_val) 
+#     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
+#     val_loader = get_val_loader(args, pre_transforms_val) 
 
-    click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir, pretransform=pre_transforms_val)
+#     click_transforms = get_click_transforms(device, args)
+#     post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir, pretransform=pre_transforms_val)
 
-    network = get_network(args.network, args.labels, args.non_interactive).to(device)
+#     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     
-    _, eval_inferer = get_inferers(
-        args.inferer,
-        sw_roi_size= args.sw_roi_size,
-        train_crop_size=args.train_crop_size,
-        val_crop_size=args.val_crop_size,
-        train_sw_batch_size = args.train_sw_batch_size,
-        val_sw_batch_size = args.val_sw_batch_size,
-        train_sw_overlap=args.train_sw_overlap,
-        val_sw_overlap=args.val_sw_overlap,
-        devic=device,
-        sw_cpu_output=args.sw_cpu_output,
-    )
+#     _, eval_inferer = get_inferers(
+#         args.inferer,
+#         sw_roi_size= args.sw_roi_size,
+#         train_crop_size=args.train_crop_size,
+#         val_crop_size=args.val_crop_size,
+#         train_sw_batch_size = args.train_sw_batch_size,
+#         val_sw_batch_size = args.val_sw_batch_size,
+#         train_sw_overlap=args.train_sw_overlap,
+#         val_sw_overlap=args.val_sw_overlap,
+#         devic=device,
+#         sw_cpu_output=args.sw_cpu_output,
+#     )
 
-    loss_kwargs = {
-        "squared_pred": args.loss_squared_pred,
-        "include_background": args.loss_include_background,
-    }
-    loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
-    val_key_metric = get_key_metric(str_to_prepend="val_")
-    val_additional_metrics = {}
+#     loss_kwargs = {
+#         "squared_pred": (not args.loss_no_squared_pred),
+#         "include_background": (not args.loss_dont_include_background),
+#     }
+#     loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
+#     val_key_metric = get_key_metric(str_to_prepend="val_")
+#     val_additional_metrics = {}
 
-    if args.additional_metrics:
-        val_additional_metrics = get_additional_metrics(
-            args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
-        )
+#     if args.additional_metrics:
+#         val_additional_metrics = get_additional_metrics(
+#             args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
+#         )
 
-    evaluator = SupervisedEvaluator(
-        device=device,
-        val_data_loader=val_loader,
-        network=network,
-        iteration_update=Interaction(
-            deepgrow_probability=args.deepgrow_probability_val,
-            transforms=click_transforms,
-            train=False,
-            label_names=args.labels,
-            max_interactions=args.max_val_interactions,
-            args=args,
-            loss_function=loss_function,
-            post_transform=post_transform,
-            click_generation_strategy=args.val_click_generation,
-            stopping_criterion=args.val_click_generation_stopping_criterion,
-            non_interactive=args.non_interactive,
-        ),
-        inferer=eval_inferer,
-        postprocessing=post_transform,
-        amp=args.amp,
-        key_val_metric=val_key_metric,
-        additional_metrics=val_additional_metrics,
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
-    )
+#     evaluator = SupervisedEvaluator(
+#         device=device,
+#         val_data_loader=val_loader,
+#         network=network,
+#         iteration_update=Interaction(
+#             deepgrow_probability=args.deepgrow_probability_val,
+#             transforms=click_transforms,
+#             train=False,
+#             label_names=args.labels,
+#             max_interactions=args.max_val_interactions,
+#             args=args,
+#             loss_function=loss_function,
+#             post_transform=post_transform,
+#             click_generation_strategy=args.val_click_generation,
+#             stopping_criterion=args.val_click_generation_stopping_criterion,
+#             non_interactive=args.non_interactive,
+#         ),
+#         inferer=eval_inferer,
+#         postprocessing=post_transform,
+#         amp=args.amp,
+#         key_val_metric=val_key_metric,
+#         additional_metrics=val_additional_metrics,
+#         val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
+#     )
 
-    save_dict = {
-            "net": network,
-    }
+#     save_dict = {
+#             "net": network,
+#     }
 
-    if resume_from != "None":
-        logger.info(f"{args.gpu}:: Loading Network...")
-        logger.info(f"{save_dict.keys()=}")
-        map_location = device  # {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
-        checkpoint = torch.load(resume_from)
+#     if resume_from != "None":
+#         logger.info(f"{args.gpu}:: Loading Network...")
+#         logger.info(f"{save_dict.keys()=}")
+#         map_location = device  # {f"cuda:{args.gpu}": f"cuda:{args.gpu}"}
+#         checkpoint = torch.load(resume_from)
 
-        for key in save_dict:
-            # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
-            assert (
-                key in checkpoint
-            ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
+#         for key in save_dict:
+#             # If it fails: the file may be broken or incompatible (e.g. evaluator has not been run)
+#             assert (
+#                 key in checkpoint
+#             ), f"key {key} has not been found in the save_dict! \n file keys: {checkpoint.keys()}"
 
-        logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
-        handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
-        handler(evaluator)
+#         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
+#         handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
+#         handler(evaluator)
 
-    return evaluator, val_key_metric, val_additional_metrics
+#     return evaluator, val_key_metric, val_additional_metrics
 
 
 def get_supervised_evaluator(
@@ -505,7 +507,8 @@ def get_supervised_evaluator(
             train=False,
             label_names=args.labels,
             max_interactions=args.max_val_interactions,
-            args=args,
+            save_nifti=args.save_nifti,
+            nifti_dir=args.data_dir,
             loss_function=loss_function,
             post_transform=post_transform,
             click_generation_strategy=args.val_click_generation,
@@ -521,34 +524,33 @@ def get_supervised_evaluator(
     )
     return evaluator
 
+# def get_cross_validation_trainers_generator(args, nfolds=5):
+#     device = torch.device(f"cuda:{args.gpu}")
 
-def get_cross_validation_trainers_generator(args, nfolds=5):
-    device = torch.device(f"cuda:{args.gpu}")
+#     pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
 
-    pre_transforms_train, pre_transforms_val = get_pre_transforms(args.labels, device, args)
+#     train_loaders, val_loaders = get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
 
-    train_loaders, val_loaders = get_cross_validation(args, nfolds, pre_transforms_train, pre_transforms_val)
+#     # Parse args.resume_from and split it into the different parts, assert len is nfolds
+#     if args.resume_from != "None":
+#         assert os.path.isdir(
+#             args.resume_from
+#         ), "For the ensemble resume_from has to be a dictionary containing the weights starting with 0_, 1_, ..."
+#         filenames = []
+#         for i in range(nfolds):
+#             try:
+#                 file = glob.glob(os.path.join(args.resume, f"{i}_checkpoint_key_metric*"))[0]
+#             except IndexError:
+#                 logger.error("File for the resuming the ensemble has not been found!")
+#                 raise
+#             filenames.append(file)
+#             print(f"{file=}")
+#             exit(0)
 
-    # Parse args.resume_from and split it into the different parts, assert len is nfolds
-    if args.resume_from != "None":
-        assert os.path.isdir(
-            args.resume_from
-        ), "For the ensemble resume_from has to be a dictionary containing the weights starting with 0_, 1_, ..."
-        filenames = []
-        for i in range(nfolds):
-            try:
-                file = glob.glob(os.path.join(args.resume, f"{i}_checkpoint_key_metric*"))[0]
-            except IndexError:
-                logger.error("File for the resuming the ensemble has not been found!")
-                raise
-            filenames.append(file)
-            print(f"{file=}")
-            exit(0)
-
-    for i in range(nfolds):
-        yield get_trainer_with_loaders(
-            args, train_loaders[i], val_loaders[i], file_prefix=f"{i}_", resume_from=filenames[i]
-        )
+#     for i in range(nfolds):
+#         yield get_trainer_with_loaders(
+#             args, train_loaders[i], val_loaders[i], file_prefix=f"{i}_", resume_from=filenames[i]
+#         )
 
 
 def get_ensemble_evaluator(    
@@ -593,24 +595,30 @@ def get_ensemble_evaluator(
 
 
 
-def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedEvaluator, List]:
+# def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedEvaluator, List]:
+#     init(args)
+#     device = torch.device(f"cuda:{args.gpu}")
+
+#     pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
+#     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
+#     train_loader  = get_train_loader(args, pre_transforms_train)
+#     val_loader = get_val_loader(args, pre_transforms_val) 
+
+#     return get_trainer_with_loaders(args, train_loader, val_loader, resume_from=resume_from)
+
+
+def get_trainer(
+    args, file_prefix="", ensemble_mode: bool = False, resume_from="None"
+) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
-    device = torch.device(f"cuda:{args.gpu}")
+    device = torch.device(f"cuda:{args.gpu}") if not args.sw_cpu_output else 'cpu'
+    sw_device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
     train_loader  = get_train_loader(args, pre_transforms_train)
     val_loader = get_val_loader(args, pre_transforms_val) 
 
-    return get_trainer_with_loaders(args, train_loader, val_loader, resume_from=resume_from)
-
-
-def get_trainer_with_loaders(
-    args, train_loader, val_loader, file_prefix="", ensemble_mode: bool = False, resume_from="None"
-) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
-    init(args)
-    device = torch.device(f"cuda:{args.gpu}") if not args.sw_cpu_output else 'cpu'
-    sw_device = torch.device(f"cuda:{args.gpu}")
 
     click_transforms = get_click_transforms(sw_device, args)
     post_transform = get_post_transforms(args.labels, sw_device, args.save_pred, args.output_dir)
@@ -628,8 +636,8 @@ def get_trainer_with_loaders(
     )
 
     loss_kwargs = {
-        "squared_pred": args.loss_squared_pred,
-        "include_background": args.loss_include_background,
+        "squared_pred": (not args.loss_no_squared_pred),
+        "include_background": (not args.loss_dont_include_background),
     }
     loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
@@ -646,9 +654,6 @@ def get_trainer_with_loaders(
         val_additional_metrics = get_additional_metrics(
             args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
         )
-    # key_val_metric = get_key_val_metrics(loss_function)
-
-    # additional_train_metrics
 
     evaluator = get_supervised_evaluator(
         args,
@@ -684,7 +689,8 @@ def get_trainer_with_loaders(
             train=True,
             label_names=args.labels,
             max_interactions=args.max_train_interactions,
-            args=args,
+            save_nifti=args.save_nifti,
+            nifti_dir=args.data_dir,
             loss_function=loss_function,
             post_transform=post_transform,
             click_generation_strategy=args.train_click_generation,
@@ -794,8 +800,6 @@ def init(args):
         # rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
         # resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
 
-
-
     if args.limit_gpu_memory_to != -1:
         limit = args.limit_gpu_memory_to
         assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
@@ -824,10 +828,11 @@ def init(args):
 
     if not is_docker():
         with cp.cuda.Device(args.gpu):
-            # mempool = cp.get_default_memory_pool()
-            # mempool.set_limit(size=10 * 1024**3)
             cp.random.seed(seed=args.seed)
 
+    if args.debug:
+        torch.autograd.set_detect_anomaly(True)
+        np.seterr(all="raise")
 
 def oom_observer(device, alloc, device_alloc, device_free):
     if device is not None and logger is not None:

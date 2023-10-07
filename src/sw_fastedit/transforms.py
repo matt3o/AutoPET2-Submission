@@ -19,43 +19,29 @@ from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
 from pathlib import Path
 import os
 
-import numpy as np
 import torch
 from monai.config import KeysCollection
 from monai.data import MetaTensor, PatchIterd
 from monai.losses import DiceLoss
 from monai.networks.layers import GaussianFilter
 from monai.transforms import Activationsd, AsDiscreted, CenterSpatialCropd, Compose, CropForegroundd, SignalFillEmpty, Transform, MapTransform, Randomizable
-# from monai.transforms.transform import MapTransform, Randomizable
 from monai.utils.enums import CommonKeys
 
 from sw_fastedit.utils.distance_transform import (
-    get_choice_from_distance_transform_cp,
-    get_choice_from_tensor,
+    get_random_choice_from_tensor,
     get_distance_transform,
 )
 from sw_fastedit.utils.helper import (
-    describe_batch_data,
     get_global_coordinates_from_patch_coordinates,
     get_tensor_at_coordinates,
     timeit,
-    # convert_nii_to_mha,
-    # convert_mha_to_nii, 
 )
 
 from sw_fastedit.click_definitions import ClickGenerationStrategy, StoppingCriterion, LABELS_KEY
 
-# from monai.utils.type_conversion import (
-#     convert_to_dst_type,
-#     convert_to_tensor,
-# )
+# from monai.transforms import DistanceTransformEDT
 
-# from sw_fastedit.utils.logger import get_logger, setup_loggers
-# from monai.data.folder_layout import default_name_formatter
 
-np.seterr(all="raise")
-# To debug Nans, slows down code:
-# torch.autograd.set_detect_anomaly(True)
 logger = logging.getLogger("sw_fastedit")
 
 
@@ -71,7 +57,8 @@ def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
 class AddEmptySignalChannels(MapTransform):
     def __init__(self, device, keys: KeysCollection = None):
         """
-        Prints the GPU usage
+        Adds empty channels to the signal which will be filled with the guidance signal later.
+        E.g. for two labels: 1x192x192x256 -> 3x192x192x256
         """
         super().__init__(keys)
         self.device = device
@@ -108,8 +95,10 @@ class NormalizeLabelsInDatasetd(MapTransform):
         Normalize label values according to label names dictionary
 
         Args:
-            keys: The ``keys`` parameter will be used to get and set the actual data item to transform
+            keys: the ``keys`` parameter will be used to get and set the actual data item to transform
             labels: all label names
+            allow_missing_keys: whether to ignore it if keys are missing.
+            device: device this transform shall run on
 
         Returns: data and also the new labels will be stored in data with key LABELS_KEY
         """
@@ -161,50 +150,32 @@ class AddGuidanceSignal(MapTransform):
     Based on the "guidance" points, apply Gaussian to them and add them as new channel for input image.
 
     Args:
-        guidance_key: key to store guidance.
         sigma: standard deviation for Gaussian kernel.
         number_intensity_ch: channel index.
+        disks: This paraemters fill spheres with a radius of sigma centered around each click.
+        device: device this transform shall run on.
     """
 
     def __init__(
         self,
         keys: KeysCollection,
-        # guidance_key: str = "guidance",
         sigma: int = 1,
         number_intensity_ch: int = 1,
         allow_missing_keys: bool = False,
         disks: bool = False,
-        edt: bool = False,
-        gdt: bool = False,
-        gdt_th: float = 0.1,
-        exp_geos: bool = False,
         device=None,
-        spacing=None,
-        adaptive_sigma=False,
     ):
         super().__init__(keys, allow_missing_keys)
-        # self.guidance_key = guidance_key
         self.sigma = sigma
         self.number_intensity_ch = number_intensity_ch
         self.disks = disks
-        self.edt = edt
-        self.gdt = gdt
-        self.gdt_th = gdt_th
-        self.exp_geos = exp_geos
         self.device = device
-        self.spacing = spacing
-        self.adaptive_sigma = adaptive_sigma
-        self.gdt_th = 0 if self.exp_geos else self.gdt_th
-        self.gdt = True if self.exp_geos else self.gdt
 
     def _get_corrective_signal(self, image, guidance, key_label):
         dimensions = 3 if len(image.shape) > 3 else 2
         assert (
             type(guidance) == torch.Tensor or type(guidance) == MetaTensor
         ), f"guidance is {type(guidance)}, value {guidance}"
-
-        if self.gdt or self.edt:
-            assert self.disks
 
         if guidance.size()[0]:
             first_point_size = guidance[0].numel()
@@ -250,30 +221,6 @@ class AddGuidanceSignal(MapTransform):
                 signal[0] = (signal[0] - torch.min(signal[0])) / (torch.max(signal[0]) - torch.min(signal[0]))
                 if self.disks:
                     signal[0] = (signal[0] > 0.1) * 1.0  # 0.1 with sigma=1 --> radius = 3, otherwise it is a cube
-
-                    if self.gdt or self.edt or self.adaptive_sigma:
-                        raise UserWarning("Code no longer active")
-                        # fact = 1.0 if (self.gdt or self.exp_geos or self.adaptive_sigma) else 0.0
-                        # spacing  = self.spacing
-                        # geos = generalised_geodesic3d(image.unsqueeze(0).to(self.device),
-                        #                             signal[0].unsqueeze(0).unsqueeze(0).to(self.device),
-                        #                             spacing,
-                        #                             10e10,
-                        #                             fact,
-                        #                             4)
-                        # if torch.max(geos.cpu()) > 0:
-                        #     geos = (geos - torch.min(geos)) / (torch.max(geos) - torch.min(geos))
-                        # vals = geos[0][0].cpu().detach().numpy()
-
-                        # if len(vals[vals > 0]) == 0:
-                        #     theta = 0
-                        # else:
-                        #     theta = np.percentile(vals[vals > 0], self.gdt_th)
-                        # geos *= ((geos > theta) * 1.0)
-
-                        # if self.exp_geos: # Eponentialized Geodesic Distance (MIDeepSeg)
-                        #     geos = 1.0 - torch.exp(-geos)
-                        # signal[0] = geos[0][0]
 
             if not (torch.min(signal[0]).item() >= 0 and torch.max(signal[0]).item() <= 1.0):
                 raise UserWarning(
@@ -347,6 +294,7 @@ class FindDiscrepancyRegions(MapTransform):
     Args:
         pred_key: key to prediction source.
         discrepancy_key: key to store discrepancies found between label and prediction.
+        device: device this transform shall run on.
     """
 
     def __init__(
@@ -423,16 +371,17 @@ class AddGuidance(Randomizable, MapTransform):
     Add guidance based on different click generation strategies.
 
     Args:
-        guidance_key: key to guidance source, shape (2, N, # of dim)
         discrepancy_key: key to discrepancy map between label and prediction shape (2, C, H, W, D) or (2, C, H, W)
         probability_key: key to click/interaction probability, shape (1)
-        device: device the transforms shall be executed on
+        device: device this transform shall run on.
+        click_generation_strategy_key: sets the used ClickGenerationStrategy.
+        patch_size: Only relevant for the patch-based click generation strategy. Sets the size of the cropped patches 
+        on which then further analysis is run.
     """
 
     def __init__(
         self,
         keys: KeysCollection,
-        # guidance_key: str = "guidance",
         discrepancy_key: str = "discrepancy",
         probability_key: str = "probability",
         allow_missing_keys: bool = False,
@@ -441,14 +390,11 @@ class AddGuidance(Randomizable, MapTransform):
         patch_size: Tuple[int] = (128, 128, 128),
     ):
         super().__init__(keys, allow_missing_keys)
-        # self.guidance_key = guidance_key
         self.discrepancy_key = discrepancy_key
         self.probability_key = probability_key
         self._will_interact = None
-        # self.is_pos = None
         self.is_other = None
         self.default_guidance = None
-        # self.guidance: Dict[str, List[List[int]]] = {}
         self.device = device
         self.click_generation_strategy_key = click_generation_strategy_key
         self.patch_size = patch_size
@@ -459,10 +405,9 @@ class AddGuidance(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy) -> List[int | List[int]] | None:
         assert discrepancy.is_cuda
-        # discrepancy = discrepancy.to(device=self.device)
-        distance = get_distance_transform(discrepancy, self.device, verify_correctness=False)
-        t = get_choice_from_distance_transform_cp(distance, device=self.device)
-        return t
+        distance = get_distance_transform(discrepancy, self.device)
+        t_index, t_value = get_random_choice_from_tensor(distance, device=self.device)
+        return t_index
 
     def add_guidance_based_on_discrepancy(
         self,
@@ -512,21 +457,19 @@ class AddGuidance(Randomizable, MapTransform):
         # Add guidance to the current key label
         if torch.sum(label) > 0:
             # generate a random sample
-            tmp_gui = get_choice_from_tensor(label, device=self.device)
-            self.check_guidance_length(data, tmp_gui)
-            if tmp_gui is not None:
+            tmp_gui_index, tmp_gui_value = get_random_choice_from_tensor(label, device=self.device)
+            if tmp_gui_index is not None:
+                self.check_guidance_length(data, tmp_gui_index)
                 guidance = torch.cat(
                     (
                         guidance,
-                        torch.tensor([tmp_gui], dtype=torch.int32, device=guidance.device),
+                        torch.tensor([tmp_gui_index], dtype=torch.int32, device=guidance.device),
                     ),
                     0,
                 )
         return guidance
 
     def check_guidance_length(self, data, new_guidance):
-        if new_guidance is None:
-            return
         dimensions = 3 if len(data[CommonKeys.IMAGE].shape) > 3 else 2
         if dimensions == 3:
             assert len(new_guidance) == 4, f"len(new_guidance) is {len(new_guidance)}, new_guidance is {new_guidance}"

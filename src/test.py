@@ -18,27 +18,17 @@ from __future__ import annotations
 
 import logging
 import os
-import pathlib
 import resource
 import sys
-import time
 
-import pandas as pd
 import torch
-from ignite.engine import Events
-from monai.data import DataLoader, decollate_batch
-from monai.engines.utils import IterationEvents
-from monai.transforms.utils import allow_missing_keys_mode
-from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
 from sw_fastedit.api import (
     get_ensemble_evaluator,
     get_inferers,
-    get_key_metric,
     get_network,
     get_pre_transforms,
     get_test_evaluator,
-    oom_observer,
 )
 from sw_fastedit.data import (
     get_post_ensemble_transforms,
@@ -47,8 +37,8 @@ from sw_fastedit.data import (
     post_process_AutoPET2_Challenge_file_list,
 )
 from sw_fastedit.utils.argparser import parse_args, setup_environment_and_adapt_args
-from sw_fastedit.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
-from sw_fastedit.utils.tensorboard_logger import init_tensorboard_logger
+from sw_fastedit.utils.helper import handle_exception
+
 
 logger = logging.getLogger("sw_fastedit")
 
@@ -95,10 +85,6 @@ def run(args):
         resume_from=args.resume_from,
     )
 
-    save_dict = {
-        "net": network,
-    }
-
     evaluator.run()
 
     # POSTPROCESSING for the challenge
@@ -124,7 +110,7 @@ def run_ensemble(args):
     )
 
     networks = []
-    for i in range(args.nfolds):
+    for _ in range(args.nfolds):
         networks.append(get_network(args.network, args.labels, args.non_interactive).to(device))
     assert len(networks) == args.nfolds
 

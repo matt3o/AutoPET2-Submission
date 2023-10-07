@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import logging
 import os
-import pathlib
-import resource
 import sys
 import time
 
@@ -30,9 +28,8 @@ from monai.engines.utils import IterationEvents
 from monai.utils.profiling import ProfileHandler, WorkflowProfiler
 
 from sw_fastedit.api import get_trainer, oom_observer
-from sw_fastedit.data import post_process_AutoPET2_Challenge_file_list
 from sw_fastedit.utils.argparser import parse_args, setup_environment_and_adapt_args
-from sw_fastedit.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception, is_docker
+from sw_fastedit.utils.helper import GPU_Thread, TerminationHandler, get_gpu_usage, handle_exception
 from sw_fastedit.utils.tensorboard_logger import init_tensorboard_logger
 
 logger = logging.getLogger("sw_fastedit")

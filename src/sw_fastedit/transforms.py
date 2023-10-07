@@ -13,10 +13,7 @@ from __future__ import annotations
 
 import gc
 import logging
-import os
-import time
-from pathlib import Path
-from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
+from typing import Dict, Hashable, List, Mapping, Tuple
 
 import torch
 from monai.config import KeysCollection
@@ -26,17 +23,13 @@ from monai.networks.layers import GaussianFilter
 from monai.transforms import (
     Activationsd,
     AsDiscreted,
-    CenterSpatialCropd,
     Compose,
-    CropForegroundd,
     MapTransform,
     Randomizable,
-    SignalFillEmpty,
-    Transform,
 )
 from monai.utils.enums import CommonKeys
 
-from sw_fastedit.click_definitions import LABELS_KEY, ClickGenerationStrategy, StoppingCriterion
+from sw_fastedit.click_definitions import LABELS_KEY, ClickGenerationStrategy
 from sw_fastedit.utils.distance_transform import get_distance_transform, get_random_choice_from_tensor
 from sw_fastedit.utils.helper import get_global_coordinates_from_patch_coordinates, get_tensor_at_coordinates, timeit
 
@@ -51,7 +44,7 @@ def get_guidance_tensor_for_key_label(data, key_label, device) -> torch.Tensor:
     tmp_gui = data.get(key_label, torch.tensor([], dtype=torch.int32, device=device))
     if isinstance(tmp_gui, list):
         tmp_gui = torch.tensor(tmp_gui, dtype=torch.int32, device=device)
-    assert type(tmp_gui) == torch.Tensor or type(tmp_gui) == MetaTensor
+    assert type(tmp_gui) is torch.Tensor or type(tmp_gui) is MetaTensor
     return tmp_gui
 
 
@@ -175,7 +168,7 @@ class AddGuidanceSignal(MapTransform):
     def _get_corrective_signal(self, image, guidance, key_label):
         dimensions = 3 if len(image.shape) > 3 else 2
         assert (
-            type(guidance) == torch.Tensor or type(guidance) == MetaTensor
+            type(guidance) is torch.Tensor or type(guidance) is MetaTensor
         ), f"guidance is {type(guidance)}, value {guidance}"
 
         if guidance.size()[0]:
@@ -327,9 +320,9 @@ class FindDiscrepancyRegions(MapTransform):
         for key in self.key_iterator(data):
             if key == "label":
                 assert (
-                    (type(data[key]) == torch.Tensor)
-                    or (type(data[key]) == MetaTensor)
-                    and (type(data[self.pred_key]) == torch.Tensor or type(data[self.pred_key]) == MetaTensor)
+                    (type(data[key]) is torch.Tensor)
+                    or (type(data[key]) is MetaTensor)
+                    and (type(data[self.pred_key]) is torch.Tensor or type(data[self.pred_key]) is MetaTensor)
                 )
                 all_discrepancies = {}
                 assert data[key].is_cuda and data["pred"].is_cuda

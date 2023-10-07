@@ -198,13 +198,13 @@ def print_amount_of_tensors():
 
 def get_total_size_of_all_tensors(data):
     size = 0
-    if type(data) == dict:
+    if type(data) is dict:
         for key in data:
             size += get_total_size_of_all_tensors(data[key])
-    elif type(data) == list:
+    elif type(data) is list:
         for element in data:
             size += get_total_size_of_all_tensors(element)
-    elif type(data) == torch.Tensor or type(data) == MetaTensor:
+    elif type(data) is torch.Tensor or type(data) is MetaTensor:
         size += data.element_size() * data.nelement()
 
     return size
@@ -228,7 +228,7 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
     else:
         batch_data_string += f"Type of batch data: {type(batchdata)}\n"
         for key in batchdata:
-            if type(batchdata[key]) == torch.Tensor or type(batchdata[key]) == MetaTensor:
+            if type(batchdata[key]) is torch.Tensor or type(batchdata[key]) is MetaTensor:
                 extra_info = torch.unique(batchdata[key]).tolist()
                 if len(extra_info) > 20:
                     extra_info = f"too many unique (len): {len(extra_info)}"
@@ -242,12 +242,12 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                     f"unique values: {extra_info}"
                     "\n"
                 )
-            if type(batchdata[key]) == MetaTensor:
+            if type(batchdata[key]) is MetaTensor:
                 batch_data_string += f"  Meta: {batchdata[key].meta}\n" ""
-            elif type(batchdata[key]) == dict:
+            elif type(batchdata[key]) is dict:
                 batch_data_string += f"- {key}(dict)\n"
                 for key2 in batchdata[key]:
-                    if type(batchdata[key][key2]) == torch.Tensor or type(batchdata[key][key2]) == MetaTensor:
+                    if type(batchdata[key][key2]) is torch.Tensor or type(batchdata[key][key2]) is MetaTensor:
                         batch_data_string += (
                             f"    - {key}/{key2}(Tensor/MetaTensor) "
                             f"size: {batchdata[key][key2].size()} "
@@ -257,7 +257,7 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                         )
                     else:
                         batch_data_string += f"    - {key}/{key2}: {batchdata[key][key2]} \n"
-            elif type(batchdata[key]) == list:
+            elif type(batchdata[key]) is list:
                 batch_data_string += f"- {key}(list)\n"
                 for item in batchdata[key]:
                     batch_data_string += f"    - {item}\n"

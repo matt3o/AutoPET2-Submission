@@ -2,29 +2,22 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, Hashable, Iterable, List, Mapping, Tuple
+from typing import Hashable, Iterable, Mapping
+import gc
 
 import torch
 from monai.config import KeysCollection
-from monai.data import MetaTensor
 from monai.transforms import (
-    Activationsd,
-    AsDiscreted,
     CenterSpatialCropd,
     Compose,
     CropForegroundd,
     MapTransform,
-    Randomizable,
-    SignalFillEmpty,
     Transform,
 )
 
 from sw_fastedit.click_definitions import LABELS_KEY
 from sw_fastedit.utils.helper import (  # convert_nii_to_mha,; convert_mha_to_nii,
     describe_batch_data,
-    get_global_coordinates_from_patch_coordinates,
-    get_tensor_at_coordinates,
-    timeit,
 )
 from sw_fastedit.utils.logger import get_logger, setup_loggers
 

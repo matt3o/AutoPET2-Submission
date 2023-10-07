@@ -14,8 +14,7 @@ import torch
 from monai.apps import CrossValidation
 from monai.data import DataLoader, Dataset, ThreadDataLoader, partition_dataset
 
-# from monai.data.dataloader import DataLoader
-from monai.data.dataset import PersistentDataset  # , Dataset
+from monai.data.dataset import PersistentDataset
 from monai.data.folder_layout import FolderLayout
 from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensityRanged,; SignalFillEmpty
     Activationsd,
@@ -24,7 +23,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     Compose,
     CopyItemsd,
     CropForegroundd,
-    DataStatsd,
+    # DataStatsd,
     DivisiblePadd,
     EnsureChannelFirstd,
     EnsureTyped,
@@ -42,21 +41,21 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     SignalFillEmptyd,
     Spacingd,
     ToDeviced,
-    ToNumpyd,
+    # ToNumpyd,
     ToTensord,
     VoteEnsembled,
 )
 from monai.utils.enums import CommonKeys
 
-from sw_fastedit.helper_transforms import (  # Convert_mha_to_niid,; Convert_nii_to_mhad,; SignalFillEmptyd,
-    AbortifNaNd,
+from sw_fastedit.helper_transforms import (  # SignalFillEmptyd,
+    # AbortifNaNd,
     CheckTheAmountOfInformationLossByCropd,
     InitLoggerd,
-    PrintDatad,
+    # PrintDatad,
     TrackTimed,
     threshold_foreground,
 )
-from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,; NoOpd,
+from sw_fastedit.transforms import (
     AddEmptySignalChannels,
     AddGuidance,
     AddGuidanceSignal,
@@ -65,17 +64,6 @@ from sw_fastedit.transforms import (  # PrintGPUUsaged,; PrintDatad,; NoOpd,
     SplitPredsLabeld,
 )
 from sw_fastedit.utils.helper import convert_mha_to_nii, convert_nii_to_mha
-
-# from monai.apps.deepedit.transforms import (
-#     AddGuidanceSignalDeepEditd,
-#     AddRandomGuidanceDeepEditd,
-#     FindDiscrepancyRegionsDeepEditd,
-#     NormalizeLabelsInDatasetd as M_NormalizeLabelsInDatasetd,
-#     FindAllValidSlicesMissingLabelsd,
-#     AddInitialSeedPointMissingLabelsd,
-#     SplitPredsLabeld as M_SplitPredsLabeld,
-# )
-
 
 logger = logging.getLogger("sw_fastedit")
 
@@ -249,11 +237,6 @@ def get_click_transforms(device, args):
     spacing = get_spacing(args)
     cpu_device = torch.device("cpu")
 
-    if args.debug:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-
     logger.info(f"{device=}")
 
     t = [
@@ -271,11 +254,6 @@ def get_click_transforms(device, args):
             keys="image",
             sigma=args.sigma,
             disks=(not args.no_disks),
-            # edt=args.edt,
-            # gdt=args.gdt,
-            # gdt_th=args.gdt_th,
-            # exp_geos=args.exp_geos,
-            # adaptive_sigma=args.adaptive_sigma,
             device=device,
             spacing=spacing,
         ),
@@ -301,7 +279,6 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
 
     input_keys = ("pred",)
     t = [
-        # ToTensord(keys=("pred","label",), device=device),
         CopyItemsd(keys=("pred",), times=1, names=("pred_for_save",))
         if save_pred
         else Identityd(keys=input_keys, allow_missing_keys=True),
@@ -317,7 +294,6 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
         AsDiscreted(
             keys="pred_for_save",
             argmax=True,
-            # to_onehot=(len(labels), len(labels)),
         )
         if save_pred
         else Identityd(keys=input_keys, allow_missing_keys=True),
@@ -384,7 +360,6 @@ def get_post_ensemble_transforms(labels, device, pred_dir, pretransform, nfolds=
     nii_layout = FolderLayout(output_dir=pred_dir, postfix="", extension=".nii.gz", makedirs=False)
 
     t = [
-        # PrintDatad(),
         Invertd(
             keys=prediction_keys,
             orig_keys="image",
@@ -518,22 +493,12 @@ def get_AutoPET2_file_list(args) -> List[List, List, List]:
     all_images = []
     all_labels = []
 
-    for root, dirs, files in os.walk(args.input_dir, followlinks=True):
+    for root, _, files in os.walk(args.input_dir, followlinks=True):
         for file in files:
             if file.startswith("SUV") and file.endswith(".nii.gz"):
                 all_images.append(os.path.join(root, file))
             if file.startswith("SEG") and file.endswith(".nii.gz"):
                 all_labels.append(os.path.join(root, file))
-
-    # for root, dirs, files in os.walk(args.input, followlinks=True):
-    #     for file in files:
-    #         if file.startswith("SUV") and file.endswith(".nii.gz"):
-    #             all_images.append(os.path.join(root, file))
-
-    # all_images = [str(p) for p in Path(args.input).rglob("**/SUV*.nii.gz") if p.is_file()]
-    # all_labels = [str(p) for p in Path(args.input).rglob("**/SEG*.nii.gz") if p.is_file()]
-
-    # all_labels = glob.glob(os.path.join(args.input, "**", "**", "SEG*.nii.gz"))
 
     data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(all_images, all_labels)]
 

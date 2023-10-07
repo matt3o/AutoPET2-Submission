@@ -9,8 +9,8 @@ import torch
 
 # Details here: https://docs.rapids.ai/api/cucim/nightly/api/#cucim.core.operations.morphology.distance_transform_edt
 from cucim.core.operations.morphology import distance_transform_edt as distance_transform_edt_cupy
-from numpy.typing import ArrayLike
-from scipy.ndimage import distance_transform_edt
+# from numpy.typing import ArrayLike
+# from scipy.ndimage import distance_transform_edt
 
 np.seterr(all="raise")
 
@@ -67,9 +67,9 @@ def get_random_choice_from_tensor(
             max_threshold = int(cp.floor(cp.log(cp.finfo(cp.float32).max))) / (800 * 800 * 800)
 
         # Clip the distance transform to avoid overflows and negative probabilities
-        clipped_distance = t.clip(min=0, max=max_threshold)
+        clipped_distance = t_cp.clip(min=0, max=max_threshold)
 
-        flattened_t_cp = t_cp.flatten()
+        flattened_t_cp = clipped_distance.flatten()
 
         probability = cp.exp(flattened_t_cp) - 1.0
         idx = cp.where(flattened_t_cp > 0)[0]

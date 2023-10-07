@@ -37,6 +37,7 @@ compute_metrics.py
 Computes the metrics of a labels against a prediction dir. Currently the file type is defined as "*.nii.gz" in get_metrics_loader.
 """
 
+
 def run(args):
     device = torch.device(f"cuda:{args.gpu}")
     args.device = device
@@ -71,7 +72,7 @@ def run(args):
         dice_metric(y_pred=batchdata["pred"], y=batchdata["label"])
         surface_dice_metric(y_pred=batchdata["pred"], y=batchdata["label"])
         filenames.append(pred_file_name)
-    
+
     # all-gather results from all the processes and reduce for final result
     dice_results = dice_metric.aggregate().item()
     surface_dice_results = surface_dice_metric.aggregate().item()

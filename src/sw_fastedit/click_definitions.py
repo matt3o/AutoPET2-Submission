@@ -1,9 +1,9 @@
-
 from __future__ import annotations
 
 from enum import IntEnum
 
 LABELS_KEY = "label_names"
+
 
 class ClickGenerationStrategy(IntEnum):
     # Sample a click randomly based on the label, so no correction based on the prediction

@@ -101,7 +101,7 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
     if network_str == "dynunet":
         network = DynUNet(
             spatial_dims=3,
-            # 
+            #
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=[3, 3, 3, 3, 3, 3],
@@ -146,7 +146,7 @@ def get_network(network_str: str, labels: Iterable, non_interactive: bool = Fals
             kernel_size=[3, 3, 3, 3, 3, 3, 3],
             strides=[1, 2, 2, 2, 2, 2, 2],
             upsample_kernel_size=[2, 2, 2, 2, 2, 2],
-            filters=[32, 64, 128, 192, 256, 384, 512],#, 768, 1024, 2048],
+            filters=[32, 64, 128, 192, 256, 384, 512],  # , 768, 1024, 2048],
             dropout=0.1,
             norm_name="instance",
             deep_supervision=False,
@@ -168,9 +168,9 @@ def get_inferers(
     train_sw_batch_size,
     val_sw_batch_size,
     train_sw_overlap=0.25,
-    val_sw_overlap = 0.25,
+    val_sw_overlap=0.25,
     cache_roi_weight_map: bool = True,
-    device='cpu',
+    device="cpu",
     sw_cpu_output=False,
 ):
     if inferer == "SimpleInferer":
@@ -208,28 +208,18 @@ def get_inferers(
 
         sw_params = {
             "roi_size": sw_roi_size,
-            "mode":"gaussian",
+            "mode": "gaussian",
             "cache_roi_weight_map": cache_roi_weight_map,
-            
         }
-        
+
         if sw_cpu_output:
             logger.warning("Enabling Sliding Window output on the CPU")
-            logger.warning("Note that this only works well for validation! For training AMP has to be turned off and it has no real effect")
-            sw_params.update({
-                "sw_device": device, 
-                "device": 'cpu'
-            })
-        train_inferer = SlidingWindowInferer(
-            sw_batch_size=train_batch_size,
-            overlap=train_sw_overlap,
-            **sw_params
-        )
-        eval_inferer = SlidingWindowInferer(
-            sw_batch_size=val_batch_size,
-            overlap=val_sw_overlap,
-            **sw_params
-        )
+            logger.warning(
+                "Note that this only works well for validation! For training AMP has to be turned off and it has no real effect"
+            )
+            sw_params.update({"sw_device": device, "device": "cpu"})
+        train_inferer = SlidingWindowInferer(sw_batch_size=train_batch_size, overlap=train_sw_overlap, **sw_params)
+        eval_inferer = SlidingWindowInferer(sw_batch_size=val_batch_size, overlap=val_sw_overlap, **sw_params)
     return train_inferer, eval_inferer
 
 
@@ -278,7 +268,7 @@ def get_train_handlers(
     sw_roi_size: List,
     inferer: str,
     gpu_size: str,
-    garbage_collector=True
+    garbage_collector=True,
 ):
     if sw_roi_size[0] <= 128:
         train_trigger_event = Events.ITERATION_COMPLETED(every=4) if gpu_size == "large" else Events.ITERATION_COMPLETED
@@ -332,7 +322,7 @@ def get_additional_metrics(labels, include_background=False, loss_kwargs=None, s
         include_background=include_background,
         class_thresholds=class_thresholds,
         reduction="mean",
-        get_not_nans=False,  
+        get_not_nans=False,
         use_subvoxels=True,
     )
     surface_dice_metric_ignite = IgniteMetricHandler(
@@ -373,13 +363,18 @@ def get_test_evaluator(
         inferer=inferer,
         postprocessing=post_transform,
         amp=args.amp,
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
+        val_handlers=get_val_handlers(
+            sw_roi_size=args.sw_roi_size,
+            inferer=args.inferer,
+            gpu_size=args.gpu_size,
+            garbage_collector=(not args.non_interactive),
+        ),
     )
 
     save_dict = {
         "net": network,
     }
-    
+
     if resume_from != "None":
         logger.info(f"{args.gpu}:: Loading Network...")
         logger.info(f"{save_dict.keys()=}")
@@ -387,7 +382,7 @@ def get_test_evaluator(
         map_location = device
         checkpoint = torch.load(resume_from)
         logger.info(f"{checkpoint.keys()=}")
-        network.load_state_dict(checkpoint['net'])
+        network.load_state_dict(checkpoint["net"])
         handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
         handler(evaluator)
 
@@ -400,13 +395,13 @@ def get_test_evaluator(
 #     device = torch.device(f"cuda:{args.gpu}")
 
 #     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-#     val_loader = get_val_loader(args, pre_transforms_val) 
+#     val_loader = get_val_loader(args, pre_transforms_val)
 
 #     click_transforms = get_click_transforms(device, args)
 #     post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir, pretransform=pre_transforms_val)
 
 #     network = get_network(args.network, args.labels, args.non_interactive).to(device)
-    
+
 #     _, eval_inferer = get_inferers(
 #         args.inferer,
 #         sw_roi_size= args.sw_roi_size,
@@ -512,15 +507,23 @@ def get_supervised_evaluator(
             click_generation_strategy=args.val_click_generation,
             stopping_criterion=args.val_click_generation_stopping_criterion,
             non_interactive=args.non_interactive,
-        ) if not args.non_interactive else None,
+        )
+        if not args.non_interactive
+        else None,
         inferer=inferer,
         postprocessing=post_transform,
         amp=args.amp,
         key_val_metric=key_val_metric,
         additional_metrics=additional_metrics,
-        val_handlers=get_val_handlers(sw_roi_size=args.sw_roi_size, inferer=args.inferer, gpu_size=args.gpu_size, garbage_collector=(not args.non_interactive)),
+        val_handlers=get_val_handlers(
+            sw_roi_size=args.sw_roi_size,
+            inferer=args.inferer,
+            gpu_size=args.gpu_size,
+            garbage_collector=(not args.non_interactive),
+        ),
     )
     return evaluator
+
 
 # def get_cross_validation_trainers_generator(args, nfolds=5):
 #     device = torch.device(f"cuda:{args.gpu}")
@@ -551,16 +554,9 @@ def get_supervised_evaluator(
 #         )
 
 
-def get_ensemble_evaluator(    
-        args,
-        networks,
-        inferer,
-        device,
-        val_loader,
-        post_transform,
-        resume_from="None",
-        nfolds=5
-    ) -> EnsembleEvaluator:
+def get_ensemble_evaluator(
+    args, networks, inferer, device, val_loader, post_transform, resume_from="None", nfolds=5
+) -> EnsembleEvaluator:
     init(args)
 
     device = torch.device(f"cuda:{args.gpu}")
@@ -575,8 +571,7 @@ def get_ensemble_evaluator(
         pred_keys=prediction_keys,
         amp=args.amp,
     )
-    
-    
+
     if resume_from != "None":
         logger.info(f"{args.gpu}:: Loading Networks...")
         logger.info(f"CWD: {os.getcwd()}")
@@ -588,9 +583,8 @@ def get_ensemble_evaluator(
             logger.info(f"{file_path=}")
             map_location = device
             checkpoint = torch.load(file_path)
-            networks[i].load_state_dict(checkpoint['net'])
+            networks[i].load_state_dict(checkpoint["net"])
     return evaluator
-
 
 
 # def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedEvaluator, List]:
@@ -600,7 +594,7 @@ def get_ensemble_evaluator(
 #     pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
 #     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
 #     train_loader  = get_train_loader(args, pre_transforms_train)
-#     val_loader = get_val_loader(args, pre_transforms_val) 
+#     val_loader = get_val_loader(args, pre_transforms_val)
 
 #     return get_trainer_with_loaders(args, train_loader, val_loader, resume_from=resume_from)
 
@@ -609,14 +603,13 @@ def get_trainer(
     args, file_prefix="", ensemble_mode: bool = False, resume_from="None"
 ) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
     init(args)
-    device = torch.device(f"cuda:{args.gpu}") if not args.sw_cpu_output else 'cpu'
+    device = torch.device(f"cuda:{args.gpu}") if not args.sw_cpu_output else "cpu"
     sw_device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-    train_loader  = get_train_loader(args, pre_transforms_train)
-    val_loader = get_val_loader(args, pre_transforms_val) 
-
+    train_loader = get_train_loader(args, pre_transforms_train)
+    val_loader = get_val_loader(args, pre_transforms_val)
 
     click_transforms = get_click_transforms(sw_device, args)
     post_transform = get_post_transforms(args.labels, sw_device, args.save_pred, args.output_dir)
@@ -624,11 +617,11 @@ def get_trainer(
     network = get_network(args.network, args.labels, args.non_interactive).to(sw_device)
     train_inferer, eval_inferer = get_inferers(
         args.inferer,
-        sw_roi_size= args.sw_roi_size,
+        sw_roi_size=args.sw_roi_size,
         train_crop_size=args.train_crop_size,
         val_crop_size=args.val_crop_size,
-        train_sw_batch_size = args.train_sw_batch_size,
-        val_sw_batch_size = args.val_sw_batch_size,
+        train_sw_batch_size=args.train_sw_batch_size,
+        val_sw_batch_size=args.val_sw_batch_size,
         train_sw_overlap=args.train_sw_overlap,
         val_sw_overlap=args.val_sw_overlap,
     )
@@ -696,7 +689,9 @@ def get_trainer(
             iteration_probability=args.train_iteration_probability,
             loss_stopping_threshold=args.train_loss_stopping_threshold,
             non_interactive=args.non_interactive,
-        ) if not args.non_interactive else None,
+        )
+        if not args.non_interactive
+        else None,
         optimizer=optimizer,
         loss_function=loss_function,
         inferer=train_inferer,
@@ -802,14 +797,13 @@ def init(args):
         limit = args.limit_gpu_memory_to
         assert limit > 0 and limit < 1, f"Percentage GPU memory limit is invalid! {limit} > 0 or < 1"
         torch.cuda.set_per_process_memory_fraction(limit, args.gpu)
-        
+
         #    # Slurm only: Speed up the creation of temporary files
         #    if os.environ.get("SLURM_JOB_ID") is not None:
         #        tmpdir = "/local/work/mhadlich/tmp"
         #        os.environ["TMPDIR"] = tmpdir
         #        if not os.path.exists(tmpdir):
         #            pathlib.Path(tmpdir).mkdir(parents=True)
-
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -831,6 +825,7 @@ def init(args):
     if args.debug:
         torch.autograd.set_detect_anomaly(True)
         np.seterr(all="raise")
+
 
 def oom_observer(device, alloc, device_alloc, device_free):
     if device is not None and logger is not None:

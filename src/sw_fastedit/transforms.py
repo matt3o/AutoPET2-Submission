@@ -376,7 +376,7 @@ class AddGuidance(Randomizable, MapTransform):
         probability_key: key to click/interaction probability, shape (1)
         device: device this transform shall run on.
         click_generation_strategy_key: sets the used ClickGenerationStrategy.
-        patch_size: Only relevant for the patch-based click generation strategy. Sets the size of the cropped patches 
+        patch_size: Only relevant for the patch-based click generation strategy. Sets the size of the cropped patches
         on which then further analysis is run.
     """
 

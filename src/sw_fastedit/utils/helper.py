@@ -122,7 +122,7 @@ def get_gpu_usage(
     if device.type == "cpu":
         # important for the sw_cpu_output flag
         return ""
-    
+
     (cuda_index, util_gpu, util_memory, nv_total, nv_free, nv_used, torch_reserved, cupy_total, cupy_used) = gpu_usage(
         device=device, nvml_handle=nvml_handle
     )
@@ -162,7 +162,6 @@ def get_gpu_usage(
                 "memory reserved by torch ({0}): {4:.0f} cupy total ({0}): {5:.0f}\n"
             ).format(memory_unit, nv_total, nv_free, nv_used, torch_reserved, cupy_total)
     return usage
-
 
 
 def print_tensor_gpu_usage(a: torch.Tensor):
@@ -233,7 +232,7 @@ def describe_batch_data(batchdata: dict, total_size_only=False):
                 extra_info = torch.unique(batchdata[key]).tolist()
                 if len(extra_info) > 20:
                     extra_info = f"too many unique (len): {len(extra_info)}"
-                
+
                 batch_data_string += (
                     f"- {key}({batchdata[key].__class__.__qualname__}) size: {batchdata[key].size()} "
                     f"size in MB: {batchdata[key].element_size() * batchdata[key].nelement() / (1024**2)}MB "
@@ -453,9 +452,7 @@ def convert_nii_to_mha(nii_input_path, mha_out_path):
 
     SimpleITK.WriteImage(img, mha_out_path, True)
 
+
 def is_docker():
-    path = '/proc/self/cgroup'
-    return (
-        os.path.exists('/.dockerenv') or
-        os.path.isfile(path) and any('docker' in line for line in open(path))
-    )
+    path = "/proc/self/cgroup"
+    return os.path.exists("/.dockerenv") or os.path.isfile(path) and any("docker" in line for line in open(path))

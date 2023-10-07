@@ -40,7 +40,7 @@ class Interaction:
     More details about this can be found at:
 
         TODO add our paper
-    
+
     The code is based on:
         Diaz-Pinto et al., MONAI Label: A framework for AI-assisted Interactive
         Labeling of 3D Medical Images. (2022) https://arxiv.org/abs/2203.12362
@@ -64,7 +64,7 @@ class Interaction:
         iteration_probability: parameter for the `StoppingCriterion`. States after how many iterations the click generation is stopped
         loss_stopping_threshold: parameter for the `StoppingCriterion`. States at which optimal loss the click generation is stopped.
             Usually used in combination with `iteration_probability`, to have a hard upper bound on the amount of clicks.
-        non_interactive: set it for non-interactive runs, where no clicks shall be added. The Interaction class only prints the 
+        non_interactive: set it for non-interactive runs, where no clicks shall be added. The Interaction class only prints the
             shape of image and label, then resumes normal training.
     """
 
@@ -141,7 +141,6 @@ class Interaction:
             inputs, labels = engine.prepare_batch(batchdata, device=engine.state.device)
             batchdata[CommonKeys.IMAGE] = inputs
             batchdata[CommonKeys.LABEL] = labels
-            
 
             if iteration == 0:
                 logger.info("inputs.shape is {}".format(inputs.shape))
@@ -253,7 +252,6 @@ class Interaction:
         self.save_nifti_file(f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy())
         self.save_nifti_file(f"{self.args.data_dir}/labels", labels[0, 0].cpu().detach().numpy())
         self.save_nifti_file(f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy())
-
 
     def save_nifti_file(self, name, im):
         affine = np.eye(4)

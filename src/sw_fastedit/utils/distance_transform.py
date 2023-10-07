@@ -20,6 +20,7 @@ logger = logging.getLogger("sw_fastedit")
 CUDA enabled distance transforms using cupy
 """
 
+
 # TODO replace with distance_transform_edt when MONAI 1.3.0 gets released
 def get_distance_transform(tensor: torch.Tensor, device: torch.device = None) -> torch.Tensor:
     # The distance transform provides a metric or measure of the separation of points in the image.
@@ -49,7 +50,7 @@ def get_random_choice_from_tensor(
     device: torch.device,
     max_threshold: int = None,
     size=1,
-) -> Tuple[List[int],int] | None:
+) -> Tuple[List[int], int] | None:
     with cp.cuda.Device(device.index):
         if not isinstance(t, cp.ndarray):
             t_cp = cp.asarray(t)
@@ -59,7 +60,7 @@ def get_random_choice_from_tensor(
         if cp.sum(t_cp) <= 0:
             # No valid distance has been found. Dont raise, just empty return
             return None, None
-        
+
         # Probability transform
         if max_threshold is None:
             # divide by the maximum number of elements in a volume, otherwise we will get overflows..

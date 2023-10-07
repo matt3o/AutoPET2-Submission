@@ -129,14 +129,16 @@ def run(args):
         pd.set_option("display.max_rows", None)
         logger.info(f"\n{wp.get_times_summary_pd()}")
 
+
 def main():
     global logger
-    
+
     sys.excepthook = handle_exception
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)
 
     run(args)
+
 
 if __name__ == "__main__":
     main()

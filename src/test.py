@@ -58,6 +58,7 @@ test.py
 Use this file for the AutoPET2 Challenge. It does not expect any labels and works on input images only.
 """
 
+
 def run(args):
     for arg in vars(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
@@ -68,8 +69,10 @@ def run(args):
     test_loader = get_test_loader(args, pre_transforms_test)
 
     pred_dir = os.path.join(args.output_dir, "predictions")
-    post_transform = get_post_transforms_unsupervised(args.labels, device, pred_dir=pred_dir, pretransform=pre_transforms_test)
-    
+    post_transform = get_post_transforms_unsupervised(
+        args.labels, device, pred_dir=pred_dir, pretransform=pre_transforms_test
+    )
+
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, test_inferer = get_inferers(
         args.inferer,
@@ -95,7 +98,7 @@ def run(args):
     save_dict = {
         "net": network,
     }
-    
+
     evaluator.run()
 
     # POSTPROCESSING for the challenge
@@ -106,7 +109,7 @@ def run(args):
 
 def run_ensemble(args):
     args.nfolds = 5
-    
+
     for arg in vars(args):
         logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
     print("")
@@ -116,13 +119,14 @@ def run_ensemble(args):
     test_loader = get_test_loader(args, pre_transforms_test)
 
     pred_dir = os.path.join(args.output_dir, "predictions")
-    post_transform = get_post_ensemble_transforms(labels=args.labels, device=device, pred_dir=pred_dir, pretransform=pre_transforms_test, nfolds=args.nfolds)
+    post_transform = get_post_ensemble_transforms(
+        labels=args.labels, device=device, pred_dir=pred_dir, pretransform=pre_transforms_test, nfolds=args.nfolds
+    )
 
     networks = []
     for i in range(args.nfolds):
         networks.append(get_network(args.network, args.labels, args.non_interactive).to(device))
-    assert(len(networks) == args.nfolds)
-
+    assert len(networks) == args.nfolds
 
     _, test_inferer = get_inferers(
         args.inferer,
@@ -144,7 +148,7 @@ def run_ensemble(args):
         post_transform=post_transform,
         resume_from=args.resume_from,
         nfolds=args.nfolds,
-    )    
+    )
 
     evaluator.run()
 

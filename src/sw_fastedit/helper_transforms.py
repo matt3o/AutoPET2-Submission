@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -31,6 +30,7 @@ from sw_fastedit.utils.logger import get_logger, setup_loggers
 
 logger = None
 
+
 def threshold_foreground(x):
     return (x > 0.005) & (x < 0.995)
 
@@ -45,7 +45,7 @@ class AbortifNaNd(MapTransform):
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
         for key in self.key_iterator(data):
             assert not torch.isnan(data[key]).any()
-        
+
         return data
 
 
@@ -66,7 +66,7 @@ class TrackTimed(Transform):
         total_time = end_time - start_time
         logger.info(f"-------- {self.transform.__class__.__qualname__:<20.20}() took {total_time:.3f} seconds")
         # print(f"{self.transform.__class__.__qualname__}() took {total_time:.3f} seconds")
-        
+
         return data
 
 
@@ -88,11 +88,11 @@ class TrackTimed(Transform):
 #                 # tensor = data[key]
 #                 data[key] = self.signal_fill_empty(data[key])
 #             # data_, orig_type, orig_device = convert_to_tensor(data[key], dst=torch.Tensor)
-            
+
 
 #             # data[key] = convert_to_dst_type(tensor, dst=data[key], dtype=data[key].dtype)[0]
 #             # data[key] = convert_to_dst_type(data[key], dst=torch.Tensor)
-        
+
 #         return data
 
 
@@ -150,7 +150,11 @@ class CheckTheAmountOfInformationLossByCropd(MapTransform):
 
 
 class PrintDatad(MapTransform):
-    def __init__(self, keys: KeysCollection = None, allow_missing_keys: bool = False,):
+    def __init__(
+        self,
+        keys: KeysCollection = None,
+        allow_missing_keys: bool = False,
+    ):
         """
         Prints all the information inside data
         """
@@ -168,7 +172,7 @@ class PrintDatad(MapTransform):
         except UnboundLocalError:
             logger = logging.getLogger("sw_fastedit")
             logger.info(describe_batch_data(data_sub_dict))
-        
+
         return data
 
 
@@ -212,7 +216,7 @@ class ClearGPUMemoryd(MapTransform):
 class InitLoggerd(MapTransform):
     def __init__(self, loglevel=logging.INFO, no_log=True, log_dir=None):
         """
-        Initialises the logger inside the dataloader thread (if it is a separate thread). 
+        Initialises the logger inside the dataloader thread (if it is a separate thread).
         This is only necessary if the data loading is done in multiple threads / processes.
 
         Otherwise no log messages get print.
@@ -226,7 +230,7 @@ class InitLoggerd(MapTransform):
 
         if self.no_log:
             self.log_dir = None
-        
+
         setup_loggers(self.loglevel, self.log_dir)
         logger = get_logger()
 

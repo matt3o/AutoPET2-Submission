@@ -38,13 +38,43 @@ def parse_args():
     # Data
     parser.add_argument("-i", "--input_dir", required=True, help="Base folder for input images and labels")
     parser.add_argument("-o", "--output_dir", required=True, help="All the logs and weights will be stored here")
-    parser.add_argument("-d", "--data_dir", default="None", help="Only used for debugging Niftii files, so usually not required")
+    parser.add_argument(
+        "-d", "--data_dir", default="None", help="Only used for debugging Niftii files, so usually not required"
+    )
     # a subdirectory is created below cache_dir for every run
-    parser.add_argument("-c", "--cache_dir", type=str, default="None", help="Code uses a CacheDataset, so stores the transforms on the disk. This parameter is where the data gets stored.")
-    parser.add_argument("-ta", "--throw_away_cache", default=False, action="store_true", help="Use a temporary folder which will be cleaned up after the program run.")
-    parser.add_argument("--save_pred", default=False, action="store_true", help="To save the prediction in the output_dir/prediction if that is desired")
-    parser.add_argument("-x", "--split", type=float, default=0.8, help="Split into training and validation samples, default is 80% training samples.")
-    parser.add_argument("--gpu_size", default="None", choices=["None", "small", "medium", "large"], help="Influcences some performance options of the code")
+    parser.add_argument(
+        "-c",
+        "--cache_dir",
+        type=str,
+        default="None",
+        help="Code uses a CacheDataset, so stores the transforms on the disk. This parameter is where the data gets stored.",
+    )
+    parser.add_argument(
+        "-ta",
+        "--throw_away_cache",
+        default=False,
+        action="store_true",
+        help="Use a temporary folder which will be cleaned up after the program run.",
+    )
+    parser.add_argument(
+        "--save_pred",
+        default=False,
+        action="store_true",
+        help="To save the prediction in the output_dir/prediction if that is desired",
+    )
+    parser.add_argument(
+        "-x",
+        "--split",
+        type=float,
+        default=0.8,
+        help="Split into training and validation samples, default is 80% training samples.",
+    )
+    parser.add_argument(
+        "--gpu_size",
+        default="None",
+        choices=["None", "small", "medium", "large"],
+        help="Influcences some performance options of the code",
+    )
     parser.add_argument(
         "--limit_gpu_memory_to",
         type=float,
@@ -58,7 +88,9 @@ def parse_args():
         default=0,
         help="Limit the amount of training/validation samples to a fixed number",
     )
-    parser.add_argument("--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen", "AutoPET2_Challenge"])
+    parser.add_argument(
+        "--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen", "AutoPET2_Challenge"]
+    )
     parser.add_argument("--train_on_all_samples", action="store_true")
     parser.add_argument(
         "--positive_crop_rate", type=float, default=0.6, help="The rate of positive samples for RandCropByPosNegLabeld"
@@ -74,7 +106,10 @@ def parse_args():
 
     # Model
     parser.add_argument(
-        "-n", "--network", default="dynunet", choices=["dynunet", "smalldynunet", "bigdynunet", "bigdynunet2", "matteodynunet"]
+        "-n",
+        "--network",
+        default="dynunet",
+        choices=["dynunet", "smalldynunet", "bigdynunet", "bigdynunet2", "matteodynunet"],
     )
     parser.add_argument(
         "-in",
@@ -110,7 +145,7 @@ def parse_args():
     )
     parser.add_argument("--loss_dont_include_background", action="store_false")
     parser.add_argument("--loss_no_squared_pred", action="store_false")
-    
+
     parser.add_argument("--resume_from", type=str, default="None")
     # Use this parameter to change the scheduler..
     parser.add_argument("--resume_override_scheduler", default=False, action="store_true")
@@ -121,13 +156,17 @@ def parse_args():
 
     # Logging
     parser.add_argument("-f", "--val_freq", type=int, default=1)  # Epoch Level
-    parser.add_argument("--save_interval", type=int, default=3) # Save checkpoints every x epochs
-    
+    parser.add_argument("--save_interval", type=int, default=3)  # Save checkpoints every x epochs
+
     parser.add_argument("--eval_only", default=False, action="store_true")
     parser.add_argument("--save_nifti", default=False, action="store_true")
 
     # Interactions
-    parser.add_argument("--non_interactive", action="store_true", help="Default training of neural network. Don't add any guidance channels, do normal backprop only.") 
+    parser.add_argument(
+        "--non_interactive",
+        action="store_true",
+        help="Default training of neural network. Don't add any guidance channels, do normal backprop only.",
+    )
     parser.add_argument("-it", "--max_train_interactions", type=int, default=10)
     parser.add_argument("-iv", "--max_val_interactions", type=int, default=10)
     parser.add_argument("-dpt", "--deepgrow_probability_train", type=float, default=1.0)
@@ -174,7 +213,9 @@ def setup_environment_and_adapt_args(args):
     args.labels = {"tumor": 1, "background": 0}
 
     if not args.dont_check_output_dir and os.path.isdir(args.output_dir):
-        raise UserWarning(f"output path {args.output_dir} already exists. Please choose another path or set --dont_check_output_dir")
+        raise UserWarning(
+            f"output path {args.output_dir} already exists. Please choose another path or set --dont_check_output_dir"
+        )
     if not os.path.exists(args.output_dir):
         pathlib.Path(args.output_dir).mkdir(parents=True)
 
@@ -215,7 +256,7 @@ def setup_environment_and_adapt_args(args):
     if args.data_dir == "None":
         args.data_dir = f"{args.output_dir}/data"
         logger.info(f"--data was None, so that {args.data_dir}/data was selected instead")
-    
+
     if not args.no_data:
         if not os.path.exists(args.data_dir):
             pathlib.Path(args.data_dir).mkdir(parents=True)

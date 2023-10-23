@@ -235,7 +235,7 @@ class Interaction:
                 batchdata_list[i][self.click_generation_strategy_key] = self.click_generation_strategy.value
                 start = time.time()
                 batchdata_list[i] = self.transforms(batchdata_list[i])  # Apply click transform
-                logger.info(f"Click transform took: {time.time() - start:.2} seconds")
+                logger.debug(f"Click transform took: {time.time() - start:.2} seconds")
 
             batchdata = list_data_collate(batchdata_list)
 
@@ -243,7 +243,7 @@ class Interaction:
 
             iteration += 1
 
-        logger.info(f"Interaction took {time.time()- before_it:.2f} seconds..")
+        logger.debug(f"Interaction took {time.time()- before_it:.2f} seconds..")
         engine.state.batch = batchdata
         return engine._iteration(engine, batchdata)  # train network with the final iteration cycle
 

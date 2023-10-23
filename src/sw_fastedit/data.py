@@ -255,7 +255,7 @@ def get_click_transforms(device, args):
             sigma=args.sigma,
             disks=(not args.no_disks),
             device=device,
-            spacing=spacing,
+            # spacing=spacing,
         ),
         ToTensord(keys=("image", "label", "pred"), device=cpu_device)
         if args.sw_cpu_output

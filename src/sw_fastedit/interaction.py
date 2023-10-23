@@ -46,45 +46,46 @@ class Interaction:
         Labeling of 3D Medical Images. (2022) https://arxiv.org/abs/2203.12362
 
     Args:
-        deepgrow_probability: probability of simulating clicks in an iteration
         transforms: execute additional transformation during every iteration (before train).
             Typically, several Tensor based transforms composed by `Compose`.
         train: True for training mode or False for evaluation mode
         label_names: Dict of label names
-        click_probability_key: key to click/interaction probability
         max_interactions: maximum number of interactions per iteration
-        save_nifti: whether to save nifti files to debug the code
-        nifti_dir: location where to store the debug nifti files
-        nifti_post_transform: post transforms to be run before the information is stored into the nifti files
-        loss_function: loss_function to the ran after every interaction to determine if the clicks actually help the model
-        click_generation_strategy: used to select the according `ClickGenerationStrategy`, which decides how clicks are generated
+        click_probability_key: key to click/interaction probability
         click_generation_strategy_key: which key to use for storing the `ClickGenerationStrategy` in the batchdata
+        click_generation_strategy: used to select the according `ClickGenerationStrategy`, which decides how clicks are generated
         stopping_criterion: used to select the `StoppingCriterion`, which decides when the click generation is stopped. This may be
             max interaction based, loss based, or completely different. Look into `StoppingCriterion` definition for details.
         iteration_probability: parameter for the `StoppingCriterion`. States after how many iterations the click generation is stopped
         loss_stopping_threshold: parameter for the `StoppingCriterion`. States at which optimal loss the click generation is stopped.
             Usually used in combination with `iteration_probability`, to have a hard upper bound on the amount of clicks.
+        deepgrow_probability: probability of simulating clicks in an iteration
+        save_nifti: whether to save nifti files to debug the code
+        nifti_dir: location where to store the debug nifti files
+        nifti_post_transform: post transforms to be run before the information is stored into the nifti files
+        loss_function: loss_function to the ran after every interaction to determine if the clicks actually help the model
         non_interactive: set it for non-interactive runs, where no clicks shall be added. The Interaction class only prints the
             shape of image and label, then resumes normal training.
     """
 
     def __init__(
         self,
-        deepgrow_probability: float,
         transforms: Union[Sequence[Callable], Callable],
         train: bool,
         label_names: Union[None, Dict[str, int]] = None,
-        click_probability_key: str = "probability",
         max_interactions: int = 1,
+        *,
+        click_probability_key: str = "probability",
+        click_generation_strategy_key: str = "click_generation_strategy",
+        click_generation_strategy: ClickGenerationStrategy = ClickGenerationStrategy.GLOBAL_CORRECTIVE,
+        stopping_criterion: StoppingCriterion = StoppingCriterion.MAX_ITER,
+        iteration_probability: float = 0.5,
+        loss_stopping_threshold: float = 0.1,
+        deepgrow_probability: float = 1.0,
         save_nifti=False,
         nifti_dir=None,
         nifti_post_transform=None,
         loss_function=None,
-        click_generation_strategy: ClickGenerationStrategy = ClickGenerationStrategy.GLOBAL_CORRECTIVE,
-        click_generation_strategy_key: str = "click_generation_strategy",
-        stopping_criterion: StoppingCriterion = StoppingCriterion.MAX_ITER,
-        iteration_probability: float = 0.5,
-        loss_stopping_threshold: float = 0.1,
         non_interactive=False,
     ) -> None:
         self.deepgrow_probability = deepgrow_probability
@@ -214,7 +215,7 @@ class Interaction:
                 f"It: {iteration} {self.dice_loss_function.__class__.__name__}: {last_dice_loss:.4f} Epoch: {engine.state.epoch}"
             )
 
-            if self.args.save_nifti:
+            if self.save_nifti:
                 tmp_batchdata = {
                     CommonKeys.PRED: batchdata[CommonKeys.PRED].detach().clone(),
                     CommonKeys.LABEL: batchdata[CommonKeys.LABEL].detach().clone(),
@@ -247,11 +248,11 @@ class Interaction:
         return engine._iteration(engine, batchdata)  # train network with the final iteration cycle
 
     def debug_viz(self, inputs, labels, preds, j):
-        self.save_nifti_file(f"{self.args.data_dir}/im", inputs[0, 0].cpu().detach().numpy())
-        self.save_nifti_file(f"{self.args.data_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy())
-        self.save_nifti_file(f"{self.args.data_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy())
-        self.save_nifti_file(f"{self.args.data_dir}/labels", labels[0, 0].cpu().detach().numpy())
-        self.save_nifti_file(f"{self.args.data_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.nifti_dir}/im", inputs[0, 0].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.nifti_dir}/guidance_fgg_{j}", inputs[0, 1].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.nifti_dir}/guidance_bgg_{j}", inputs[0, 2].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.nifti_dir}/labels", labels[0, 0].cpu().detach().numpy())
+        self.save_nifti_file(f"{self.nifti_dir}/pred_{j}", preds[0, 1].cpu().detach().numpy())
 
     def save_nifti_file(self, name, im):
         affine = np.eye(4)

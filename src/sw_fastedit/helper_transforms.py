@@ -178,7 +178,7 @@ class PrintGPUUsaged(MapTransform):
         self.device = device
         self.name = name
 
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:        
         if logger is not None:
             logger.info(
                 f"{self.name}::Current reserved memory for dataloader: {torch.cuda.memory_reserved(self.device) / (1024**3)} GB"

@@ -130,7 +130,6 @@ def run(args):
 def main():
     global logger
 
-    sys.excepthook = handle_exception
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)
 

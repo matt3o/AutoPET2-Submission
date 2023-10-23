@@ -93,69 +93,14 @@ def run(args):
         post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
 
 
-def run_ensemble(args):
-    args.nfolds = 5
-
-    for arg in vars(args):
-        logger.info("USING:: {} = {}".format(arg, getattr(args, arg)))
-    print("")
-    device = torch.device(f"cuda:{args.gpu}")
-
-    _, pre_transforms_test = get_pre_transforms(args.labels, device, args, input_keys=("image",))
-    test_loader = get_test_loader(args, pre_transforms_test)
-
-    pred_dir = os.path.join(args.output_dir, "predictions")
-    post_transform = get_post_ensemble_transforms(
-        labels=args.labels, device=device, pred_dir=pred_dir, pretransform=pre_transforms_test, nfolds=args.nfolds
-    )
-
-    networks = []
-    for _ in range(args.nfolds):
-        networks.append(get_network(args.network, args.labels, args.non_interactive).to(device))
-    assert len(networks) == args.nfolds
-
-    _, test_inferer = get_inferers(
-        args.inferer,
-        args.sw_roi_size,
-        args.train_crop_size,
-        args.val_crop_size,
-        args.train_sw_batch_size,
-        args.val_sw_batch_size,
-        args.sw_overlap,
-        True,
-    )
-
-    evaluator = get_ensemble_evaluator(
-        args,
-        networks=networks,
-        inferer=test_inferer,
-        device=device,
-        val_loader=test_loader,
-        post_transform=post_transform,
-        resume_from=args.resume_from,
-        nfolds=args.nfolds,
-    )
-
-    evaluator.run()
-
-    # POSTPROCESSING for the challenge
-    if args.dataset == "AutoPET2_Challenge":
-        # convert the mha to nifti
-        post_process_AutoPET2_Challenge_file_list(args, pred_dir=pred_dir, cache_dir=args.cache_dir)
-
 
 def main():
     global logger
 
-    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (8 * 8192, rlimit[1]))
-
-    sys.excepthook = handle_exception
-
     args = parse_args()
     args, logger = setup_environment_and_adapt_args(args)
 
-    run_ensemble(args)
+    run(args)
 
 
 if __name__ == "__main__":

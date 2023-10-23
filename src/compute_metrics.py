@@ -115,8 +115,6 @@ def parse_args():
 
 
 def main():
-    torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources
-
     args = parse_args()
     args.num_workers = 1
     args.labels = {"spleen": 1, "background": 0}

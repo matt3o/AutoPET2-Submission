@@ -23,6 +23,7 @@ from collections import OrderedDict
 from functools import reduce
 from pickle import dump
 from typing import Iterable, List
+import sys
 
 import cupy as cp
 import numpy as np
@@ -59,7 +60,7 @@ from sw_fastedit.data import (
     get_val_loader,
 )
 from sw_fastedit.interaction import Interaction
-from sw_fastedit.utils.helper import count_parameters, is_docker, run_once
+from sw_fastedit.utils.helper import count_parameters, is_docker, run_once, handle_exception
 
 logger = logging.getLogger("sw_fastedit")
 output_dir = None
@@ -693,6 +694,7 @@ def init(args):
     global output_dir
     # for OOM debugging
     output_dir = args.output_dir
+    sys.excepthook = handle_exception
 
     if not is_docker():
         torch.set_num_threads(int(os.cpu_count() / 3))  # Limit number of threads to 1/3 of resources

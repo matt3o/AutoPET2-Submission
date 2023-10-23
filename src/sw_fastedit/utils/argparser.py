@@ -27,7 +27,8 @@ import uuid
 
 import torch
 
-from sw_fastedit.transforms import ClickGenerationStrategy, StoppingCriterion
+from sw_fastedit.transforms import ClickGenerationStrategy
+from sw_fastedit.click_definitions import StoppingCriterion
 from sw_fastedit.utils.helper import get_actual_cuda_index_of_device, get_git_information, gpu_usage
 from sw_fastedit.utils.logger import get_logger, setup_loggers
 
@@ -140,7 +141,7 @@ def parse_args():
     parser.add_argument("--loss", default="DiceCELoss", choices=["DiceCELoss", "DiceLoss"])
     parser.add_argument(
         "--scheduler",
-        default="MultiStepLR",
+        default="CosineAnnealingLR",
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
     parser.add_argument("--loss_dont_include_background", action="store_false")

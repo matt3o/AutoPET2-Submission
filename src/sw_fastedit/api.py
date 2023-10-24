@@ -249,7 +249,7 @@ def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str, garbage_col
         # End of epoch GarbageCollection
         GarbageCollector(log_level=10),
     ]
-    if inferer == "SlidingWindowInferer" and garbage_collector:
+    if garbage_collector:
         # https://github.com/Project-MONAI/MONAI/issues/3423
         iteration_gc = GarbageCollector(log_level=10, trigger_event=val_trigger_event)
         val_handlers.append(iteration_gc)

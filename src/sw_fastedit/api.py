@@ -285,7 +285,7 @@ def get_train_handlers(
         # End of epoch GarbageCollection
         GarbageCollector(log_level=10),
     ]
-    if inferer == "SlidingWindowInferer" and garbage_collector:
+    if garbage_collector:
         # https://github.com/Project-MONAI/MONAI/issues/3423
         iteration_gc = GarbageCollector(log_level=10, trigger_event=train_trigger_event)
         train_handlers.append(iteration_gc)

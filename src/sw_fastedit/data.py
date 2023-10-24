@@ -142,9 +142,9 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             )
             if args.train_crop_size is not None
             else Identityd(keys=input_keys, allow_missing_keys=True),
-            DivisiblePadd(keys=input_keys, k=64, value=0)
+            DivisiblePadd(keys=input_keys, k=32, value=0)
             if args.inferer == "SimpleInferer"
-            else Identityd(keys=input_keys, allow_missing_keys=True),  # UNet needs this
+            else Identityd(keys=input_keys, allow_missing_keys=True),  # UNet needs this, 32 for 6 layers, for 7 at least 64
             RandFlipd(keys=input_keys, spatial_axis=[0], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[1], prob=0.10),
             RandFlipd(keys=input_keys, spatial_axis=[2], prob=0.10),
@@ -214,7 +214,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             else ScaleIntensityRangePercentilesd(
                 keys="image", lower=0.05, upper=99.95, b_min=0.0, b_max=1.0, clip=True, relative=False
             ),
-            DivisiblePadd(keys=input_keys, k=64, value=0)
+            DivisiblePadd(keys=input_keys, k=32, value=0)
             if args.inferer == "SimpleInferer"
             else Identityd(keys=input_keys, allow_missing_keys=True),
             AddEmptySignalChannels(keys=input_keys, device=cpu_device)

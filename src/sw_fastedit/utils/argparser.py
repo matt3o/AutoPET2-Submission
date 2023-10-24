@@ -328,8 +328,8 @@ def setup_environment_and_adapt_args(args):
     # verify both have a valid size (for Unet with seven layers)
     if args.inferer == "SimpleInferer":
         for size in args.train_crop_size:
-            assert (size % 64) == 0
+            assert (size % 32) == 0
         for size in args.val_crop_size:
-            assert (size % 64) == 0
+            assert (size % 32) == 0
 
     return args, logger

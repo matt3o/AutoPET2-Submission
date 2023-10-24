@@ -30,7 +30,8 @@ from monai.transforms import (
 from monai.utils.enums import CommonKeys
 
 from sw_fastedit.click_definitions import LABELS_KEY, ClickGenerationStrategy
-from sw_fastedit.utils.distance_transform import get_distance_transform, get_random_choice_from_tensor
+from sw_fastedit.utils.distance_transform import get_random_choice_from_tensor
+from monai.transforms.utils import distance_transform_edt
 from sw_fastedit.utils.helper import get_global_coordinates_from_patch_coordinates, get_tensor_at_coordinates, timeit
 
 # from monai.transforms import DistanceTransformEDT
@@ -399,8 +400,8 @@ class AddGuidance(Randomizable, MapTransform):
 
     def find_guidance(self, discrepancy) -> List[int | List[int]] | None:
         assert discrepancy.is_cuda
-        distance = get_distance_transform(discrepancy, self.device)
-        t_index, t_value = get_random_choice_from_tensor(distance, device=self.device)
+        distance = distance_transform_edt(discrepancy)
+        t_index, t_value = get_random_choice_from_tensor(distance)
         return t_index
 
     def add_guidance_based_on_discrepancy(

@@ -18,6 +18,8 @@ VOLUME=unet_baseline-output
 #-$VOLUME_SUFFIX
 VOLUME=$SCRIPTPATH/output/
 # Do not change any of the parameters to docker run, these are fixed
+
+# weight files have to be 0.pt, 1.pt, ...
 docker run --rm \
         --memory="${MEM_LIMIT}" \
         --memory-swap="${MEM_LIMIT}" \

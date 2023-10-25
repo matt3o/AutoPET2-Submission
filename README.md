@@ -39,6 +39,7 @@ Use the `train.py` file for that. Use the `--resume_from` flag to resume trainin
 
 Use the `train.py` file for that and only add the `--eval_only` flag. The network will only run the evaluator which finishes after one epoch. Evaluation will use the images and the label and thus print a metric at the end.
 Use the `--resume_from` flag to load previous weights.
+Use `--save_pred` to save the resulting predictions.
 
 ### Testing (image only)
 

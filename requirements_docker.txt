@@ -1,5 +1,5 @@
 pandas
-cupy-cuda11x
+cupy-cuda12x
 cucim
 monai[itk,ignite,nibabel]>=1.2.0
 pynvml

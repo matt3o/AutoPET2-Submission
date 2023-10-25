@@ -27,9 +27,9 @@ from sw_fastedit.api import (
     get_ensemble_evaluator,
     get_inferers,
     get_network,
-    get_pre_transforms,
     get_test_evaluator,
 )
+from sw_fastedit.data import get_pre_transforms
 from sw_fastedit.data import (
     get_post_ensemble_transforms,
     get_post_transforms_unsupervised,
@@ -66,13 +66,14 @@ def run(args):
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, test_inferer = get_inferers(
         args.inferer,
-        args.sw_roi_size,
-        args.train_crop_size,
-        args.val_crop_size,
-        args.train_sw_batch_size,
-        args.val_sw_batch_size,
-        args.sw_overlap,
-        True,
+        sw_roi_size=args.sw_roi_size,
+        train_crop_size=args.train_crop_size,
+        val_crop_size=args.val_crop_size,
+        train_sw_batch_size=args.train_sw_batch_size,
+        val_sw_batch_size=args.val_sw_batch_size,
+        train_sw_overlap=args.train_sw_overlap,
+        val_sw_overlap=args.val_sw_overlap,
+        cache_roi_weight_map=True,
     )
 
     evaluator = get_test_evaluator(

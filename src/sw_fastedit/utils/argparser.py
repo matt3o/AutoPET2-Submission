@@ -134,8 +134,8 @@ def parse_args():
     parser.add_argument("-a", "--amp", default=False, action="store_true")
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("-e", "--epochs", type=int, default=100)
-    # If learning rate is set to 0.001, the DiceCELoss will produce Nans very quickly
     # LOSS
+    # If learning rate is set to 0.001, the DiceCELoss will produce Nans very quickly
     parser.add_argument("-lr", "--learning_rate", type=float, default=0.0001)
     parser.add_argument("--optimizer", default="Adam", choices=["Adam", "Novograd"])
     parser.add_argument("--loss", default="DiceCELoss", choices=["DiceCELoss", "DiceLoss"])

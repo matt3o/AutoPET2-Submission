@@ -95,7 +95,7 @@ class SWFastEdit(BasicInferTask):
         labels=None,
         label_names=None,
         dimension=3,
-        target_spacing=(1.0, 1.0, 1.0),
+        target_spacing=(2.03642011, 2.03642011, 3.0),
         description="",
         **kwargs,
     ):

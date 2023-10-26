@@ -43,22 +43,28 @@ Use `--save_pred` to save the resulting predictions.
 
 ### Testing (image only)
 
-Use the `test.py` file for running. Example usage:
+Use the `test.py` file for running. Example usage on the AutoPET test mha files:
 
-`python test.py -i /input/images/pet/ -o /output/images/automated-petct-lesion-segmentation/  --non_interactive -a --resume_from checkpoint.pt -ta --dataset AutoPET2_Challenge --dont_check_output_dir --no_log --sw_overlap 0.75 --no_data --val_sw_batch_size 8
-`
+`python test.py -i /input/images/pet/ -o /output/images/automated-petct-lesion-segmentation/  --non_interactive -a --resume_from checkpoint.pt -ta --dataset AutoPET2_Challenge --dont_check_output_dir --no_log --sw_overlap 0.75 --no_data --val_sw_batch_size 8`
 
 Also check out the Docker file for testing, it it configured to run on the AutoPET2 challenge files.
 
 ### monailabel
 
-For the moment, this repo has to be installed as a dependency. I hope I can soon add the code to main MONAI, then this won't be necessary.
-Do  `pip install -e .` in this repo, then copy the two files under monailabel to `MONAILABEL/sample-apps/radiology/lib` and the into the according folders.
+There are multiple steps involved to get this to run.
 
-You can then run the model with:
+1) Install monailabel via `pip install monailabel`.
+3) Download the radiology sample app `monailabel apps --download --name radiology --output .`
+    (Alternative: Download the entire monailabel repo and just launch monailabel from there)
+4) Copy the three files from the repo under `monailabel/` to `radiology/lib/` and the into the according folders `infers/`, `configs/` and `transforms/`.
+5) Download the weights from https://bwsyncandshare.kit.edu/s/Yky4x6PQbtxLj2H , rename it to `pretrained_sw_fastedit.pt` and put them into `radiology/model/`. This model was pretrained on tumor-only AutoPET volumes.
+6) Make sure your images follow the monailabel convention, so e.g. all Nifti files in one folder `imagesTs`.
 
-`monailabel start_server --app sample-apps/radiology --studies .../imagesTs --conf models sw_interactive_segmentation
-`
+You can then run the model with (adapt the studies path where the images lie):
+
+`monailabel start_server --app radiology --studies ../imagesTs --conf models sw_fastedit`
+
+
 ### Computing statistics on the monailabel results
 
 Use compute_metrics.py for that. Example usage:

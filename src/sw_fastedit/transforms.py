@@ -451,8 +451,9 @@ class AddGuidance(Randomizable, MapTransform):
         assert guidance.dtype == torch.int32
         # Add guidance to the current key label
         if torch.sum(label) > 0:
+            assert label.is_cuda
             # generate a random sample
-            tmp_gui_index, tmp_gui_value = get_random_choice_from_tensor(label, device=self.device)
+            tmp_gui_index, tmp_gui_value = get_random_choice_from_tensor(label)
             if tmp_gui_index is not None:
                 self.check_guidance_length(data, tmp_gui_index)
                 guidance = torch.cat(

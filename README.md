@@ -58,7 +58,7 @@ Optional: Create a new conda environment
 2) Install the dependencies of this repository with `pip install -r requirements.txt`, then install this repository as a package via `pip install -e`. Hopefully this step can be removed in the future when the code is integrated into MONAI.
 3) Download the radiology sample app `monailabel apps --download --name radiology --output .`
     (Alternative: Download the entire monailabel repo and just launch monailabel from there)
-4) Copy the two files from the repo under `monailabel/` to `radiology/lib/` and the into the according folders `infers/` and `configs/`.
+4) Copy the files from the repo under `monailabel/` to `radiology/lib/` and into the according folders `infers/` and `configs/`.
 5) Download the weights from https://bwsyncandshare.kit.edu/s/Yky4x6PQbtxLj2H , rename it to `pretrained_sw_fastedit.pt` and put them into the (new) folder `radiology/model/`. This model was pretrained on tumor-only AutoPET volumes.
 6) Make sure your images follow the monailabel convention, so e.g. all Nifti files in one folder `imagesTs`.
 

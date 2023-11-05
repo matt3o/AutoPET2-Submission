@@ -630,60 +630,59 @@ def get_trainer(
         key_val_metric=val_key_metric,
         additional_metrics=val_additional_metrics,
     )
-    trainer = None
-    if not args.eval_only:
-        pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
-        train_loader = get_train_loader(args, pre_transforms_train)
-        train_key_metric = get_key_metric(str_to_prepend="train_")
-        train_additional_metrics = {}
-        if args.additional_metrics:
-            train_additional_metrics = get_additional_metrics(
-                args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="train_"
-            )
 
-
-        train_handlers = get_train_handlers(
-            lr_scheduler,
-            evaluator,
-            args.val_freq,
-            args.eval_only,
-            args.sw_roi_size,
-            args.inferer,
-            args.gpu_size,
-            not args.non_interactive,
+    pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
+    train_loader = get_train_loader(args, pre_transforms_train)
+    train_key_metric = get_key_metric(str_to_prepend="train_")
+    train_additional_metrics = {}
+    if args.additional_metrics:
+        train_additional_metrics = get_additional_metrics(
+            args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="train_"
         )
-        trainer = SupervisedTrainer(
-            device=device,
-            max_epochs=args.epochs,
-            train_data_loader=train_loader,
-            network=network,
-            iteration_update=Interaction(
-                deepgrow_probability=args.deepgrow_probability_train,
-                transforms=click_transforms,
-                train=True,
-                label_names=args.labels,
-                max_interactions=args.max_train_interactions,
-                save_nifti=args.save_nifti,
-                nifti_dir=args.data_dir,
-                loss_function=loss_function,
-                nifti_post_transform=post_transform,
-                click_generation_strategy=args.train_click_generation,
-                stopping_criterion=args.train_click_generation_stopping_criterion,
-                iteration_probability=args.train_iteration_probability,
-                loss_stopping_threshold=args.train_loss_stopping_threshold,
-                non_interactive=args.non_interactive,
-            )
-            if not args.non_interactive
-            else None,
-            optimizer=optimizer,
+
+
+    train_handlers = get_train_handlers(
+        lr_scheduler,
+        evaluator,
+        args.val_freq,
+        args.eval_only,
+        args.sw_roi_size,
+        args.inferer,
+        args.gpu_size,
+        not args.non_interactive,
+    )
+    trainer = SupervisedTrainer(
+        device=device,
+        max_epochs=args.epochs,
+        train_data_loader=train_loader,
+        network=network,
+        iteration_update=Interaction(
+            deepgrow_probability=args.deepgrow_probability_train,
+            transforms=click_transforms,
+            train=True,
+            label_names=args.labels,
+            max_interactions=args.max_train_interactions,
+            save_nifti=args.save_nifti,
+            nifti_dir=args.data_dir,
             loss_function=loss_function,
-            inferer=train_inferer,
-            postprocessing=post_transform,
-            amp=args.amp,
-            key_train_metric=train_key_metric,
-            additional_metrics=train_additional_metrics,
-            train_handlers=train_handlers,
+            nifti_post_transform=post_transform,
+            click_generation_strategy=args.train_click_generation,
+            stopping_criterion=args.train_click_generation_stopping_criterion,
+            iteration_probability=args.train_iteration_probability,
+            loss_stopping_threshold=args.train_loss_stopping_threshold,
+            non_interactive=args.non_interactive,
         )
+        if not args.non_interactive
+        else None,
+        optimizer=optimizer,
+        loss_function=loss_function,
+        inferer=train_inferer,
+        postprocessing=post_transform,
+        amp=args.amp,
+        key_train_metric=train_key_metric,
+        additional_metrics=train_additional_metrics,
+        train_handlers=train_handlers,
+    )
 
     if not args.eval_only:
             save_dict = {
@@ -695,8 +694,6 @@ def get_trainer(
     else:
         save_dict = {
             "net": network,
-            "opt": optimizer,
-            "lr": lr_scheduler,
         }
 
     if ensemble_mode:
@@ -706,21 +703,19 @@ def get_trainer(
 
 
     if not ensemble_mode:
-        if trainer is not None:
-            CheckpointSaver(
-                save_dir=args.output_dir,
-                save_dict=save_dict,
-                save_interval=args.save_interval,
-                save_final=True,
-                final_filename="checkpoint.pt",
-                save_key_metric=True,
-                n_saved=2,
-                file_prefix="train",
-            ).attach(trainer)
-        
         CheckpointSaver(
             save_dir=args.output_dir,
             save_dict=save_dict,
+            save_interval=args.save_interval,
+            save_final=True,
+            final_filename="checkpoint.pt",
+            save_key_metric=True,
+            n_saved=2,
+            file_prefix="train",
+        ).attach(trainer)
+        CheckpointSaver(
+            save_dir=args.output_dir,
+        save_dict=save_dict,
             save_key_metric=True,
             save_final=True,
             save_interval=args.save_interval,

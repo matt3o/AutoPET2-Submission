@@ -385,7 +385,6 @@ def get_test_evaluator(
 
     return evaluator
 
-
 def get_supervised_evaluator(
     args,
     network,
@@ -496,28 +495,14 @@ def get_ensemble_evaluator(
     return evaluator
 
 
-# def get_trainer(args, resume_from="None") -> List[SupervisedTrainer, SupervisedEvaluator, List]:
-#     init(args)
-#     device = torch.device(f"cuda:{args.gpu}")
-
-#     pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
-#     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-#     train_loader  = get_train_loader(args, pre_transforms_train)
-#     val_loader = get_val_loader(args, pre_transforms_val)
-
-#     return get_trainer_with_loaders(args, train_loader, val_loader, resume_from=resume_from)
-
-
 def get_trainer(
     args, file_prefix="", ensemble_mode: bool = False, resume_from="None"
-) -> List[SupervisedTrainer, SupervisedEvaluator, List]:
+) -> List[SupervisedTrainer | None, SupervisedEvaluator | None, List]:
     init(args)
     device = torch.device(f"cuda:{args.gpu}") if not args.sw_cpu_output else "cpu"
     sw_device = torch.device(f"cuda:{args.gpu}")
 
-    pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-    train_loader = get_train_loader(args, pre_transforms_train)
     val_loader = get_val_loader(args, pre_transforms_val)
 
     click_transforms = get_click_transforms(sw_device, args)
@@ -542,15 +527,10 @@ def get_trainer(
     loss_function = get_loss_function(loss_args=args.loss, loss_kwargs=loss_kwargs)
     optimizer = get_optimizer(args.optimizer, args.learning_rate, network)
     lr_scheduler = get_scheduler(optimizer, args.scheduler, args.epochs)
-    train_key_metric = get_key_metric(str_to_prepend="train_")
+    
     val_key_metric = get_key_metric(str_to_prepend="val_")
-    train_additional_metrics = {}
     val_additional_metrics = {}
-
     if args.additional_metrics:
-        train_additional_metrics = get_additional_metrics(
-            args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="train_"
-        )
         val_additional_metrics = get_additional_metrics(
             args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="val_"
         )
@@ -567,49 +547,61 @@ def get_trainer(
         key_val_metric=val_key_metric,
         additional_metrics=val_additional_metrics,
     )
+    if not args.eval_only:
+        pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
+        train_loader = get_train_loader(args, pre_transforms_train)
+        train_key_metric = get_key_metric(str_to_prepend="train_")
+        train_additional_metrics = {}
+        if args.additional_metrics:
+            train_additional_metrics = get_additional_metrics(
+                args.labels, include_background=False, loss_kwargs=loss_kwargs, str_to_prepend="train_"
+            )
 
-    train_handlers = get_train_handlers(
-        lr_scheduler,
-        evaluator,
-        args.val_freq,
-        args.eval_only,
-        args.sw_roi_size,
-        args.inferer,
-        args.gpu_size,
-        not args.non_interactive,
-    )
-    trainer = SupervisedTrainer(
-        device=device,
-        max_epochs=args.epochs,
-        train_data_loader=train_loader,
-        network=network,
-        iteration_update=Interaction(
-            deepgrow_probability=args.deepgrow_probability_train,
-            transforms=click_transforms,
-            train=True,
-            label_names=args.labels,
-            max_interactions=args.max_train_interactions,
-            save_nifti=args.save_nifti,
-            nifti_dir=args.data_dir,
-            loss_function=loss_function,
-            nifti_post_transform=post_transform,
-            click_generation_strategy=args.train_click_generation,
-            stopping_criterion=args.train_click_generation_stopping_criterion,
-            iteration_probability=args.train_iteration_probability,
-            loss_stopping_threshold=args.train_loss_stopping_threshold,
-            non_interactive=args.non_interactive,
+
+        train_handlers = get_train_handlers(
+            lr_scheduler,
+            evaluator,
+            args.val_freq,
+            args.eval_only,
+            args.sw_roi_size,
+            args.inferer,
+            args.gpu_size,
+            not args.non_interactive,
         )
-        if not args.non_interactive
-        else None,
-        optimizer=optimizer,
-        loss_function=loss_function,
-        inferer=train_inferer,
-        postprocessing=post_transform,
-        amp=args.amp,
-        key_train_metric=train_key_metric,
-        additional_metrics=train_additional_metrics,
-        train_handlers=train_handlers,
-    )
+        trainer = SupervisedTrainer(
+            device=device,
+            max_epochs=args.epochs,
+            train_data_loader=train_loader,
+            network=network,
+            iteration_update=Interaction(
+                deepgrow_probability=args.deepgrow_probability_train,
+                transforms=click_transforms,
+                train=True,
+                label_names=args.labels,
+                max_interactions=args.max_train_interactions,
+                save_nifti=args.save_nifti,
+                nifti_dir=args.data_dir,
+                loss_function=loss_function,
+                nifti_post_transform=post_transform,
+                click_generation_strategy=args.train_click_generation,
+                stopping_criterion=args.train_click_generation_stopping_criterion,
+                iteration_probability=args.train_iteration_probability,
+                loss_stopping_threshold=args.train_loss_stopping_threshold,
+                non_interactive=args.non_interactive,
+            )
+            if not args.non_interactive
+            else None,
+            optimizer=optimizer,
+            loss_function=loss_function,
+            inferer=train_inferer,
+            postprocessing=post_transform,
+            amp=args.amp,
+            key_train_metric=train_key_metric,
+            additional_metrics=train_additional_metrics,
+            train_handlers=train_handlers,
+        )
+    else:
+        trainer = None
 
     save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
     ensemble_save_dict = {
@@ -619,16 +611,17 @@ def get_trainer(
         save_dict = ensemble_save_dict
 
     if not ensemble_mode:
-        CheckpointSaver(
-            save_dir=args.output_dir,
-            save_dict=save_dict,
-            save_interval=args.save_interval,
-            save_final=True,
-            final_filename="checkpoint.pt",
-            save_key_metric=True,
-            n_saved=2,
-            file_prefix="train",
-        ).attach(trainer)
+        if trainer is not None:
+            CheckpointSaver(
+                save_dir=args.output_dir,
+                save_dict=save_dict,
+                save_interval=args.save_interval,
+                save_final=True,
+                final_filename="checkpoint.pt",
+                save_key_metric=True,
+                n_saved=2,
+                file_prefix="train",
+            ).attach(trainer)
         CheckpointSaver(
             save_dir=args.output_dir,
             save_dict=save_dict,
@@ -645,7 +638,8 @@ def get_trainer(
             file_prefix=file_prefix,
         ).attach(evaluator)
 
-    trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
+    if trainer is not None:
+        trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
     if resume_from != "None":
         if args.resume_override_scheduler:
@@ -669,7 +663,10 @@ def get_trainer(
 
         logger.critical("!!!!!!!!!!!!!!!!!!!! RESUMING !!!!!!!!!!!!!!!!!!!!!!!!!")
         handler = CheckpointLoader(load_path=resume_from, load_dict=save_dict, map_location=map_location)
-        handler(trainer)
+        if trainer is not None:
+            handler(trainer)
+        else:
+            handler(evaluator)
 
         if args.resume_override_scheduler:
             # Restore params

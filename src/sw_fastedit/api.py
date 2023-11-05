@@ -547,6 +547,7 @@ def get_trainer(
         key_val_metric=val_key_metric,
         additional_metrics=val_additional_metrics,
     )
+    trainer = None
     if not args.eval_only:
         pre_transforms_train = Compose(get_pre_transforms_train_as_list(args.labels, device, args))
         train_loader = get_train_loader(args, pre_transforms_train)
@@ -600,15 +601,26 @@ def get_trainer(
             additional_metrics=train_additional_metrics,
             train_handlers=train_handlers,
         )
-    else:
-        trainer = None
 
-    save_dict = get_save_dict(trainer, network, optimizer, lr_scheduler)
-    ensemble_save_dict = {
-        "net": network,
-    }
+    if not args.eval_only:
+            save_dict = {
+                "trainer": trainer,
+                "net": network,
+                "opt": optimizer,
+                "lr": lr_scheduler,
+            }
+    else:
+        save_dict = {
+            "net": network,
+            "opt": optimizer,
+            "lr": lr_scheduler,
+        }
+
     if ensemble_mode:
-        save_dict = ensemble_save_dict
+        save_dict = {
+            "net": network,
+        }
+
 
     if not ensemble_mode:
         if trainer is not None:
@@ -622,6 +634,7 @@ def get_trainer(
                 n_saved=2,
                 file_prefix="train",
             ).attach(trainer)
+        
         CheckpointSaver(
             save_dir=args.output_dir,
             save_dict=save_dict,
@@ -676,14 +689,14 @@ def get_trainer(
     return trainer, evaluator, train_key_metric, train_additional_metrics, val_key_metric, val_additional_metrics
 
 
-def get_save_dict(trainer, network, optimizer, lr_scheduler):
-    save_dict = {
-        "trainer": trainer,
-        "net": network,
-        "opt": optimizer,
-        "lr": lr_scheduler,
-    }
-    return save_dict
+# def get_save_dict(trainer, network, optimizer, lr_scheduler):
+#     save_dict = {
+#         "trainer": trainer,
+#         "net": network,
+#         "opt": optimizer,
+#         "lr": lr_scheduler,
+#     }
+#     return save_dict
 
 
 @run_once

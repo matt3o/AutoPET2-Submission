@@ -385,53 +385,6 @@ def get_test_evaluator(
 
     return evaluator
 
-def get_supervised_evaluator(
-    args,
-    network,
-    inferer,
-    device,
-    val_loader,
-    loss_function,
-    click_transforms,
-    post_transform,
-    key_val_metric,
-    additional_metrics,
-) -> SupervisedEvaluator:
-    init(args)
-
-    evaluator = SupervisedEvaluator(
-        device=device,
-        val_data_loader=val_loader,
-        network=network,
-        iteration_update=Interaction(
-            deepgrow_probability=args.deepgrow_probability_val,
-            transforms=click_transforms,
-            train=False,
-            label_names=args.labels,
-            max_interactions=args.max_val_interactions,
-            save_nifti=args.save_nifti,
-            nifti_dir=args.data_dir,
-            loss_function=loss_function,
-            nifti_post_transform=post_transform,
-            click_generation_strategy=args.val_click_generation,
-            stopping_criterion=args.val_click_generation_stopping_criterion,
-            non_interactive=args.non_interactive,
-        )
-        if not args.non_interactive
-        else None,
-        inferer=inferer,
-        postprocessing=post_transform,
-        amp=args.amp,
-        key_val_metric=key_val_metric,
-        additional_metrics=additional_metrics,
-        val_handlers=get_val_handlers(
-            sw_roi_size=args.sw_roi_size,
-            inferer=args.inferer,
-            gpu_size=args.gpu_size,
-            garbage_collector=(not args.non_interactive),
-        ),
-    )
-    return evaluator
 
 
 def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator:
@@ -516,6 +469,55 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
         handler(evaluator)
 
     return evaluator, val_key_metric, val_additional_metrics
+
+def get_supervised_evaluator(
+    args,
+    network,
+    inferer,
+    device,
+    val_loader,
+    loss_function,
+    click_transforms,
+    post_transform,
+    key_val_metric,
+    additional_metrics,
+) -> SupervisedEvaluator:
+    init(args)
+
+    evaluator = SupervisedEvaluator(
+        device=device,
+        val_data_loader=val_loader,
+        network=network,
+        iteration_update=Interaction(
+            deepgrow_probability=args.deepgrow_probability_val,
+            transforms=click_transforms,
+            train=False,
+            label_names=args.labels,
+            max_interactions=args.max_val_interactions,
+            save_nifti=args.save_nifti,
+            nifti_dir=args.data_dir,
+            loss_function=loss_function,
+            nifti_post_transform=post_transform,
+            click_generation_strategy=args.val_click_generation,
+            stopping_criterion=args.val_click_generation_stopping_criterion,
+            non_interactive=args.non_interactive,
+        )
+        if not args.non_interactive
+        else None,
+        inferer=inferer,
+        postprocessing=post_transform,
+        amp=args.amp,
+        key_val_metric=key_val_metric,
+        additional_metrics=additional_metrics,
+        val_handlers=get_val_handlers(
+            sw_roi_size=args.sw_roi_size,
+            inferer=args.inferer,
+            gpu_size=args.gpu_size,
+            garbage_collector=(not args.non_interactive),
+        ),
+    )
+    return evaluator
+
 
 # def get_cross_validation_trainers_generator(args, nfolds=5):
 #     device = torch.device(f"cuda:{args.gpu}")

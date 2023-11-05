@@ -144,8 +144,8 @@ def parse_args():
         default="CosineAnnealingLR",
         choices=["MultiStepLR", "PolynomialLR", "CosineAnnealingLR"],
     )
-    parser.add_argument("--loss_dont_include_background", action="store_false")
-    parser.add_argument("--loss_no_squared_pred", action="store_false")
+    parser.add_argument("--loss_dont_include_background", default=False, action="store_true")
+    parser.add_argument("--loss_no_squared_pred", default=False, action="store_true")
 
     parser.add_argument("--resume_from", type=str, default="None")
     # Use this parameter to change the scheduler..
@@ -175,7 +175,7 @@ def parse_args():
 
     # Guidance Signal Hyperparameters
     parser.add_argument("--sigma", type=int, default=1)
-    parser.add_argument("--no_disks", default=True, action="store_false")
+    parser.add_argument("--no_disks", default=False, action="store_true")
 
     # Guidance Signal Click Generation - for details see the mappings below
     parser.add_argument("-tcg", "--train_click_generation", type=int, default=2, choices=[1, 2])

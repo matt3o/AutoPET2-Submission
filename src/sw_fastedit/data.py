@@ -51,7 +51,7 @@ from sw_fastedit.helper_transforms import (  # SignalFillEmptyd,
     # AbortifNaNd,
     CheckTheAmountOfInformationLossByCropd,
     InitLoggerd,
-    # PrintDatad,
+    PrintDatad,
     TrackTimed,
     threshold_foreground,
 )
@@ -116,7 +116,10 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             Orientationd(keys=input_keys, axcodes="RAS"),
-            Spacingd(keys=input_keys, pixdim=spacing),
+            # Spacingd(keys=input_keys, pixdim=spacing),
+            Spacingd(keys='image', pixdim=spacing),
+            Spacingd(keys='label', pixdim=spacing, mode="nearest") if 'label' in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
+            # PrintDatad(),
             CropForegroundd(
                 keys=input_keys,
                 source_key="image",
@@ -154,6 +157,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             AddEmptySignalChannels(keys=input_keys, device=cpu_device)
             if not args.non_interactive
             else Identityd(keys=input_keys, allow_missing_keys=True),
+            # PrintDatad(),
             # Move to GPU
             # WARNING: Activating the line below leads to minimal gains in performance
             # However you are buying these gains with a lot of weird errors and problems
@@ -192,7 +196,8 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             if "label" in input_keys
             else Identityd(keys=input_keys, allow_missing_keys=True),
             Orientationd(keys=input_keys, axcodes="RAS"),
-            Spacingd(keys=input_keys, pixdim=spacing),
+            Spacingd(keys='image', pixdim=spacing),
+            Spacingd(keys='label', pixdim=spacing, mode="nearest") if 'label' in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
             CheckTheAmountOfInformationLossByCropd(
                 keys="label", roi_size=args.val_crop_size, crop_foreground=args.crop_foreground
             )

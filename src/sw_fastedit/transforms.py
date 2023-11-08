@@ -102,6 +102,9 @@ class NormalizeLabelsInDatasetd(MapTransform):
         self.device = device
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Mapping[Hashable, torch.Tensor]:
+        # Set the labels dict in case no labels were provided
+        data[LABELS_KEY] = self.labels
+        
         for key in self.key_iterator(data):
             if key == "label":
                 try:
@@ -111,7 +114,6 @@ class NormalizeLabelsInDatasetd(MapTransform):
                         raise AttributeError
                 except AttributeError:
                     # label does not exist - this might be a validation run
-                    data[LABELS_KEY] = self.labels
                     break
 
                 # Dictionary containing new label numbers

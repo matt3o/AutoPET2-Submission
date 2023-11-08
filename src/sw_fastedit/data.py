@@ -118,7 +118,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             ),
             ToTensord(keys=input_keys, device=cpu_device, track_meta=True),
             EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
+            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device, allow_missing_keys=True),
             Orientationd(keys=input_keys, axcodes="RAS"),
             # Spacingd(keys=input_keys, pixdim=spacing),
             Spacingd(keys='image', pixdim=spacing) if True else Identityd(keys=input_keys, allow_missing_keys=True),
@@ -196,7 +196,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
+            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device, allow_missing_keys=True),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys='image', pixdim=spacing) if True else Identityd(keys=input_keys, allow_missing_keys=True),
             Spacingd(keys='label', pixdim=spacing, mode="nearest") if ('label' in input_keys) else Identityd(keys=input_keys, allow_missing_keys=True),

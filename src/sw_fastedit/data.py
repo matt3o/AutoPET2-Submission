@@ -81,7 +81,10 @@ def get_spacing(args):
     AUTOPET_SPACING = (2.03642011, 2.03642011, 3.0)
     MSD_SPLEEN_SPACING = (2 * 0.79296899, 2 * 0.79296899, 5.0)
     # Apply this only to the label!
-    HECKTOR_SPACING = (4 * 0.98, 4 * 0.98, 1 * 3.27)
+    #HECKTOR_SPACING = (4, 4, 4)
+    HECKTOR_SPACING = (2.03642011, 2.03642011, 3.0)
+    #HECKTOR_SPACING = (2,2,2)
+    #HECKTOR_SPACING = (4 * 0.98, 4 * 0.98, 1 * 3.27)
 
     if args.dataset == "AutoPET" or args.dataset == "AutoPET2" or args.dataset == "AutoPET2_Challenge":
         return AUTOPET_SPACING
@@ -118,7 +121,7 @@ def get_pre_transforms_train_as_list(labels: Dict, device, args, input_keys=("im
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             Orientationd(keys=input_keys, axcodes="RAS"),
             # Spacingd(keys=input_keys, pixdim=spacing),
-            Spacingd(keys='image', pixdim=spacing) if (not args.dataset=="HECKTOR") else Identityd(keys=input_keys, allow_missing_keys=True),
+            Spacingd(keys='image', pixdim=spacing) if True else Identityd(keys=input_keys, allow_missing_keys=True),
             Spacingd(keys='label', pixdim=spacing, mode="nearest") if ('label' in input_keys) else Identityd(keys=input_keys, allow_missing_keys=True),
             # PrintDatad(),
             CropForegroundd(
@@ -195,8 +198,9 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             Orientationd(keys=input_keys, axcodes="RAS"),
-            Spacingd(keys='image', pixdim=spacing) if (not args.dataset=="HECKTOR") else Identityd(keys=input_keys, allow_missing_keys=True),
-            Spacingd(keys='label', pixdim=spacing, mode="nearest") if ('label' in input_keys and not args.dataset=="HECKTOR") else Identityd(keys=input_keys, allow_missing_keys=True),
+            Spacingd(keys='image', pixdim=spacing) if True else Identityd(keys=input_keys, allow_missing_keys=True),
+            Spacingd(keys='label', pixdim=spacing, mode="nearest") if ('label' in input_keys) else Identityd(keys=input_keys, allow_missing_keys=True),
+            #PrintDatad(),
             CheckTheAmountOfInformationLossByCropd(
                 keys="label", roi_size=args.val_crop_size, crop_foreground=args.crop_foreground
             )
@@ -209,6 +213,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             )
             if args.crop_foreground
             else Identityd(keys=input_keys, allow_missing_keys=True),
+            #PrintDatad(),
             CenterSpatialCropd(keys=input_keys, roi_size=args.val_crop_size)
             if args.val_crop_size is not None
             else Identityd(keys=input_keys, allow_missing_keys=True),

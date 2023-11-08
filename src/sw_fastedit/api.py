@@ -406,13 +406,13 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, eval_inferer = get_inferers(
         args.inferer,
-        args.sw_roi_size,
-        args.train_crop_size,
-        args.val_crop_size,
-        args.train_sw_batch_size,
-        args.val_sw_batch_size,
-        args.val_sw_overlap,
-        True,
+        sw_roi_size=args.sw_roi_size,
+        train_crop_size=args.train_crop_size,
+        val_crop_size=args.val_crop_size,
+        train_sw_batch_size=args.train_sw_batch_size,
+        val_sw_batch_size=args.val_sw_batch_size,
+        val_sw_overlap=args.val_sw_overlap,
+        cache_roi_weight_map=True,
     )
 
     loss_kwargs = {
@@ -438,13 +438,14 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
             train=False,
             label_names=args.labels,
             max_interactions=args.max_val_interactions,
-            args=args,
+            save_nifti=args.save_nifti,
+            nifti_dir=args.data_dir,
             loss_function=loss_function,
-            post_transform=post_transform,
+            nifti_post_transform=post_transform,
             click_generation_strategy=args.val_click_generation,
             stopping_criterion=args.val_click_generation_stopping_criterion,
             non_interactive=args.non_interactive,
-        ),
+        )
         inferer=eval_inferer,
         postprocessing=post_transform,
         amp=args.amp,

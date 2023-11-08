@@ -401,7 +401,7 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
 
 
     click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device, save_pred=args.save_pred, output_dir=args.output_dir, pretransform=pre_transforms_val)
+    post_transform = get_post_transforms(args.labels, save_pred=args.save_pred, output_dir=args.output_dir, pretransform=pre_transforms_val)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, eval_inferer = get_inferers(
@@ -411,7 +411,7 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
         args.val_crop_size,
         args.train_sw_batch_size,
         args.val_sw_batch_size,
-        args.sw_overlap,
+        args.val_sw_overlap,
         True,
     )
 
@@ -601,7 +601,7 @@ def get_trainer(
 
 
     click_transforms = get_click_transforms(sw_device, args)
-    post_transform = get_post_transforms(args.labels, sw_device, args.save_pred, args.output_dir)
+    post_transform = get_post_transforms(args.labels, save_pred=args.save_pred, output_dir=args.output_dir)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(sw_device)
     train_inferer, eval_inferer = get_inferers(

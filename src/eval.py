@@ -54,7 +54,7 @@ def run(args):
         key_val_metric,
         additional_val_metrics,
     ) = create_supervised_evaluator(args, resume_from=args.resume_from)
-    val_metric_names = list(key_val_metric.keys()) + list(additional_val_metrics.keys())
+    # val_metric_names = list(key_val_metric.keys()) + list(additional_val_metrics.keys())
 
     start_time = time.time()
     try:

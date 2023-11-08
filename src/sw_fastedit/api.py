@@ -238,11 +238,15 @@ def get_scheduler(optimizer, scheduler_str: str, epochs_to_run: int):
     return lr_scheduler
 
 
-def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str, garbage_collector=True):
+def get_val_handlers(sw_roi_size: List, inferer: str, gpu_size: str, *,garbage_collector=True, non_interactive=False):
+    every_x_iterations = 2
+    if non_interactive:
+        every_x_iterations *= 10
+    
     if sw_roi_size[0] < 128:
-        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED
+        val_trigger_event = Events.ITERATION_COMPLETED(every=every_x_iterations) if gpu_size == "large" else Events.ITERATION_COMPLETED
     else:
-        val_trigger_event = Events.ITERATION_COMPLETED(every=2) if gpu_size == "large" else Events.ITERATION_COMPLETED
+        val_trigger_event = Events.ITERATION_COMPLETED(every=every_x_iterations) if gpu_size == "large" else Events.ITERATION_COMPLETED
 
     # define event-handlers for engine
     val_handlers = [
@@ -267,12 +271,17 @@ def get_train_handlers(
     inferer: str,
     gpu_size: str,
     garbage_collector=True,
+    non_interactive=False,
 ):
+    every_x_iterations = 4
+    if non_interactive:
+        every_x_iterations *= 10
+    
     if sw_roi_size[0] <= 128:
-        train_trigger_event = Events.ITERATION_COMPLETED(every=4) if gpu_size == "large" else Events.ITERATION_COMPLETED
-    else:
+        train_trigger_event = Events.ITERATION_COMPLETED(every=every_x_iterations) if gpu_size == "large" else Events.ITERATION_COMPLETED
+    else:        
         train_trigger_event = (
-            Events.ITERATION_COMPLETED(every=10) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=5)
+            Events.ITERATION_COMPLETED(every=every_x_iterations*2) if gpu_size == "large" else Events.ITERATION_COMPLETED(every=every_x_iterations)
         )
 
     train_handlers = [
@@ -519,7 +528,7 @@ def get_supervised_evaluator(
             sw_roi_size=args.sw_roi_size,
             inferer=args.inferer,
             gpu_size=args.gpu_size,
-            garbage_collector=(not args.non_interactive),
+            garbage_collector=True,
         ),
     )
     return evaluator
@@ -662,7 +671,7 @@ def get_trainer(
         args.sw_roi_size,
         args.inferer,
         args.gpu_size,
-        not args.non_interactive,
+        garbage_collector=True,
     )
     trainer = SupervisedTrainer(
         device=device,

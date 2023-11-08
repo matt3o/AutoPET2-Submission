@@ -192,9 +192,7 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             ),  # necessary if the dataloader runs in an extra thread / process
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
-            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device)
-            if "label" in input_keys
-            else Identityd(keys=input_keys, allow_missing_keys=True),
+            NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys='image', pixdim=spacing),
             Spacingd(keys='label', pixdim=spacing, mode="nearest") if 'label' in input_keys else Identityd(keys=input_keys, allow_missing_keys=True),
@@ -274,7 +272,7 @@ def get_click_transforms(device, args):
     return Compose(t)
 
 
-def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretransform=None):
+def get_post_transforms(labels, *, save_pred=False, output_dir=None, pretransform=None):
     cpu_device = torch.device("cpu")
     if save_pred:
         if output_dir is None:
@@ -293,7 +291,7 @@ def get_post_transforms(labels, device, save_pred=False, output_dir=None, pretra
             nearest_interp=False,
             transform=pretransform,
         )
-        if save_pred and pretransform is not None
+        if (save_pred and pretransform is not None)
         else Identityd(keys=input_keys, allow_missing_keys=True),
         Activationsd(keys=("pred",), softmax=True),
         AsDiscreted(

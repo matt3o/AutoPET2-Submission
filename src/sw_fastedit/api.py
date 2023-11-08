@@ -58,6 +58,7 @@ from sw_fastedit.data import (
     get_pre_transforms_val_as_list,
     get_train_loader,
     get_val_loader,
+    get_test_loader,
 )
 from sw_fastedit.interaction import Interaction
 from sw_fastedit.utils.helper import count_parameters, is_docker, run_once, handle_exception
@@ -393,10 +394,14 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
     device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-    val_loader = get_val_loader(args, pre_transforms_val) 
+    if args.use_test_data_for_validation:
+        val_loader = get_test_loader(args, pre_transforms_val)
+    else:
+        val_loader = get_val_loader(args, pre_transforms_val)
+
 
     click_transforms = get_click_transforms(device, args)
-    post_transform = get_post_transforms(args.labels, device, args.save_pred, args.output_dir, pretransform=pre_transforms_val)
+    post_transform = get_post_transforms(args.labels, device, save_pred=args.save_pred, output_dir=args.output_dir, pretransform=pre_transforms_val)
 
     network = get_network(args.network, args.labels, args.non_interactive).to(device)
     _, eval_inferer = get_inferers(
@@ -588,7 +593,12 @@ def get_trainer(
     sw_device = torch.device(f"cuda:{args.gpu}")
 
     pre_transforms_val = Compose(get_pre_transforms_val_as_list(args.labels, device, args))
-    val_loader = get_val_loader(args, pre_transforms_val)
+    # val_loader = get_val_loader(args, pre_transforms_val)
+    if args.use_test_data_for_validation:
+        val_loader = get_test_loader(args, pre_transforms_val)
+    else:
+        val_loader = get_val_loader(args, pre_transforms_val)
+
 
     click_transforms = get_click_transforms(sw_device, args)
     post_transform = get_post_transforms(args.labels, sw_device, args.save_pred, args.output_dir)

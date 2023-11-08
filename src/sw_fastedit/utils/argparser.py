@@ -92,6 +92,9 @@ def parse_args():
     parser.add_argument(
         "--dataset", default="AutoPET", choices=["AutoPET", "AutoPET2", "HECKTOR", "MSD_Spleen", "AutoPET2_Challenge"]
     )
+    parser.add_argument(
+        "--use_test_data_for_validation", default=False, action="store_true", help="Use the test data instead of the split of the training data for validation. May not work for all models but is tested for AutoPET"
+    )
     parser.add_argument("--train_on_all_samples", action="store_true")
     parser.add_argument(
         "--positive_crop_rate", type=float, default=0.6, help="The rate of positive samples for RandCropByPosNegLabeld"

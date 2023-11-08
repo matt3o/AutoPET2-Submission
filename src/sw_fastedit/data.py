@@ -435,9 +435,7 @@ def get_AutoPET_file_list(args) -> List[List, List, List]:
         {"image": image_name, "label": label_name} for image_name, label_name in zip(train_images, train_labels)
     ]
     val_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
-
-    # Same data as validation but without labels
-    test_data = [{"image": image_name} for image_name in test_images]
+    test_data = [{"image": image_name, "label": label_name} for image_name, label_name in zip(test_images, test_labels)]
 
     return train_data, val_data, test_data
 

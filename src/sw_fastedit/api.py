@@ -445,7 +445,7 @@ def create_supervised_evaluator(args, resume_from="None") -> SupervisedEvaluator
             click_generation_strategy=args.val_click_generation,
             stopping_criterion=args.val_click_generation_stopping_criterion,
             non_interactive=args.non_interactive,
-        )
+        ),
         inferer=eval_inferer,
         postprocessing=post_transform,
         amp=args.amp,

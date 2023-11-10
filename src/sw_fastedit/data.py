@@ -29,6 +29,7 @@ from monai.transforms import (  # RandShiftIntensityd,; Resized,; ScaleIntensity
     EnsureTyped,
     Identityd,
     Invertd,
+    Lambdad,
     LoadImaged,
     MeanEnsembled,
     Orientationd,
@@ -54,6 +55,7 @@ from sw_fastedit.helper_transforms import (  # SignalFillEmptyd,
     PrintDatad,
     TrackTimed,
     threshold_foreground,
+    cast_labels_to_zero_and_one,
 )
 from sw_fastedit.transforms import (
     AddEmptySignalChannels,
@@ -197,6 +199,8 @@ def get_pre_transforms_val_as_list(labels: Dict, device, args, input_keys=("imag
             LoadImaged(keys=input_keys, reader="ITKReader", image_only=False),
             EnsureChannelFirstd(keys=input_keys),
             NormalizeLabelsInDatasetd(keys="label", labels=labels, device=cpu_device, allow_missing_keys=True),
+            # Only for HECKTOR, filter out the values > 1
+            Lambdad(keys="label", func=cast_labels_to_zero_and_one) if (args.dataset == "HECKTOR") else Identityd(keys=input_keys, allow_missing_keys=True),
             Orientationd(keys=input_keys, axcodes="RAS"),
             Spacingd(keys='image', pixdim=spacing) if True else Identityd(keys=input_keys, allow_missing_keys=True),
             Spacingd(keys='label', pixdim=spacing, mode="nearest") if ('label' in input_keys) else Identityd(keys=input_keys, allow_missing_keys=True),

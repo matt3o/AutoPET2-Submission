@@ -23,6 +23,7 @@ from sw_fastedit.utils.logger import get_logger, setup_loggers
 
 logger = None
 
+cast_labels_to_zero_and_one = lambda x: torch.where(x > 0, 1, 0)
 
 def threshold_foreground(x):
     return (x > 0.005) & (x < 0.995)
